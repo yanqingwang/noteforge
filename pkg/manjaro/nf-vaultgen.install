@@ -1,0 +1,20 @@
+post_install() {
+    echo "========================================"
+    echo "  nf-vaultgen v${1:-0.1.0} installed"
+    echo "========================================"
+    echo ""
+    echo "Quick start:"
+    echo "  nf-vaultgen list-profiles"
+    echo "  nf-vaultgen generate --profile smoke --seed 42 --out ./my-vault"
+    echo "  nf-vaultgen verify --vault ./my-vault/vault --manifest ./my-vault/manifest"
+    echo ""
+    echo "Documentation: /usr/share/doc/nf-vaultgen/"
+}
+
+post_upgrade() {
+    post_install "$1"
+}
+
+pre_remove() {
+    echo "Removing nf-vaultgen..."
+}

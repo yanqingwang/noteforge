@@ -1,0 +1,16 @@
+[package]
+name = "nf-markdown"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nf-core = { path = "../nf-core" }
+pulldown-cmark.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tree-sitter.workspace = true
+tree-sitter-markdown = "0.7"

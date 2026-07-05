@@ -1,0 +1,20 @@
+[package]
+name = "nf-index"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nf-core = { path = "../nf-core" }
+nf-markdown = { path = "../nf-markdown" }
+tantivy.workspace = true
+redb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+nf-vaultgen = { path = "../nf-vaultgen" }

@@ -1,0 +1,10 @@
+/target
+frontend/node_modules/
+pkg/manjaro/pkg/
+pkg/manjaro/src/
+*.swp
+*.swo
+*~
+.DS_Store
+*.pyc
+__pycache__/

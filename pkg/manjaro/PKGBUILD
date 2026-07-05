@@ -1,0 +1,95 @@
+# Maintainer: NoteForge Team
+# Contributor: Ross Wang
+# PKGBUILD for NoteForge - local-first knowledge management application
+
+pkgname=noteforge
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="NoteForge - local-first Markdown knowledge management application (Rust)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/heartandroad/noteforge"
+license=('Apache' 'MIT')
+depends=('gcc-libs' 'glibc' 'fontconfig' 'libxkbcommon' 'libgl')
+makedepends=('cargo' 'rust' 'pkgconf' 'cmake')
+options=('!lto' 'strip')
+install="${pkgname}.install"
+
+# Local build (PKGBUILD is at <project>/pkg/manjaro/PKGBUILD)
+source=()
+sha256sums=()
+
+_project_root="${startdir}/../.."
+
+build() {
+    cd "${_project_root}"
+    export CARGO_TARGET_DIR="${srcdir}/target"
+    # Build workspace without nf-app (which is deprecated in favor of nf-ui)
+    cargo build --release --workspace
+}
+
+check() {
+    cd "${_project_root}"
+    export CARGO_TARGET_DIR="${srcdir}/target"
+    cargo test --release --workspace
+}
+
+package() {
+    cd "${_project_root}"
+
+    # Create directories
+    local bindir="${pkgdir}/usr/bin"
+    local docdir="${pkgdir}/usr/share/doc/${pkgname}"
+    local licensedir="${pkgdir}/usr/share/licenses/${pkgname}"
+    local appdir="${pkgdir}/usr/share/applications"
+    local icondir="${pkgdir}/usr/share/icons/hicolor/256x256/apps"
+
+    mkdir -p "${bindir}" "${docdir}" "${licensedir}" "${appdir}" "${icondir}"
+
+    # Install binaries
+    install -Dm755 "${srcdir}/target/release/nf-vaultgen" "${bindir}/nf-vaultgen"
+    install -Dm755 "${srcdir}/target/release/nf-app" "${bindir}/nf-app"
+
+    # Desktop entry for the GUI application
+    cat > "${appdir}/noteforge.desktop" << EOF
+[Desktop Entry]
+Name=NoteForge
+Comment=Local-first Markdown knowledge management
+Exec=noteforge
+Icon=noteforge
+Terminal=false
+Type=Application
+Categories=Office;Database;Utility;
+StartupNotify=true
+EOF
+
+    # Create a simple SVG icon placeholder
+    cat > "${icondir}/noteforge.svg" << 'ICONEOF'
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="32" fill="#2563eb"/>
+  <text x="128" y="160" font-size="120" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="bold">N</text>
+</svg>
+ICONEOF
+
+    # Copy documentation
+    install -Dm644 README.md "${docdir}/README.md" 2>/dev/null || true
+    install -Dm644 docs/产品说明书.md "${docdir}/产品说明书.md" 2>/dev/null || true
+    install -Dm644 docs/部署说明书.md "${docdir}/部署说明书.md" 2>/dev/null || true
+
+    # Man pages
+    mkdir -p "${pkgdir}/usr/share/man/man1/"
+    for bin in nf-vaultgen nf-app; do
+        "${srcdir}/target/release/${bin}" --help 2>/dev/null | sed '
+            1i\.TH '"$(echo $bin | tr 'a-z' 'A-Z')"' 1 "'"$(date +%B %Y)"'" "'"${bin}"' v'"${pkgver}"'"
+            2i\.SH NAME
+            3i\ '"${bin}"' \- NoteForge '"${bin}"'
+            4i\.SH SYNOPSIS
+            5i\ \fB'"${bin}"'\fR [OPTIONS] <COMMAND>
+            6i\.SH DESCRIPTION
+            s/^/\.IP /' > "${pkgdir}/usr/share/man/man1/${bin}.1" 2>/dev/null || true
+        gzip -f "${pkgdir}/usr/share/man/man1/${bin}.1" 2>/dev/null || true
+    done
+
+    # License
+    install -Dm644 LICENSE "${licensedir}/LICENSE" 2>/dev/null || \
+    install -Dm644 /dev/null "${licensedir}/LICENSE"
+}

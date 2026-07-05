@@ -1,0 +1,32 @@
+/// NoteForge plugin host API.
+interface nf-host {
+    /// Read a file from the vault.
+    read-file: func(path: string) -> option<string>;
+    
+    /// Get the current note content.
+    get-current-note: func() -> option<string>;
+    
+    /// Log a message.
+    log: func(message: string);
+    
+    /// Get a config value.
+    get-config: func(key: string) -> option<string>;
+}
+
+/// NoteForge plugin interface.
+interface nf-plugin {
+    /// Called when the plugin is loaded.
+    on-load: func();
+    
+    /// Called when the active note changes.
+    on-note-change: func(path: string);
+    
+    /// Get plugin commands.
+    get-commands: func() -> list<command>;
+}
+
+/// A command that the plugin contributes.
+record command {
+    id: string,
+    name: string,
+}

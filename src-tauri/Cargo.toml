@@ -1,0 +1,26 @@
+[package]
+name = "noteforge"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+nf-core = { path = "../crates/nf-core" }
+nf-vault = { path = "../crates/nf-vault" }
+nf-markdown = { path = "../crates/nf-markdown" }
+nf-index = { path = "../crates/nf-index" }
+nf-graph = { path = "../crates/nf-graph" }
+nf-plugin = { path = "../crates/nf-plugin" }
+nf-workspace = { path = "../crates/nf-workspace" }
+nf-render = { path = "../crates/nf-render" }
+nf-vaultgen = { path = "../crates/nf-vaultgen" }
+comrak.workspace = true
+tokio = { version = "1", features = ["full"] }

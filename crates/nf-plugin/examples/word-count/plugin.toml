@@ -1,0 +1,13 @@
+[plugin]
+id = "nf.word-count"
+name = "Word Count"
+version = "1.0.0"
+api_version = "1.0"
+min_app_version = "0.1.0"
+
+[permissions]
+vault_read = true
+vault_write = false
+clipboard = false
+network = []
+shell = false

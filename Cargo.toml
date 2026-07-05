@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/nf-core",
+    "crates/nf-editor",
+    "crates/nf-graph",
+    "crates/nf-index",
+    "crates/nf-markdown",
+    "crates/nf-plugin",
+    "crates/nf-render",
+    "crates/nf-vault",
+    "crates/nf-vaultgen",
+    "crates/nf-workspace",
+    "crates/nf-app",
+    "src-tauri",
+]
+
+[workspace.dependencies]
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+rand = "0.9"
+rand_chacha = "0.9"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+walkdir = "2"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+pulldown-cmark = "0.12"
+regex = "1"
+ropey = "1"
+slint = "1"
+tree-sitter = "0.19"
+wasmtime = "28"
+comrak = "0.30"
+tree-sitter-markdown = "0.7"
+tantivy = "0.22"
+redb = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[profile.release]
+lto = true
+codegen-units = 1
