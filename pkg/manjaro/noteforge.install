@@ -3,16 +3,17 @@ post_install() {
     echo "  NoteForge v${1:-0.1.0} installed"
     echo "============================================"
     echo ""
-    echo "  CLI 工具: nf-vaultgen, nf-app"
+    echo "  CLI: nf-vaultgen, nf-app"
+    echo "  Desktop: noteforge"
     echo ""
     echo "快速开始:"
     echo "  nf-vaultgen generate --profile smoke --seed 42 --out ./vault"
-    echo "  nf-app info ./vault/vault"
+    echo "  nf-app info ./vault/vault        # CLI 查看 vault 信息"
+    echo "  noteforge                         # 启动桌面应用"
     echo ""
-    echo "运行桌面版: cd noteforge && cargo tauri dev"
     echo "文档: /usr/share/doc/noteforge/"
     echo "============================================"
 }
 
 post_upgrade() { post_install "$1"; }
-pre_remove() { echo "Removing NoteForge..."; }
+pre_remove() { echo "正在删除 NoteForge..."; }
