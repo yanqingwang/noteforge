@@ -32,12 +32,9 @@ build() {
         cd "${_project_root}"
     fi
 
-    # 2. Build Rust workspace (CLI tools + libs)
+    # 2. Build Rust workspace + Tauri binary
     export CARGO_TARGET_DIR="${srcdir}/target"
     cargo build --release --workspace
-
-    # 3. Build Tauri desktop binary
-    cargo build --release --manifest-path src-tauri/Cargo.toml
 }
 
 check() {
