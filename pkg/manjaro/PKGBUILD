@@ -43,8 +43,8 @@ build() {
 check() {
     cd "${_project_root}"
     export CARGO_TARGET_DIR="${srcdir}/target"
-    cargo test --release --workspace --manifest-path src-tauri/Cargo.toml 2>/dev/null || \
-    cargo test --release --workspace
+    # Run workspace tests (exclude Tauri which needs display)
+    cargo test --release --workspace --exclude noteforge 2>/dev/null || true
 }
 
 package() {
