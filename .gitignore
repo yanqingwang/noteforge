@@ -2,9 +2,11 @@
 frontend/node_modules/
 pkg/manjaro/pkg/
 pkg/manjaro/src/
+*.pkg.tar.zst
 *.swp
 *.swo
 *~
 .DS_Store
 *.pyc
 __pycache__/
+*.bak

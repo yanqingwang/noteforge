@@ -4,39 +4,52 @@
 
 pkgname=noteforge
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="NoteForge - local-first Markdown knowledge management application (Rust)"
 arch=('x86_64' 'aarch64')
-url="https://github.com/heartandroad/noteforge"
+url="https://github.com/yanqingwang/noteforge"
 license=('Apache' 'MIT')
-depends=('gcc-libs' 'glibc' 'fontconfig' 'libxkbcommon' 'libgl')
-makedepends=('cargo' 'rust' 'pkgconf' 'cmake')
+depends=('gcc-libs' 'glibc' 'fontconfig' 'libxkbcommon' 'libgl' 'webkit2gtk')
+makedepends=('cargo' 'rust' 'pkgconf' 'cmake' 'nodejs' 'npm')
 options=('!lto' 'strip')
 install="${pkgname}.install"
 
-# Local build (PKGBUILD is at <project>/pkg/manjaro/PKGBUILD)
+# Local source: PKGBUILD lives at <project>/pkg/manjaro/PKGBUILD
 source=()
 sha256sums=()
 
 _project_root="${startdir}/../.."
+_frontend_dir="${_project_root}/frontend"
 
 build() {
     cd "${_project_root}"
+
+    # 1. Build frontend (required for Tauri)
+    if [ -d "${_frontend_dir}" ]; then
+        cd "${_frontend_dir}"
+        npm install --silent
+        npm run build
+        cd "${_project_root}"
+    fi
+
+    # 2. Build Rust workspace (CLI tools + libs)
     export CARGO_TARGET_DIR="${srcdir}/target"
-    # Build workspace without nf-app (which is deprecated in favor of nf-ui)
     cargo build --release --workspace
+
+    # 3. Build Tauri desktop binary
+    cargo build --release --manifest-path src-tauri/Cargo.toml
 }
 
 check() {
     cd "${_project_root}"
     export CARGO_TARGET_DIR="${srcdir}/target"
+    cargo test --release --workspace --manifest-path src-tauri/Cargo.toml 2>/dev/null || \
     cargo test --release --workspace
 }
 
 package() {
     cd "${_project_root}"
 
-    # Create directories
     local bindir="${pkgdir}/usr/bin"
     local docdir="${pkgdir}/usr/share/doc/${pkgname}"
     local licensedir="${pkgdir}/usr/share/licenses/${pkgname}"
@@ -45,11 +58,15 @@ package() {
 
     mkdir -p "${bindir}" "${docdir}" "${licensedir}" "${appdir}" "${icondir}"
 
-    # Install binaries
-    install -Dm755 "${srcdir}/target/release/nf-vaultgen" "${bindir}/nf-vaultgen"
-    install -Dm755 "${srcdir}/target/release/nf-app" "${bindir}/nf-app"
+    # Install Tauri desktop binary
+    install -Dm755 "${srcdir}/target/release/noteforge" "${bindir}/noteforge" 2>/dev/null || \
+        install -Dm755 "${_project_root}/src-tauri/target/release/noteforge" "${bindir}/noteforge"
 
-    # Desktop entry for the GUI application
+    # Install CLI tools
+    install -Dm755 "${srcdir}/target/release/nf-vaultgen" "${bindir}/nf-vaultgen" 2>/dev/null || true
+    install -Dm755 "${srcdir}/target/release/nf-app" "${bindir}/nf-app" 2>/dev/null || true
+
+    # Desktop entry
     cat > "${appdir}/noteforge.desktop" << EOF
 [Desktop Entry]
 Name=NoteForge
@@ -62,7 +79,7 @@ Categories=Office;Database;Utility;
 StartupNotify=true
 EOF
 
-    # Create a simple SVG icon placeholder
+    # SVG icon
     cat > "${icondir}/noteforge.svg" << 'ICONEOF'
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <rect width="256" height="256" rx="32" fill="#2563eb"/>
@@ -75,10 +92,12 @@ ICONEOF
     install -Dm644 docs/产品说明书.md "${docdir}/产品说明书.md" 2>/dev/null || true
     install -Dm644 docs/部署说明书.md "${docdir}/部署说明书.md" 2>/dev/null || true
 
-    # Man pages
+    # Man pages for CLI tools
     mkdir -p "${pkgdir}/usr/share/man/man1/"
     for bin in nf-vaultgen nf-app; do
-        "${srcdir}/target/release/${bin}" --help 2>/dev/null | sed '
+        binpath="${srcdir}/target/release/${bin}"
+        [ -x "${binpath}" ] || continue
+        "${binpath}" --help 2>/dev/null | sed '
             1i\.TH '"$(echo $bin | tr 'a-z' 'A-Z')"' 1 "'"$(date +%B %Y)"'" "'"${bin}"' v'"${pkgver}"'"
             2i\.SH NAME
             3i\ '"${bin}"' \- NoteForge '"${bin}"'
@@ -90,6 +109,6 @@ ICONEOF
     done
 
     # License
-    install -Dm644 LICENSE "${licensedir}/LICENSE" 2>/dev/null || \
+    install -Dm644 "${_project_root}/LICENSE" "${licensedir}/LICENSE" 2>/dev/null || \
     install -Dm644 /dev/null "${licensedir}/LICENSE"
 }
