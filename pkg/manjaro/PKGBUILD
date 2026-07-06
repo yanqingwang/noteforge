@@ -32,7 +32,7 @@ build() {
 
     export CARGO_TARGET_DIR="${srcdir}/target"
     # Use cargo tauri build for proper asset embedding; fallback to cargo build
-    cargo tauri build --bundles none 2>/dev/null || \
+    cargo tauri build --no-bundle 2>/dev/null || \
     cargo build --release --workspace
 }
 
