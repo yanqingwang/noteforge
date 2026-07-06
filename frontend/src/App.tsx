@@ -4,6 +4,8 @@ import { layoutReducer, createInitialState } from "./layout/LayoutState";
 import StatusBar from "./components/StatusBar";
 import FileTree from "./components/FileTree";
 import EditorPane from "./components/EditorPane";
+import type { ViewMode } from "./components/EditorPane";
+import AboutDialog from "./components/AboutDialog";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import DropdownMenu from "./components/DropdownMenu";
@@ -26,6 +28,11 @@ function App() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem('nf-view-mode');
+    return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
+  });
 
   // Auto-open last vault on startup
   useEffect(() => {
@@ -129,9 +136,11 @@ function App() {
 
   const viewMenu = [
     { label: "切换侧栏", action: () => setSidebarVisible(s => !s) },
-    { label: "源码模式", action: () => {} },
-    { label: "预览模式", action: () => {} },
-    { label: "分栏模式", action: () => {} },
+    { divider: true as const },
+    { label: "源码模式", action: () => setViewMode("source") },
+    { label: "分栏模式", action: () => setViewMode("split") },
+    { label: "即输即显", action: () => setViewMode("live") },
+    { label: "预览模式", action: () => setViewMode("preview") },
     { divider: true as const },
     { label: "快速切换器", shortcut: "Ctrl+O", action: () => setShowQuickSwitcher(true) },
     { label: "命令面板", shortcut: "Ctrl+P", action: () => setShowCommandPalette(true) },
@@ -140,16 +149,27 @@ function App() {
   ];
 
   const toolsMenu = [
-    { label: "生成测试库", action: () => { dispatch({ type: 'SET_STATUS', text: '生成功能待实现' } as any); } },
+    { label: "生成测试库", action: async () => {
+      if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '请先打开 Vault' } as any); return; }
+      const profile = prompt('测试库 profile (smoke/stress/crosslink/topo-complex):', 'smoke');
+      if (profile) {
+        try {
+          const seed = Date.now();
+          const out = prompt('输出路径:', `${vaultPath}_test`);
+          if (out) {
+            const result: any = await invoke("generate_vault", { profile, seed, out });
+            dispatch({ type: 'SET_STATUS', text: result } as any);
+          }
+        } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `生成失败: ${e}` } as any); }
+      }
+    } },
     { label: "检查链接", disabled: true as const },
     { label: "Vault 统计", action: fileActions.vaultStats },
   ];
 
   const helpMenu = [
-    { label: "关于 NoteForge", action: () => {
-    dispatch({ type: 'SET_STATUS', text: `NoteForge v0.1.0 - Tauri2 + React + TypeScript - 本地优先知识管理` } as any);
-  } },
-    { label: "版本信息", action: () => { dispatch({ type: 'SET_STATUS', text: `构建: 2026-07` } as any); } },
+    { label: "关于 NoteForge", action: () => setAboutOpen(true) },
+    { label: "版本信息", action: () => setAboutOpen(true) },
   ];
 
   const quickActions = [
@@ -218,7 +238,8 @@ function App() {
           </div>
         )}
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
-          activeFile={activeFile || ""} files={files} onNavigate={readNote} />
+          activeFile={activeFile || ""} files={files} onNavigate={readNote}
+          mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }} />
       </div>
 
       {/* ── 状态栏 ── */}
@@ -231,6 +252,7 @@ function App() {
       {showCommandPalette && (
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

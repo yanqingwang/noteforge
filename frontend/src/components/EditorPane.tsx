@@ -11,7 +11,11 @@ interface EditorPaneProps {
   activeFile: string;
   files?: { path: string }[];
   onNavigate?: (path: string) => void;
+  mode?: ViewMode;
+  onSetMode?: (m: ViewMode) => void;
 }
+
+export type { ViewMode };
 
 function mdToHtml(md: string): string {
   let html = md
@@ -41,13 +45,15 @@ function highlightSource(text: string): string {
     .replace(/(\[.+\]\([^)]+\))/g, '<span class="hl-link">$1</span>');
 }
 
-const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, files = [], onNavigate }: EditorPaneProps) {
-  const [mode, setMode] = useState<ViewMode>(() => {
+const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode: externalSetMode }: EditorPaneProps) {
+  const [internalMode, internalSetMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
   });
-  // Persist view mode
-  useEffect(() => { localStorage.setItem('nf-view-mode', mode); }, [mode]);
+  const mode = externalMode ?? internalMode;
+  const setMode = externalSetMode ?? internalSetMode;
+  // Persist view mode to localStorage when using internal state
+  useEffect(() => { if (!externalMode) localStorage.setItem('nf-view-mode', mode); }, [mode, externalMode]);
   const [editContent, setEditContent] = useState(content);
   const [liveHtml, setLiveHtml] = useState(previewHtml);
   const [autocomplete, setAutocomplete] = useState<{ rect: DOMRect; filter: string } | null>(null);
