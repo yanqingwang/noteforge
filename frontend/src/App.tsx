@@ -1,5 +1,6 @@
 import { useReducer, useCallback, useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { layoutReducer, createInitialState } from "./layout/LayoutState";
 import StatusBar from "./components/StatusBar";
 import FileTree from "./components/FileTree";
@@ -81,45 +82,41 @@ function App() {
   const cache = activeFile ? contentCache[activeFile] : null;
   const noteCount = files.filter(f => !f.is_dir).length;
 
-  // ── Menu definitions (stable references) ──────────────────────────
-  const fileActions = useMemo(() => ({
-    handleBrowse, readNote,
-    newNote: async () => {
-      if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '请先打开 Vault' } as any); return; }
-      const name = prompt('笔记名称:', 'new-note.md');
-      if (name) {
-        try {
-          await invoke("create_note", { notePath: name });
-          // Refresh tree only
-          const tree: any[] = await invoke("get_file_tree", {});
-          setFiles(tree as FileEntry[]);
-          dispatch({ type: 'SET_STATUS', text: `已创建: ${name}` } as any);
-        } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `创建失败: ${e}` } as any); }
-      }
-    },
-    saveNote: async () => {
-      if (!vaultPath || !activeFile || !cache) { dispatch({ type: 'SET_STATUS', text: '没有需要保存的文件' } as any); return; }
-      try {
-        await invoke("write_note", { notePath: activeFile, content: cache.content });
-        dispatch({ type: 'SET_STATUS', text: `已保存: ${activeFile}` } as any);
-      } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
-    },
-    vaultStats: async () => {
-      if (!vaultPath) return;
-      try { const s: any = await invoke("vault_stats", {}); dispatch({ type: 'SET_STATUS', text: s } as any); } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `失败: ${e}` } as any); }
-    },
-  }), [vaultPath, activeFile, cache, handleBrowse, readNote]);
+  // ── Menu actions (stable references) ──────────────────────────────
+  const newNote = useCallback(async () => {
+    if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '请先打开 Vault' } as any); return; }
+    const name = prompt('笔记名称:', 'new-note.md');
+    if (!name) return;
+    try {
+      await invoke("create_note", { notePath: name });
+      const tree: any[] = await invoke("get_file_tree", {});
+      setFiles(tree as FileEntry[]);
+      dispatch({ type: 'SET_STATUS', text: `已创建: ${name}` } as any);
+    } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `创建失败: ${e}` } as any); }
+  }, [vaultPath]);
+
+  const saveNote = useCallback(async () => {
+    if (!vaultPath || !activeFile || !cache) { dispatch({ type: 'SET_STATUS', text: '没有需要保存的文件' } as any); return; }
+    try {
+      await invoke("write_note", { notePath: activeFile, content: cache.content });
+      dispatch({ type: 'SET_STATUS', text: `已保存: ${activeFile}` } as any);
+    } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
+  }, [vaultPath, activeFile, cache]);
+
+  const vaultStats = useCallback(async () => {
+    try { const s: any = await invoke("vault_stats", {}); dispatch({ type: 'SET_STATUS', text: s } as any); } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `失败: ${e}` } as any); }
+  }, []);
 
   const fileMenu = [
     { label: "打开 Vault", shortcut: "Ctrl+O", action: () => handleBrowse() },
-    { label: "新建笔记", shortcut: "Ctrl+N", action: fileActions.newNote },
+    { label: "新建笔记", shortcut: "Ctrl+N", action: newNote },
     { divider: true as const },
-    { label: "保存", shortcut: "Ctrl+S", action: fileActions.saveNote },
+    { label: "保存", shortcut: "Ctrl+S", action: saveNote },
     { divider: true as const },
     { label: "导出为 PDF", disabled: true as const },
     { label: "导出为 HTML", disabled: true as const },
     { divider: true as const },
-    { label: "退出", shortcut: "Alt+F4", action: () => window.close() },
+    { label: "退出", shortcut: "Alt+F4", action: () => { getCurrentWindow().close(); } },
   ];
 
   const editMenu = [
@@ -164,7 +161,7 @@ function App() {
       }
     } },
     { label: "检查链接", disabled: true as const },
-    { label: "Vault 统计", action: fileActions.vaultStats },
+    { label: "Vault 统计", action: vaultStats },
   ];
 
   const helpMenu = [
@@ -174,15 +171,15 @@ function App() {
 
   const quickActions = [
     { label: "打开 Vault", shortcut: "Ctrl+O", action: () => handleBrowse() },
-    { label: "新建笔记", shortcut: "Ctrl+N", action: fileActions.newNote },
+    { label: "新建笔记", shortcut: "Ctrl+N", action: newNote },
     { divider: true as const },
-    { label: "保存", shortcut: "Ctrl+S", action: fileActions.saveNote },
+    { label: "保存", shortcut: "Ctrl+S", action: saveNote },
     { divider: true as const },
     { label: "切换侧栏", action: () => setSidebarVisible(s => !s) },
     { label: "快速切换", shortcut: "Ctrl+O", action: () => setShowQuickSwitcher(true) },
     { label: "命令面板", shortcut: "Ctrl+P", action: () => setShowCommandPalette(true) },
     { divider: true as const },
-    { label: "Vault 统计", action: fileActions.vaultStats },
+    { label: "Vault 统计", action: vaultStats },
   ];
 
   const commands = useMemo(() => [
@@ -190,9 +187,9 @@ function App() {
     { id: 'quick-switcher', name: '快速切换器', shortcut: 'Ctrl+O', action: () => setShowQuickSwitcher(true) },
     { id: 'command-palette', name: '命令面板', shortcut: 'Ctrl+P', action: () => setShowCommandPalette(true) },
     { id: 'toggle-sidebar', name: '切换侧栏', action: () => setSidebarVisible(s => !s) },
-    { id: 'vault-stats', name: 'Vault 统计', action: fileActions.vaultStats },
-    { id: 'new-note', name: '新建笔记', action: fileActions.newNote },
-  ], [handleBrowse, fileActions]);
+    { id: 'vault-stats', name: 'Vault 统计', action: vaultStats },
+    { id: 'new-note', name: '新建笔记', action: newNote },
+  ], [handleBrowse, vaultStats, newNote, saveNote]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#fff" }}>
@@ -214,8 +211,8 @@ function App() {
       <div style={{ display: "flex", alignItems: "center", height: 40, background: "#fafafa",
         borderBottom: "1px solid #e0e0e0", padding: "0 8px", gap: 2 }}>
         <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault (Ctrl+O)">📂</button>
-        <button style={btnBase} onClick={fileActions.newNote} title="新建笔记">📄</button>
-        <button style={btnBase} onClick={fileActions.saveNote} title="保存 (Ctrl+S)">💾</button>
+        <button style={btnBase} onClick={newNote} title="新建笔记">📄</button>
+        <button style={btnBase} onClick={saveNote} title="保存 (Ctrl+S)">💾</button>
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
         <button style={btnBase} onClick={() => setShowQuickSwitcher(true)} title="快速切换 (Ctrl+O)">🔍</button>
         <button style={btnBase} onClick={() => setShowCommandPalette(true)} title="命令面板 (Ctrl+P)">⌘</button>
