@@ -254,6 +254,14 @@ fn vault_stats(state: tauri::State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn read_file(path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state.with_vault(|vault| {
+        vault.read_note(path).map_err(|e| e.to_string())
+            .map(|content| String::from_utf8_lossy(&content).to_string())
+    })
+}
+
+#[tauri::command]
 fn get_config(state: tauri::State<'_, AppState>) -> Result<VaultConfig, String> {
     state.with_vault(|vault| Ok(vault.config().clone()))
 }
@@ -314,6 +322,7 @@ fn main() {
             get_file_tree,
             get_config,
             update_config,
+            read_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

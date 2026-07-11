@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, memo } from "react";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import WikilinkAutocomplete from "./WikilinkAutocomplete";
+import { pluginManager } from "../plugins/PluginManager";
 
 type ViewMode = "source" | "preview" | "split" | "live";
 
@@ -100,6 +101,24 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
   useEffect(() => {
     if (!previewRef.current) return;
     previewRef.current.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b as HTMLElement));
+  }, [previewHtml, mode]);
+
+  // Plugin markdown post-processors (html-effect etc.)
+  useEffect(() => {
+    const el = mode === "preview" || mode === "split" ? previewRef.current : null;
+    if (!el) return;
+    for (const [lang, processor] of pluginManager.getPostProcessors()) {
+      el.querySelectorAll(`pre > code.language-${CSS.escape(lang)}`).forEach(code => {
+        const pre = code.parentElement;
+        if (!pre || pre.dataset.heProcessed) return;
+        pre.dataset.heProcessed = "true";
+        const source = code.textContent || "";
+        const container = document.createElement("div");
+        container.className = "he-container";
+        pre.parentNode?.replaceChild(container, pre);
+        processor(source, container);
+      });
+    }
   }, [previewHtml, mode]);
 
   // Source input handler + [[ autocomplete

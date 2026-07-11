@@ -8,6 +8,7 @@ import EditorPane from "./components/EditorPane";
 import type { ViewMode } from "./components/EditorPane";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
+import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import DropdownMenu from "./components/DropdownMenu";
@@ -36,6 +37,7 @@ function App() {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
   });
+  const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
 
   // Auto-open last vault on startup
   useEffect(() => {
@@ -52,12 +54,19 @@ function App() {
       const tree: FileEntry[] = await invoke("open_vault", { path });
       setVaultPath(path); setFiles(tree);
       localStorage.setItem('nf-last-vault', path);
+      // Load plugins
+      pluginManager.loadPlugins(path);
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
   }, []);
 
   const readNote = useCallback(async (notePath: string) => {
     if (!vaultPath) return;
+    // .html files use the HTML viewer instead of the editor
+    if (notePath.endsWith(".html")) {
+      setHtmlViewFile(notePath);
+      return;
+    }
     // Skip if already loaded
     if (contentCache[notePath]) {
       const c = contentCache[notePath];
@@ -185,14 +194,21 @@ function App() {
     { label: "Vault 统计", action: vaultStats },
   ];
 
-  const commands = useMemo(() => [
-    { id: 'open-vault', name: '打开 Vault', shortcut: 'Ctrl+O', action: () => handleBrowse() },
-    { id: 'quick-switcher', name: '快速切换器', shortcut: 'Ctrl+O', action: () => setShowQuickSwitcher(true) },
-    { id: 'command-palette', name: '命令面板', shortcut: 'Ctrl+P', action: () => setShowCommandPalette(true) },
-    { id: 'toggle-sidebar', name: '切换侧栏', action: () => setSidebarVisible(s => !s) },
-    { id: 'vault-stats', name: 'Vault 统计', action: vaultStats },
-    { id: 'new-note', name: '新建笔记', action: newNote },
-  ], [handleBrowse, vaultStats, newNote, saveNote]);
+  const commands = useMemo(() => {
+    const cmds = [
+      { id: 'open-vault', name: '打开 Vault', shortcut: 'Ctrl+O', action: () => handleBrowse() },
+      { id: 'quick-switcher', name: '快速切换器', shortcut: 'Ctrl+O', action: () => setShowQuickSwitcher(true) },
+      { id: 'command-palette', name: '命令面板', shortcut: 'Ctrl+P', action: () => setShowCommandPalette(true) },
+      { id: 'toggle-sidebar', name: '切换侧栏', action: () => setSidebarVisible(s => !s) },
+      { id: 'vault-stats', name: 'Vault 统计', action: vaultStats },
+      { id: 'new-note', name: '新建笔记', action: newNote },
+    ];
+    // Plugin commands
+    for (const pc of pluginManager.getCommands()) {
+      cmds.push({ id: `plugin-${pc.id}`, name: pc.name, action: pc.callback });
+    }
+    return cmds;
+  }, [handleBrowse, vaultStats, newNote, saveNote]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#fff" }}>
@@ -240,6 +256,18 @@ function App() {
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
           activeFile={activeFile || ""} files={files} onNavigate={readNote}
           mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }} />
+        {htmlViewFile && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "4px 12px", background: "#f8f8f8", borderBottom: "1px solid #ddd", fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
+              <span>🌐 HTML Viewer</span>
+              <span style={{ flex: 1 }}>{htmlViewFile}</span>
+              <button onClick={() => setHtmlViewFile(null)}
+                style={{ padding: "2px 8px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#999", fontSize: 16 }}>✕</button>
+            </div>
+            <div ref={(el) => { if (el && htmlViewFile) { const view = pluginManager.getViews().find(v => v.type === "html-effectiveness-view"); if (view) { el.innerHTML = ""; view.render(el, htmlViewFile); } } }}
+              style={{ flex: 1, overflow: "hidden" }} />
+          </div>
+        )}
       </div>
 
       {/* ── 状态栏 ── */}
