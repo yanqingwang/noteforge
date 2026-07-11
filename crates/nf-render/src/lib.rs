@@ -203,7 +203,33 @@ pub fn render_html(content: &str) -> String {
     let mut processed = String::with_capacity(content.len());
     let chars: Vec<char> = content.chars().collect();
     let mut i = 0;
+    let is_image_ext = |s: &str| {
+        let lower = s.to_lowercase();
+        lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
+            || lower.ends_with(".gif") || lower.ends_with(".svg") || lower.ends_with(".webp")
+            || lower.ends_with(".bmp") || lower.ends_with(".ico")
+    };
     while i < chars.len() {
+        // !![[image.png]] for embedded images via wikilink
+        if i + 3 < chars.len() && chars[i] == '!' && chars[i+1] == '[' && chars[i+2] == '[' {
+            let mut end = i + 3;
+            while end + 1 < chars.len() {
+                if chars[end] == ']' && chars[end+1] == ']' { break; }
+                end += 1;
+            }
+            if end + 1 < chars.len() {
+                let inner: String = chars[i+3..end].iter().collect();
+                let target = inner.split('|').next().unwrap_or(&inner).to_string();
+                if is_image_ext(&target) {
+                    processed.push_str(&format!("<img src=\"note://{}\" alt=\"{}\" style=\"max-width:100%\"/>", target, target));
+                } else {
+                    processed.push_str(&format!("<a href=\"note://{}\">{}</a>", target, target));
+                }
+                i = end + 2;
+                continue;
+            }
+        }
+        // [[wikilink]] for regular links
         if i + 1 < chars.len() && chars[i] == '[' && chars[i+1] == '[' {
             // Find closing ]]
             let mut end = i + 2;

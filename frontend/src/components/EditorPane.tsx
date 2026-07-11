@@ -20,6 +20,14 @@ export type { ViewMode };
 
 function mdToHtml(md: string): string {
   let html = md
+    // ![[image.png]] embedded image via wikilink
+    .replace(/!\[\[([^\]]+)\]\]/g, (_, target) => {
+      const t = target.split('|')[0];
+      if (/\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i.test(t))
+        return `<img src="note://${t}" alt="${t}" style="max-width:100%" />`;
+      return `<a href="note://${t}">${t}</a>`;
+    })
+    // [[target|display]] wikilink
     .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, display) =>
       `<a href="note://${target}" class="wikilink">${display || target}</a>`)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%"/>')

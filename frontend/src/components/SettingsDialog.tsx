@@ -10,6 +10,7 @@ interface SettingsDialogProps {
 export default function SettingsDialog({ open, onClose, onVaultReopen }: SettingsDialogProps) {
   const [excludeDirs, setExcludeDirs] = useState("");
   const [showHidden, setShowHidden] = useState(false);
+  const [attachmentDirs, setAttachmentDirs] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -18,6 +19,7 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
     invoke("get_config", {}).then((cfg: any) => {
       setExcludeDirs((cfg.exclude_dirs || []).join("\n"));
       setShowHidden(cfg.show_hidden || false);
+      setAttachmentDirs(cfg.attachment_dir || "assets");
     }).catch((e: any) => setMessage(`加载配置失败: ${e}`));
   }, [open]);
 
@@ -35,6 +37,7 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
       cfg.exclude_dirs = excludeDirs.split("\n").map((s: string) => s.trim()).filter(Boolean);
       cfg.exclude_dirs = cfg.exclude_dirs.map((d: string) => d.endsWith("/") ? d.slice(0, -1) : d);
       cfg.show_hidden = showHidden;
+      cfg.attachment_dir = attachmentDirs.trim() || "assets";
       await invoke("update_config", { config: cfg });
       setMessage("✅ 已保存");
       if (onVaultReopen) setTimeout(onVaultReopen, 500);
@@ -62,6 +65,15 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
           <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} />
           显示隐藏文件夹（以 . 开头）
         </label>
+
+        {/* attachment_dir */}
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>附件目录</label>
+        <input value={attachmentDirs} onChange={e => setAttachmentDirs(e.target.value)}
+          placeholder="assets"
+          style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 16 }} />
+        <p style={{ color: "#999", fontSize: 11, margin: "-12px 0 16px" }}>
+          附件目录用于双链中加载图片等附件，相对于 vault 根目录。
+        </p>
 
         {/* exclude_dirs */}
         <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>排除目录</label>
