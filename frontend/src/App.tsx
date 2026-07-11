@@ -62,14 +62,28 @@ function App() {
 
   const readNote = useCallback(async (notePath: string) => {
     if (!vaultPath) return;
+    // Resolve wikilink target to actual file path in vault
+    let resolved = notePath;
+    if (!resolved.endsWith(".md") && !resolved.endsWith(".html")) {
+      // Search files for a matching .md file (by exact path or filename)
+      const match = files.find(f =>
+        f.path === resolved ||
+        f.path === resolved + ".md" ||
+        f.path.endsWith("/" + resolved) ||
+        f.path.endsWith("/" + resolved + ".md") ||
+        // Match by filename without extension (for [[Title]]-style wikilinks)
+        f.path.replace(/\.md$/, "").split("/").pop() === resolved
+      );
+      if (match) resolved = match.path;
+    }
     // .html files use the HTML viewer
-    if (notePath.endsWith(".html")) {
-      setHtmlViewFile(notePath);
+    if (resolved.endsWith(".html")) {
+      setHtmlViewFile(resolved);
       return;
     }
     // Other attachments (images, PDFs) - open in viewer or OS
-    if (!notePath.endsWith(".md")) {
-      setHtmlViewFile(notePath);
+    if (!resolved.endsWith(".md")) {
+      setHtmlViewFile(resolved);
       return;
     }
     // Skip if already loaded
