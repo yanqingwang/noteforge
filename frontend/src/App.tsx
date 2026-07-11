@@ -7,6 +7,7 @@ import FileTree from "./components/FileTree";
 import EditorPane from "./components/EditorPane";
 import type { ViewMode } from "./components/EditorPane";
 import AboutDialog from "./components/AboutDialog";
+import SettingsDialog from "./components/SettingsDialog";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import DropdownMenu from "./components/DropdownMenu";
@@ -30,6 +31,7 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
@@ -146,6 +148,7 @@ function App() {
   ];
 
   const toolsMenu = [
+    { label: "设置", action: () => setSettingsOpen(true) },
     { label: "生成测试库", action: async () => {
       if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '请先打开 Vault' } as any); return; }
       const profile = prompt('测试库 profile (smoke/stress/crosslink/topo-complex):', 'smoke');
@@ -250,6 +253,7 @@ function App() {
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
