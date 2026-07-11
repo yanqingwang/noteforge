@@ -108,6 +108,8 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
   // Syntax highlighting in preview
   useEffect(() => {
     if (!previewRef.current) return;
+    // Add wikilink class to all note:// links (from Rust renderer or manual markdown)
+    previewRef.current.querySelectorAll('a[href^="note://"]').forEach(a => a.classList.add('wikilink'));
     previewRef.current.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b as HTMLElement));
   }, [previewHtml, mode]);
 
