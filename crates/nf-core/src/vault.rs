@@ -25,6 +25,8 @@ pub struct VaultConfig {
     pub line_ending: LineEnding,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude_dirs: Vec<String>,
+    #[serde(default)]
+    pub show_hidden: bool,
 }
 
 impl Default for VaultConfig {
@@ -34,6 +36,7 @@ impl Default for VaultConfig {
             attachment_dir: "assets".into(),
             line_ending: LineEnding::Lf,
             exclude_dirs: Vec::new(),
+            show_hidden: false,
         }
     }
 }
@@ -62,5 +65,6 @@ mod tests {
         assert_eq!(cfg.attachment_dir, "assets");
         assert_eq!(cfg.line_ending, LineEnding::Lf);
         assert!(cfg.exclude_dirs.is_empty());
+        assert!(!cfg.show_hidden);
     }
 }

@@ -2701,6 +2701,7 @@ dependencies = [
 name = "noteforge"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "comrak",
  "nf-core",
  "nf-graph",

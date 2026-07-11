@@ -62,8 +62,13 @@ function App() {
 
   const readNote = useCallback(async (notePath: string) => {
     if (!vaultPath) return;
-    // .html files use the HTML viewer instead of the editor
+    // .html files use the HTML viewer
     if (notePath.endsWith(".html")) {
+      setHtmlViewFile(notePath);
+      return;
+    }
+    // Other attachments (images, PDFs) - open in viewer or OS
+    if (!notePath.endsWith(".md")) {
       setHtmlViewFile(notePath);
       return;
     }
@@ -113,6 +118,16 @@ function App() {
       dispatch({ type: 'SET_STATUS', text: `已保存: ${activeFile}` } as any);
     } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
   }, [vaultPath, activeFile, cache]);
+
+  const reopenVault = useCallback(async () => {
+    if (!vaultPath) return;
+    try {
+      dispatch({ type: 'SET_STATUS', text: '重新加载...' } as any);
+      const tree: FileEntry[] = await invoke("get_file_tree", {});
+      setFiles(tree);
+      dispatch({ type: 'SET_STATUS', text: `已刷新: ${vaultPath}` } as any);
+    } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `刷新失败: ${e}` } as any); }
+  }, [vaultPath]);
 
   const vaultStats = useCallback(async () => {
     try { const s: any = await invoke("vault_stats", {}); dispatch({ type: 'SET_STATUS', text: s } as any); } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `失败: ${e}` } as any); }
@@ -259,13 +274,17 @@ function App() {
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "4px 12px", background: "#f8f8f8", borderBottom: "1px solid #ddd", fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
-              <span>🌐 HTML Viewer</span>
+              <span>{htmlViewFile.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) ? "🖼" : "🌐"}</span>
               <span style={{ flex: 1 }}>{htmlViewFile}</span>
               <button onClick={() => setHtmlViewFile(null)}
                 style={{ padding: "2px 8px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#999", fontSize: 16 }}>✕</button>
             </div>
-            <div ref={(el) => { if (el && htmlViewFile) { const view = pluginManager.getViews().find(v => v.type === "html-effectiveness-view"); if (view) { el.innerHTML = ""; view.render(el, htmlViewFile); } } }}
-              style={{ flex: 1, overflow: "hidden" }} />
+            {htmlViewFile.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) ? (
+              <ImageViewer filePath={htmlViewFile} />
+            ) : (
+              <div ref={(el) => { if (el && htmlViewFile) { const view = pluginManager.getViews().find(v => v.type === "html-effectiveness-view"); if (view) { el.innerHTML = ""; view.render(el, htmlViewFile); } } }}
+                style={{ flex: 1, overflow: "hidden" }} />
+            )}
           </div>
         )}
       </div>
@@ -281,7 +300,7 @@ function App() {
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onVaultReopen={reopenVault} />
     </div>
   );
 }
@@ -290,6 +309,24 @@ function findActivePath(node: any): string | null {
   if (node?.tabs && node.tabs.length > 0) return node.tabs[node.activeIndex]?.view?.path || null;
   if (node?.children) return findActivePath(node.children[0]);
   return null;
+}
+
+function ImageViewer({ filePath }: { filePath: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    invoke<string>("read_file_data", { path: filePath })
+      .then(setDataUrl)
+      .catch((e: any) => setErr(e.toString()));
+  }, [filePath]);
+  if (err) return <p style={{ padding: 16, color: "red" }}>加载失败: {err}</p>;
+  if (!dataUrl) return <p style={{ padding: 16, color: "#999" }}>加载中...</p>;
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f0f0", overflow: "auto" }}>
+      <img src={dataUrl} alt={filePath}
+        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+    </div>
+  );
 }
 
 export default App;

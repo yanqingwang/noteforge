@@ -24,3 +24,4 @@ nf-render = { path = "../crates/nf-render" }
 nf-vaultgen = { path = "../crates/nf-vaultgen" }
 comrak.workspace = true
 tokio = { version = "1", features = ["full"] }
+base64 = "0.22"

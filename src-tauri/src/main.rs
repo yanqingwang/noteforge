@@ -261,6 +261,21 @@ fn read_file(path: &str, state: tauri::State<'_, AppState>) -> Result<String, St
     })
 }
 
+/// Read a file and return it as a data URL (base64-encoded).
+#[tauri::command]
+fn read_file_data(path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state.with_vault(|vault| {
+        let data = vault.read_note(path).map_err(|e| e.to_string())?;
+        let mime = if path.ends_with(".png") { "image/png" }
+            else if path.ends_with(".jpg") || path.ends_with(".jpeg") { "image/jpeg" }
+            else if path.ends_with(".gif") { "image/gif" }
+            else if path.ends_with(".svg") { "image/svg+xml" }
+            else if path.ends_with(".webp") { "image/webp" }
+            else { "application/octet-stream" };
+        Ok(format!("data:{};base64,{}", mime, base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data)))
+    })
+}
+
 #[tauri::command]
 fn get_config(state: tauri::State<'_, AppState>) -> Result<VaultConfig, String> {
     state.with_vault(|vault| Ok(vault.config().clone()))
@@ -323,6 +338,7 @@ fn main() {
             get_config,
             update_config,
             read_file,
+            read_file_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
