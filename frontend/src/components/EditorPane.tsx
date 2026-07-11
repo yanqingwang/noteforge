@@ -71,6 +71,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
 
   useEffect(() => { setEditContent(content); setLiveHtml(previewHtml); }, [content, previewHtml]);
 
@@ -80,15 +81,35 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     return () => clearTimeout(t);
   }, [editContent, content]);
 
-  // Sync textarea ↔ overlay scroll
+  // Sync textarea ↔ overlay ↔ preview scroll
   const handleScroll = useCallback(() => {
-    if (textareaRef.current && lineNumRef.current) {
-      lineNumRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-    if (textareaRef.current && overlayRef.current) {
-      overlayRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  }, []);
+    if (syncing.current) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    // Sync line numbers
+    if (lineNumRef.current) lineNumRef.current.scrollTop = ta.scrollTop;
+    if (overlayRef.current) overlayRef.current.scrollTop = ta.scrollTop;
+    // Sync preview pane (split mode)
+    if (mode !== "split") return;
+    const pr = previewRef.current;
+    if (!pr) return;
+    const pct = ta.scrollHeight > ta.clientHeight ? ta.scrollTop / (ta.scrollHeight - ta.clientHeight) : 0;
+    syncing.current = true;
+    pr.scrollTop = pct * (pr.scrollHeight - pr.clientHeight);
+    syncing.current = false;
+  }, [mode]);
+
+  // Sync preview → source scroll (split mode)
+  const handlePreviewScroll = useCallback(() => {
+    if (syncing.current || mode !== "split") return;
+    const pr = previewRef.current;
+    const ta = textareaRef.current;
+    if (!pr || !ta) return;
+    const pct = pr.scrollHeight > pr.clientHeight ? pr.scrollTop / (pr.scrollHeight - pr.clientHeight) : 0;
+    syncing.current = true;
+    ta.scrollTop = pct * (ta.scrollHeight - ta.clientHeight);
+    syncing.current = false;
+  }, [mode]);
 
   // Wikilink click → navigate
   useEffect(() => {
@@ -259,7 +280,8 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
             width: mode === "split" ? "50%" : "100%",
             borderLeft: mode === "split" ? "1px solid #ddd" : "none",
             overflowY: "auto", padding: 16
-          }} className="markdown-body" dangerouslySetInnerHTML={{ __html: currentHtml }} />
+          }} className="markdown-body" dangerouslySetInnerHTML={{ __html: currentHtml }}
+            onScroll={handlePreviewScroll} />
         )}
 
         {/* Live mode */}
