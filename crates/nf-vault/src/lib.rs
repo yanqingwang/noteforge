@@ -52,12 +52,22 @@ impl Vault {
         &self.config
     }
 
-    /// Build the complete file tree (recursive).
+    /// Build the complete file tree (recursive), excluding configured dirs.
     pub fn file_tree(&self) -> Result<Vec<FileEntry>, VaultError> {
         let mut entries = Vec::new();
+        let exclude = &self.config.exclude_dirs;
         for entry in walkdir::WalkDir::new(&self.root)
             .into_iter()
-            .filter_entry(|e| !is_hidden(e))
+            .filter_entry(|e| {
+                if is_hidden(e) { return false; }
+                if !e.file_type().is_dir() { return true; }
+                // Filter out excluded directories
+                let rel = e.path().strip_prefix(&self.root)
+                    .unwrap_or(e.path())
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                !exclude.iter().any(|d| rel == *d || rel.starts_with(&format!("{}/", d)))
+            })
         {
             let entry = entry.map_err(VaultError::WalkDir)?;
             let rel = entry

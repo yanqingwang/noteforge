@@ -123,29 +123,35 @@ function buildTree(files: FileEntry[], sortMode: SortMode, dirsFirst: boolean): 
     for (const n of nodes) if (n.children.length > 0) sortDirs(n.children);
   };
 
+  // Ensure a directory node exists; creates parent dirs recursively.
+  const ensureDir = (dirPath: string): TreeNode => {
+    let existing = dirMap.get(dirPath);
+    if (existing) return existing;
+    const parts = dirPath.split('/');
+    const name = parts[parts.length - 1];
+    const parentPath = parts.slice(0, -1).join('/');
+    const dirEntry = files.find(f => f.is_dir && f.path === dirPath);
+    existing = { name, isDir: true, modified: dirEntry?.modified || 0, size: 0, children: [] };
+    dirMap.set(dirPath, existing);
+    if (parentPath) {
+      const parent = ensureDir(parentPath);
+      parent.children.push(existing);
+    } else {
+      root.push(existing);
+    }
+    return existing;
+  };
+
   for (const file of sorted) {
     const parts = file.path.split('/');
     const fileName = parts.pop()!;
     const dirPath = parts.join('/');
-
-    let parent = root;
     if (dirPath) {
-      let currentPath = "";
-      for (const p of parts) {
-        currentPath = currentPath ? `${currentPath}/${p}` : p;
-        // Create dir only from FileEntry that's a directory in the files list
-        let dirNode = Array.from(dirMap.values()).find(d => d.name === p && d.children !== undefined);
-        if (!dirNode) {
-          const dirEntry = files.find(f => f.is_dir && f.path === currentPath);
-          dirNode = { name: p, isDir: true, modified: dirEntry?.modified || 0, size: 0, children: [] };
-          dirMap.set(currentPath, dirNode);
-          root.push(dirNode);
-        }
-        parent = dirNode.children;
-      }
+      const parent = ensureDir(dirPath);
+      parent.children.push({ name: fileName, path: file.path, isDir: false, modified: file.modified, size: file.size, children: [] });
+    } else {
+      root.push({ name: fileName, path: file.path, isDir: false, modified: file.modified, size: file.size, children: [] });
     }
-
-    parent.push({ name: fileName, path: file.path, isDir: false, modified: file.modified, size: file.size, children: [] });
   }
 
   sortDirs(root);

@@ -1,4 +1,5 @@
-use nf_vault::{FileEntry, Vault};
+use nf_core::vault::VaultConfig;
+use nf_vault::{FileEntry, Vault, VaultConfigExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -252,6 +253,27 @@ fn vault_stats(state: tauri::State<'_, AppState>) -> Result<String, String> {
     Ok(format!("Vault统计: {}笔记 {}附件 {}目录 {}KB", notes, attachments, dirs, total_size / 1024))
 }
 
+#[tauri::command]
+fn get_config(state: tauri::State<'_, AppState>) -> Result<VaultConfig, String> {
+    state.with_vault(|vault| Ok(vault.config().clone()))
+}
+
+#[tauri::command]
+fn update_config(config: VaultConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let vault_path = {
+        let v = state.vault.lock().map_err(|e| e.to_string())?;
+        v.as_ref().map(|v| v.root().to_path_buf())
+            .ok_or_else(|| "No vault open".to_string())?
+    };
+    config.save(&vault_path).map_err(|e| e.to_string())?;
+    // Re-open vault with new config to pick up exclude_dirs etc.
+    let mut v = state.vault.lock().map_err(|e| e.to_string())?;
+    *v = Some(Vault::open(&vault_path).map_err(|e| e.to_string())?);
+    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+    tc.clear();
+    Ok(())
+}
+
 // ── Unchanged commands ──────────────────────────────────────────────
 
 #[tauri::command]
@@ -290,6 +312,8 @@ fn main() {
             list_profiles,
             generate_vault,
             get_file_tree,
+            get_config,
+            update_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
