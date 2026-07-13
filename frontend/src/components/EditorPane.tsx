@@ -190,7 +190,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     el1?.addEventListener('click', handler);
     el2?.addEventListener('click', handler);
     return () => { el1?.removeEventListener('click', handler); el2?.removeEventListener('click', handler); };
-  }, [previewHtml, liveHtml, onNavigate]);
+  }, [previewHtml, liveHtml, onNavigate, mode]);
 
   // Syntax highlighting in preview
   useEffect(() => {

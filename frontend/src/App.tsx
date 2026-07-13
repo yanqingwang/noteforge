@@ -76,6 +76,12 @@ function App() {
       );
       if (match) resolved = match.path;
     }
+    // If still no match, try fuzzy search
+    if (!resolved.endsWith(".md") && !resolved.endsWith(".html")) {
+      const withMd = resolved + ".md";
+      const fuzzy = files.find(f => f.path.toLowerCase().includes(withMd.toLowerCase()) || f.path.toLowerCase().includes(resolved.toLowerCase()));
+      if (fuzzy) resolved = fuzzy.path;
+    }
     // .html files use the HTML viewer
     if (resolved.endsWith(".html")) {
       setHtmlViewFile(resolved);
@@ -98,7 +104,7 @@ function App() {
       setContentCache(c => ({ ...c, [resolved]: { content: note.content, html: note.html } }));
       dispatch({ type: 'OPEN_FILE', path: resolved, content: note.content, html: note.html } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `读取失败: ${e}` } as any); }
-  }, [vaultPath, contentCache]);
+  }, [vaultPath, contentCache, files]);
 
   const handleBrowse = async () => {
     try {
