@@ -186,36 +186,9 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     }
   }, []);
 
-  // Live mode: sync contentEditable changes back to source
-  const handleLiveInput = useCallback(() => {
-    if (!liveRef.current) return;
-    const el = liveRef.current;
-    const md = mdToHtml(editContent);
-    // Only update if HTML actually diverges
-    if (el.innerHTML !== md) {
-      // user made edits - convert back roughly
-      const html = el.innerHTML;
-      const text = html
-        .replace(/<h1>/g, '# ').replace(/<\/h1>/g, '\n\n')
-        .replace(/<h2>/g, '## ').replace(/<\/h2>/g, '\n\n').replace(/<h3>/g, '### ').replace(/<\/h3>/g, '\n\n')
-        .replace(/<strong>/g, '**').replace(/<\/strong>/g, '**')
-        .replace(/<em>/g, '*').replace(/<\/em>/g, '*')
-        .replace(/<code>/g, '`').replace(/<\/code>/g, '`')
-        .replace(/<li>/g, '- ').replace(/<\/li>/g, '\n')
-        .replace(/<blockquote>/g, '> ').replace(/<\/blockquote>/g, '\n')
-        .replace(/<p>/g, '').replace(/<\/p>/g, '\n\n')
-        .replace(/<br\s*\/?>/g, '\n').replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
-      setEditContent(text);
-    }
-  }, [editContent]);
-
-  // Sync liveRef innerHTML when source changes
-  useEffect(() => {
-    if (mode === "live" && liveRef.current) {
-      liveRef.current.innerHTML = liveHtml;
-    }
-  }, [liveHtml, mode]);
+  // Live mode: no longer uses contentEditable — uses source textarea + live preview
+  // (cursor stability: textarea has native cursor management)
+  // handleLiveInput removed — contentEditable approach was unreliable
 
   if (!activeFile) {
     return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}><p>选择笔记查看内容</p></div>;
@@ -284,12 +257,24 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
             onScroll={handlePreviewScroll} />
         )}
 
-        {/* Live mode */}
+        {/* Live mode: source textarea (top) + live preview (bottom) */}
         {mode === "live" && (
-          <div ref={liveRef} contentEditable suppressContentEditableWarning onInput={handleLiveInput}
-            style={{ flex: 1, padding: 16, overflowY: "auto", outline: "none",
-              fontFamily: '"SF Mono", "Fira Code", Consolas, monospace', fontSize: 14, lineHeight: 1.8 }}
-            className="markdown-body" />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flex: 1, display: "flex", overflow: "hidden", borderBottom: "1px solid #ddd" }}>
+              <div ref={lineNumRef} style={{ padding: "8px 6px", textAlign: "right", color: "#999", fontSize: 12,
+                fontFamily: '"SF Mono", Consolas, monospace', lineHeight: 1.6, overflow: "hidden",
+                userSelect: "none", minWidth: 36, borderRight: "1px solid #eee", background: "#fafafa" }}>
+                {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
+              </div>
+              <textarea value={editContent} onChange={handleSourceChange}
+                onScroll={handleScroll} onKeyUp={handleScroll}
+                style={{ flex: 1, padding: "8px 12px", border: "none", outline: "none", resize: "none",
+                  fontFamily: '"SF Mono", "Fira Code", Consolas, monospace', fontSize: 14, lineHeight: 1.6, color: "#222" }} />
+            </div>
+            <div ref={previewRef} style={{ flex: 1, overflowY: "auto", padding: 16 }}
+              className="markdown-body" dangerouslySetInnerHTML={{ __html: currentHtml }}
+              onScroll={handlePreviewScroll} />
+          </div>
         )}
       </div>
 

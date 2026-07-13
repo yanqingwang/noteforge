@@ -87,16 +87,16 @@ function App() {
       return;
     }
     // Skip if already loaded
-    if (contentCache[notePath]) {
-      const c = contentCache[notePath];
-      dispatch({ type: 'OPEN_FILE', path: notePath, content: c.content, html: c.html } as any);
+    if (contentCache[resolved]) {
+      const c = contentCache[resolved];
+      dispatch({ type: 'OPEN_FILE', path: resolved, content: c.content, html: c.html } as any);
       return;
     }
     try {
-      dispatch({ type: 'SET_STATUS', text: `加载: ${notePath}` } as any);
-      const note = await invoke("read_note", { notePath }) as any;
-      setContentCache(c => ({ ...c, [notePath]: { content: note.content, html: note.html } }));
-      dispatch({ type: 'OPEN_FILE', path: notePath, content: note.content, html: note.html } as any);
+      dispatch({ type: 'SET_STATUS', text: `加载: ${resolved}` } as any);
+      const note = await invoke("read_note", { notePath: resolved }) as any;
+      setContentCache(c => ({ ...c, [resolved]: { content: note.content, html: note.html } }));
+      dispatch({ type: 'OPEN_FILE', path: resolved, content: note.content, html: note.html } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `读取失败: ${e}` } as any); }
   }, [vaultPath, contentCache]);
 
