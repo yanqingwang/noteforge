@@ -64,10 +64,10 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
   // Persist view mode to localStorage when using internal state
   useEffect(() => { if (!externalMode) localStorage.setItem('nf-view-mode', mode); }, [mode, externalMode]);
   const [editContent, setEditContent] = useState(content);
-  const [liveHtml, setLiveHtml] = useState(previewHtml);
   const [autocomplete, setAutocomplete] = useState<{ rect: DOMRect; filter: string } | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
+  const [liveHtml, setLiveHtml] = useState(previewHtml);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -77,19 +77,21 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
 
   useEffect(() => {
     if (editContent === content) return;
-    const t = setTimeout(() => setLiveHtml(mdToHtml(editContent)), 150);
-    return () => clearTimeout(t);
-  }, [editContent, content]);
+    if (mode === "live") {
+      setLiveHtml(mdToHtml(editContent));
+    } else {
+      const t = setTimeout(() => setLiveHtml(mdToHtml(editContent)), 150);
+      return () => clearTimeout(t);
+    }
+  }, [editContent, content, mode]);
 
   // Sync textarea ↔ overlay ↔ preview scroll
   const handleScroll = useCallback(() => {
     if (syncing.current) return;
     const ta = textareaRef.current;
     if (!ta) return;
-    // Sync line numbers
     if (lineNumRef.current) lineNumRef.current.scrollTop = ta.scrollTop;
     if (overlayRef.current) overlayRef.current.scrollTop = ta.scrollTop;
-    // Sync preview pane (split mode)
     if (mode !== "split") return;
     const pr = previewRef.current;
     if (!pr) return;
@@ -110,6 +112,70 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     ta.scrollTop = pct * (ta.scrollHeight - ta.clientHeight);
     syncing.current = false;
   }, [mode]);
+
+  // Cursor preservation for live mode
+  const saveCursor = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !liveRef.current) return null;
+    const range = sel.getRangeAt(0);
+    const pre = document.createRange();
+    pre.selectNodeContents(liveRef.current);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().length;
+  }, []);
+
+  const restoreCursor = useCallback((pos: number | null) => {
+    if (pos === null || !liveRef.current) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    const walker = document.createTreeWalker(liveRef.current, NodeFilter.SHOW_TEXT);
+    let current = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent?.length || 0;
+      if (current + len >= pos) {
+        const offset = pos - current;
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.setEnd(node, offset);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      current += len;
+    }
+  }, []);
+
+  // Handle input in live mode
+  const handleLiveInput = useCallback(() => {
+    if (!liveRef.current) return;
+    const html = liveRef.current.innerHTML;
+    const md = html
+      .replace(/<h1[^>]*>/g, '# ').replace(/<\/h1>/g, '\n\n')
+      .replace(/<h2[^>]*>/g, '## ').replace(/<\/h2>/g, '\n\n').replace(/<h3[^>]*>/g, '### ').replace(/<\/h3>/g, '\n\n')
+      .replace(/<strong>/g, '**').replace(/<\/strong>/g, '**')
+      .replace(/<em>/g, '*').replace(/<\/em>/g, '*')
+      .replace(/<code>/g, '\`').replace(/<\/code>/g, '\`')
+      .replace(/<li[^>]*>/g, '- ').replace(/<\/li>/g, '\n')
+      .replace(/<blockquote>/g, '> ').replace(/<\/blockquote>/g, '\n')
+      .replace(/<p>/g, '').replace(/<\/p>/g, '\n\n')
+      .replace(/<br\s*\/?>/g, '\n').replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/<[^>]*>/g, '');
+    setEditContent(md);
+  }, []);
+
+  // Re-render live mode from markdown, preserving cursor
+  useEffect(() => {
+    if (mode !== "live" || !liveRef.current) return;
+    if (editContent === content && previewHtml) {
+      liveRef.current.innerHTML = previewHtml;
+      return;
+    }
+    const pos = saveCursor();
+    liveRef.current.innerHTML = liveHtml;
+    restoreCursor(pos);
+  }, [liveHtml, mode, previewHtml, content, editContent]);
 
   // Wikilink click → navigate
   useEffect(() => {
@@ -186,10 +252,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     }
   }, []);
 
-  // Live mode: no longer uses contentEditable — uses source textarea + live preview
-  // (cursor stability: textarea has native cursor management)
-  // handleLiveInput removed — contentEditable approach was unreliable
-
+  // Live mode: Typora-like WYSIWYG via contentEditable with cursor preservation
   if (!activeFile) {
     return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}><p>选择笔记查看内容</p></div>;
   }
@@ -257,24 +320,12 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
             onScroll={handlePreviewScroll} />
         )}
 
-        {/* Live mode: source textarea (top) + live preview (bottom) */}
+        {/* Live mode: Typora-style WYSIWYG */}
         {mode === "live" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ flex: 1, display: "flex", overflow: "hidden", borderBottom: "1px solid #ddd" }}>
-              <div ref={lineNumRef} style={{ padding: "8px 6px", textAlign: "right", color: "#999", fontSize: 12,
-                fontFamily: '"SF Mono", Consolas, monospace', lineHeight: 1.6, overflow: "hidden",
-                userSelect: "none", minWidth: 36, borderRight: "1px solid #eee", background: "#fafafa" }}>
-                {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-              </div>
-              <textarea value={editContent} onChange={handleSourceChange}
-                onScroll={handleScroll} onKeyUp={handleScroll}
-                style={{ flex: 1, padding: "8px 12px", border: "none", outline: "none", resize: "none",
-                  fontFamily: '"SF Mono", "Fira Code", Consolas, monospace', fontSize: 14, lineHeight: 1.6, color: "#222" }} />
-            </div>
-            <div ref={previewRef} style={{ flex: 1, overflowY: "auto", padding: 16 }}
-              className="markdown-body" dangerouslySetInnerHTML={{ __html: currentHtml }}
-              onScroll={handlePreviewScroll} />
-          </div>
+          <div ref={liveRef} contentEditable suppressContentEditableWarning onInput={handleLiveInput}
+            style={{ flex: 1, padding: 16, overflowY: "auto", outline: "none",
+              fontFamily: '"SF Mono", "Fira Code", Consolas, monospace', fontSize: 14, lineHeight: 1.8 }}
+            className="markdown-body" />
         )}
       </div>
 
