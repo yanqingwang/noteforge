@@ -61,7 +61,8 @@ function App() {
   }, []);
 
   const readNote = useCallback(async (notePath: string) => {
-    if (!vaultPath) return;
+    if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '没有打开 Vault' } as any); return; }
+    dispatch({ type: 'SET_STATUS', text: `跳转: ${notePath}` } as any);
     // Resolve wikilink target to actual file path in vault
     let resolved = notePath;
     if (!resolved.endsWith(".md") && !resolved.endsWith(".html")) {

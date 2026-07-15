@@ -177,20 +177,24 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     restoreCursor(pos);
   }, [liveHtml, mode, previewHtml, content, editContent]);
 
-  // Wikilink click → navigate
+  // Wikilink click → navigate (uses ref for stable callback, avoids re-attach)
+  const navRef = useRef(onNavigate);
+  navRef.current = onNavigate;
   useEffect(() => {
-    if (!onNavigate) return;
+    if (!navRef.current) return;
     const handler = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === 'A' && t.getAttribute('href')?.startsWith('note://')) {
-        e.preventDefault(); onNavigate(t.getAttribute('href')!.replace('note://', ''));
+        e.preventDefault();
+        navRef.current!(t.getAttribute('href')!.replace('note://', ''));
       }
     };
     const el1 = previewRef.current, el2 = liveRef.current;
     el1?.addEventListener('click', handler);
     el2?.addEventListener('click', handler);
     return () => { el1?.removeEventListener('click', handler); el2?.removeEventListener('click', handler); };
-  }, [previewHtml, liveHtml, onNavigate, mode]);
+    // Only re-attach when the actual DOM elements change (mode switches)
+  }, [mode]);
 
   // Syntax highlighting in preview
   useEffect(() => {
