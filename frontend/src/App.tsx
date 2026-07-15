@@ -116,6 +116,14 @@ function App() {
   };
 
   const activeFile = findActivePath(state.main);
+  const activeGroup = (() => {
+    const find = (n: any): any => {
+      if (n?.tabs?.length > 0) return n;
+      if (n?.children) for (const c of n.children) { const r = find(c); if (r) return r; }
+      return null;
+    };
+    return find(state.main);
+  })();
   const cache = activeFile ? contentCache[activeFile] : null;
   const noteCount = files.filter(f => !f.is_dir).length;
 
@@ -268,6 +276,14 @@ function App() {
         <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault (Ctrl+O)">📂</button>
         <button style={btnBase} onClick={newNote} title="新建笔记">📄</button>
         <button style={btnBase} onClick={saveNote} title="保存 (Ctrl+S)">💾</button>
+        <button style={btnBase} onClick={() => {
+          if (activeGroup && activeGroup.tabs.length > 1) {
+            const prev = activeGroup.activeIndex > 0 ? activeGroup.activeIndex - 1 : 0;
+            if (prev !== activeGroup.activeIndex) {
+              dispatch({ type: 'SELECT_TAB', groupId: activeGroup.id, tabId: activeGroup.tabs[prev].id } as any);
+            }
+          }
+        }} title="返回上一页">←</button>
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
         <button style={btnBase} onClick={() => setShowQuickSwitcher(true)} title="快速切换 (Ctrl+O)">🔍</button>
         <button style={btnBase} onClick={() => setShowCommandPalette(true)} title="命令面板 (Ctrl+P)">⌘</button>

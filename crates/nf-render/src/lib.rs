@@ -223,7 +223,7 @@ pub fn render_html(content: &str) -> String {
                 if is_image_ext(&target) {
                     processed.push_str(&format!("<img src=\"note://{}\" alt=\"{}\" style=\"max-width:100%\"/>", target, target));
                 } else {
-                    processed.push_str(&format!("<a href=\"note://{}\">{}</a>", target, target));
+                    processed.push_str(&format!("<a href=\"#\" data-note=\"{}\">{}</a>", target, target));
                 }
                 i = end + 2;
                 continue;
@@ -246,7 +246,7 @@ pub fn render_html(content: &str) -> String {
                 };
                 let clean_target = target.split('#').next().unwrap_or(target);
                 let label = display.unwrap_or(target);
-                processed.push_str(&format!("[{}](note://{})", label, clean_target));
+                processed.push_str(&format!("<a href=\"#\" data-note=\"{}\">{}</a>", clean_target, label));
                 i = end + 2;
                 continue;
             }

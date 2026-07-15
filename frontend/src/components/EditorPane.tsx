@@ -25,11 +25,11 @@ function mdToHtml(md: string): string {
       const t = target.split('|')[0];
       if (/\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i.test(t))
         return `<img src="note://${t}" alt="${t}" style="max-width:100%" />`;
-      return `<a href="note://${t}">${t}</a>`;
+      return `<a href="#" data-note="${t}">${t}</a>`;
     })
     // [[target|display]] wikilink
     .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, display) =>
-      `<a href="note://${target}" class="wikilink">${display || target}</a>`)
+      `<a href="#" data-note="${target}" class="wikilink">${display || target}</a>`)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%"/>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -177,30 +177,29 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     restoreCursor(pos);
   }, [liveHtml, mode, previewHtml, content, editContent]);
 
-  // Wikilink click → navigate (uses ref for stable callback, avoids re-attach)
+  // Wikilink click → navigate (uses data-note attribute, avoids custom protocol issues)
   const navRef = useRef(onNavigate);
   navRef.current = onNavigate;
   useEffect(() => {
     if (!navRef.current) return;
     const handler = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.tagName === 'A' && t.getAttribute('href')?.startsWith('note://')) {
+      const t = (e.target as HTMLElement).closest('[data-note]') as HTMLElement;
+      if (t) {
         e.preventDefault();
-        navRef.current!(t.getAttribute('href')!.replace('note://', ''));
+        navRef.current!(t.getAttribute('data-note')!);
       }
     };
     const el1 = previewRef.current, el2 = liveRef.current;
     el1?.addEventListener('click', handler);
     el2?.addEventListener('click', handler);
     return () => { el1?.removeEventListener('click', handler); el2?.removeEventListener('click', handler); };
-    // Only re-attach when the actual DOM elements change (mode switches)
   }, [mode]);
 
   // Syntax highlighting in preview
   useEffect(() => {
     if (!previewRef.current) return;
-    // Add wikilink class to all note:// links (from Rust renderer or manual markdown)
-    previewRef.current.querySelectorAll('a[href^="note://"]').forEach(a => a.classList.add('wikilink'));
+    // Style data-note links as wikilinks (from Rust renderer)
+    previewRef.current.querySelectorAll('a[data-note]').forEach(a => a.classList.add('wikilink'));
     previewRef.current.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b as HTMLElement));
   }, [previewHtml, mode]);
 
@@ -349,6 +348,8 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
         .hl-link { color: #0969da; }
         .markdown-body a.wikilink { color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; }
         .markdown-body a.wikilink:hover { background: #b6e0ff; text-decoration: underline; }
+        .markdown-body a[data-note] { color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; cursor: pointer; }
+        .markdown-body a[data-note]:hover { background: #b6e0ff; text-decoration: underline; }
       `}</style>
     </div>
   );
