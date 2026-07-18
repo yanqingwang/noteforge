@@ -177,23 +177,21 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     restoreCursor(pos);
   }, [liveHtml, mode, previewHtml, content, editContent]);
 
-  // Wikilink click → navigate (uses data-note attribute, avoids custom protocol issues)
+  // Wikilink click → navigate (document-level delegation, no re-attach needed)
   const navRef = useRef(onNavigate);
   navRef.current = onNavigate;
   useEffect(() => {
-    if (!navRef.current) return;
     const handler = (e: MouseEvent) => {
       const t = (e.target as HTMLElement).closest('[data-note]') as HTMLElement;
       if (t) {
         e.preventDefault();
-        navRef.current!(t.getAttribute('data-note')!);
+        const path = t.getAttribute('data-note');
+        if (path && navRef.current) navRef.current(path);
       }
     };
-    const el1 = previewRef.current, el2 = liveRef.current;
-    el1?.addEventListener('click', handler);
-    el2?.addEventListener('click', handler);
-    return () => { el1?.removeEventListener('click', handler); el2?.removeEventListener('click', handler); };
-  }, [mode, previewHtml, liveHtml]);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   // Syntax highlighting in preview
   useEffect(() => {
