@@ -8,6 +8,7 @@ members = [
     "crates/nf-markdown",
     "crates/nf-plugin",
     "crates/nf-render",
+    "crates/nf-sync",
     "crates/nf-vault",
     "crates/nf-vaultgen",
     "crates/nf-workspace",

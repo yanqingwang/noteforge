@@ -22,6 +22,7 @@ nf-plugin = { path = "../crates/nf-plugin" }
 nf-workspace = { path = "../crates/nf-workspace" }
 nf-render = { path = "../crates/nf-render" }
 nf-vaultgen = { path = "../crates/nf-vaultgen" }
+nf-sync = { path = "../crates/nf-sync" }
 comrak.workspace = true
 tokio = { version = "1", features = ["full"] }
 base64 = "0.22"

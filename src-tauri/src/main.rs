@@ -1,4 +1,8 @@
 use nf_core::vault::VaultConfig;
+use nf_sync::drivers::filesystem::FsDriver;
+use nf_sync::drivers::joplin_server::JoplinServerDriver;
+use nf_sync::drivers::webdav::WebDavDriver;
+use nf_sync::engine::SyncEngine;
 use nf_vault::{FileEntry, Vault, VaultConfigExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -7,6 +11,16 @@ use std::sync::Mutex;
 struct AppState {
     vault: Mutex<Option<Vault>>,
     tree_cache: Mutex<Vec<FileEntry>>,
+    sync_engine: Mutex<Option<SyncEngine>>,
+    sync_config: Mutex<Option<SyncConfig>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct SyncConfig {
+    target_type: String, // "webdav", "joplin_server", "filesystem"
+    url: String,
+    username: String,
+    password: String,
 }
 
 impl AppState {
@@ -14,6 +28,8 @@ impl AppState {
         AppState {
             vault: Mutex::new(None),
             tree_cache: Mutex::new(Vec::new()),
+            sync_engine: Mutex::new(None),
+            sync_config: Mutex::new(None),
         }
     }
 
@@ -21,7 +37,6 @@ impl AppState {
         let mut v = self.vault.lock().map_err(|e| e.to_string())?;
         if v.as_ref().is_none_or(|v| v.root().to_string_lossy() != path) {
             *v = Some(Vault::open(std::path::Path::new(path)).map_err(|e| e.to_string())?);
-            // invalidate tree cache on vault switch
             let mut tc = self.tree_cache.lock().map_err(|e| e.to_string())?;
             tc.clear();
         }
@@ -297,6 +312,61 @@ fn update_config(config: VaultConfig, state: tauri::State<'_, AppState>) -> Resu
     Ok(())
 }
 
+// ── Sync commands ──────────────────────────────────────────────────
+
+fn create_engine_from_config(config: &SyncConfig) -> Result<SyncEngine, String> {
+    let driver: Box<dyn nf_sync::file_api::FileApi> = match config.target_type.as_str() {
+        "webdav" => Box::new(
+            WebDavDriver::new(&config.url, &config.username, &config.password)
+                .map_err(|e| e.to_string())?
+        ),
+        "joplin_server" => Box::new(
+            JoplinServerDriver::new(&config.url).map_err(|e| e.to_string())?
+        ),
+        "filesystem" => Box::new(FsDriver::new(&config.url)),
+        _ => return Err(format!("Unknown sync target: {}", config.target_type)),
+    };
+    Ok(SyncEngine::new(driver))
+}
+
+#[tauri::command]
+fn sync_configure(config: SyncConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    // Validate by creating engine
+    let _engine = create_engine_from_config(&config)?;
+    *state.sync_config.lock().map_err(|e| e.to_string())? = Some(config);
+    Ok(())
+}
+
+#[tauri::command]
+fn sync_get_config(state: tauri::State<'_, AppState>) -> Result<Option<SyncConfig>, String> {
+    Ok(state.sync_config.lock().map_err(|e| e.to_string())?.clone())
+}
+
+#[tauri::command]
+async fn sync_start(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let config = {
+        let cfg = state.sync_config.lock().map_err(|e| e.to_string())?;
+        cfg.clone().ok_or_else(|| "Sync not configured".to_string())?
+    };
+    let mut engine = create_engine_from_config(&config)?;
+    let report = engine.sync_all().await.map_err(|e| e.to_string())?;
+    // Store engine back
+    *state.sync_engine.lock().map_err(|e| e.to_string())? = Some(engine);
+    Ok(format!("同步完成: 上传{} 下载{} 冲突{} 错误{}", 
+        report.uploaded, report.downloaded, report.conflicts, report.errors))
+}
+
+#[tauri::command]
+async fn sync_test(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let config = {
+        let cfg = state.sync_config.lock().map_err(|e| e.to_string())?;
+        cfg.clone().ok_or_else(|| "Sync not configured".to_string())?
+    };
+    let engine = create_engine_from_config(&config)?;
+    engine.test_connection().await.map_err(|e| e.to_string())?;
+    Ok("连接成功".into())
+}
+
 // ── Unchanged commands ──────────────────────────────────────────────
 
 #[tauri::command]
@@ -339,6 +409,10 @@ fn main() {
             update_config,
             read_file,
             read_file_data,
+            sync_configure,
+            sync_get_config,
+            sync_start,
+            sync_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
