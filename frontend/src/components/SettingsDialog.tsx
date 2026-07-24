@@ -12,6 +12,12 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
   const [showHidden, setShowHidden] = useState(false);
   const [attachmentDirs, setAttachmentDirs] = useState("");
   const [message, setMessage] = useState("");
+  // Sync settings
+  const [syncType, setSyncType] = useState("webdav");
+  const [syncUrl, setSyncUrl] = useState("");
+  const [syncUser, setSyncUser] = useState("");
+  const [syncPass, setSyncPass] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -21,6 +27,10 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
       setShowHidden(cfg.show_hidden || false);
       setAttachmentDirs(cfg.attachment_dir || "assets");
     }).catch((e: any) => setMessage(`加载配置失败: ${e}`));
+    // Load sync config
+    invoke("sync_get_config", {}).then((cfg: any) => {
+      if (cfg) { setSyncType(cfg.target_type); setSyncUrl(cfg.url); setSyncUser(cfg.username); setSyncPass(cfg.password); }
+    }).catch(() => {});
   }, [open]);
 
   useEffect(() => {
@@ -88,6 +98,49 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
         <p style={{ color: "#999", fontSize: 11, margin: "6px 0 0" }}>
           每行一个目录名，保存后生效。排除的目录不会出现在文件树中。
         </p>
+
+        <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
+        <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>🔄 同步设置</h3>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>同步目标</label>
+        <select value={syncType} onChange={e => setSyncType(e.target.value)}
+          style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }}>
+          <option value="webdav">WebDAV</option>
+          <option value="joplin_server">Joplin Server</option>
+          <option value="filesystem">本地文件系统</option>
+        </select>
+
+        <input value={syncUrl} onChange={e => setSyncUrl(e.target.value)}
+          placeholder="服务器 URL (https://...)"
+          style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }} />
+        <input value={syncUser} onChange={e => setSyncUser(e.target.value)}
+          placeholder="用户名"
+          style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }} />
+        <input value={syncPass} onChange={e => setSyncPass(e.target.value)}
+          type="password" placeholder="密码"
+          style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }} />
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <button onClick={async () => {
+            try {
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              const res = await invoke("sync_test", {});
+              setSyncStatus(`✅ ${res}`);
+            } catch (e: any) { setSyncStatus(`❌ ${e}`); }
+          }} style={{ padding: "6px 16px", border: "1px solid #2563eb", borderRadius: 6, background: "#fff", color: "#2563eb", cursor: "pointer", fontSize: 12 }}>
+            测试连接
+          </button>
+          <button onClick={async () => {
+            try {
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              const res = await invoke("sync_start", {});
+              setSyncStatus(`✅ ${res}`);
+            } catch (e: any) { setSyncStatus(`❌ ${e}`); }
+          }} style={{ padding: "6px 16px", border: "none", borderRadius: 6, background: "#2563eb", color: "#fff", cursor: "pointer", fontSize: 12 }}>
+            立即同步
+          </button>
+        </div>
+        {syncStatus && <p style={{ fontSize: 12, margin: "4px 0" }}>{syncStatus}</p>}
 
         {message && <p style={{ fontSize: 13, margin: "8px 0 0" }}>{message}</p>}
 

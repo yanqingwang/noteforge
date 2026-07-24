@@ -63,11 +63,14 @@ impl SyncEngine {
 
     async fn pull_delta(&mut self) -> Result<Vec<SyncItem>, SyncError> {
         let mut items = Vec::new();
-        for file in self.target.list("").await? {
-            if file.is_dir || !file.path.ends_with(".json") { continue; }
-            if let Ok(data) = self.target.get(&file.path).await {
-                if let Ok(item) = serde_json::from_slice::<SyncItem>(&data) {
-                    items.push(item);
+        // List all Joplin-compatible subdirectories
+        for prefix in &["notes", "folders", "tags", "resources", "note_tags", "revisions"] {
+            for file in self.target.list(prefix).await? {
+                if file.is_dir || !file.path.ends_with(".json") { continue; }
+                if let Ok(data) = self.target.get(&file.path).await {
+                    if let Ok(item) = serde_json::from_slice::<SyncItem>(&data) {
+                        items.push(item);
+                    }
                 }
             }
         }
@@ -75,11 +78,13 @@ impl SyncEngine {
     }
 
     async fn full_resync(&mut self) -> Result<(), SyncError> {
-        for file in self.target.list("").await? {
-            if file.is_dir || !file.path.ends_with(".json") { continue; }
-            if let Ok(data) = self.target.get(&file.path).await {
-                if let Ok(item) = serde_json::from_slice::<SyncItem>(&data) {
-                    self.local_items.insert(item.id.clone(), item);
+        for prefix in &["notes", "folders", "tags", "resources", "note_tags", "revisions"] {
+            for file in self.target.list(prefix).await? {
+                if file.is_dir || !file.path.ends_with(".json") { continue; }
+                if let Ok(data) = self.target.get(&file.path).await {
+                    if let Ok(item) = serde_json::from_slice::<SyncItem>(&data) {
+                        self.local_items.insert(item.id.clone(), item);
+                    }
                 }
             }
         }
