@@ -388,7 +388,8 @@ async fn create_engine_async(config: &SyncConfig, window: &tauri::Window) -> Res
         e2ee.load_master_key(&config.e2ee_master_key_id, &config.e2ee_password, &config.e2ee_master_key_content)
             .map_err(|e| format!("load master key: {}", e))?;
         let _ = window.emit("sync-progress", "🔑 已加载主密钥");
-        Ok(engine.with_e2ee(e2ee, Some(config.e2ee_master_key_id.clone())))
+        Ok(engine.with_e2ee(e2ee, Some(config.e2ee_master_key_id.clone()))
+            .with_e2ee_password(Some(config.e2ee_password.clone())))
     } else {
         Ok(engine)
     }

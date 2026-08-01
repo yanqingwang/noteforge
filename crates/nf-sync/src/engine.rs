@@ -29,6 +29,8 @@ pub struct SyncEngine {
     e2ee: Option<JoplinE2eeLayer>,
     /// master key ID used when encrypting new items
     active_master_key_id: Option<String>,
+    /// password used to decrypt server-side master keys (type_=9)
+    e2ee_password: Option<String>,
 }
 
 impl SyncEngine {
@@ -42,6 +44,7 @@ impl SyncEngine {
             joplin: None,
             e2ee: None,
             active_master_key_id: None,
+            e2ee_password: None,
         }
     }
 
@@ -59,11 +62,49 @@ impl SyncEngine {
         self
     }
 
+    /// Set the E2EE password so server-side master keys can be loaded.
+    pub fn with_e2ee_password(mut self, password: Option<String>) -> Self {
+        self.e2ee_password = password;
+        self
+    }
+
+    /// Scan a list of Joplin items for master keys (type_=9) and load them
+    /// using the configured E2EE password. This enables decrypting items that
+    /// were encrypted by Obsidian/official Joplin on other devices.
+    pub fn feed_server_master_keys(&mut self, items: &[JoplinItem]) -> Result<(), SyncError> {
+        let (Some(e2ee), Some(password)) = (&mut self.e2ee, &self.e2ee_password) else { return Ok(()); };
+        for item in items {
+            if item.type_ != 9 { continue; } // MasterKey
+            let content = item.extra.get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if content.is_empty() { continue; }
+            let method = item.extra.get("encryption_method")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(8); // KeyV1 default
+            if method != 8 { continue; } // only KeyV1 supported
+            match e2ee.load_master_key(&item.id, &password, &content) {
+                Ok(_) => {
+                    if self.active_master_key_id.is_none() {
+                        self.active_master_key_id = Some(item.id.clone());
+                    }
+                }
+                Err(e) => eprintln!("load server master key {} failed: {}", item.id, e),
+            }
+        }
+        Ok(())
+    }
+
     /// Is E2EE enabled?
     pub fn e2ee_enabled(&self) -> bool { self.e2ee.is_some() }
 
+    pub fn get_active_master_key_id(&self) -> Option<&str> {
+        self.active_master_key_id.as_deref()
+    }
+
     /// Decrypt a Joplin item's content if it's encrypted; otherwise return body as-is.
-    fn decrypt_joplin_item(&self, item: &JoplinItem) -> Result<String, SyncError> {
+    pub fn decrypt_joplin_item(&self, item: &JoplinItem) -> Result<String, SyncError> {
         if item.encryption_applied == 1 {
             let e2ee = self.e2ee.as_ref()
                 .ok_or_else(|| SyncError::Other("Item is encrypted but E2EE is not enabled".into()))?;
@@ -120,6 +161,9 @@ impl SyncEngine {
                 Err(e) => { report.errors += 1; eprintln!("Download failed {}: {}", child.name, e); }
             }
         }
+
+        // 2.5 Load server master keys (type_=9) if E2EE enabled
+        self.feed_server_master_keys(&items)?;
 
         // 3. Build folder hierarchy: map id -> local path
         let mut id_to_path: HashMap<String, String> = HashMap::new();
@@ -364,6 +408,14 @@ impl SyncEngine {
         let delta = joplin.get_delta(&cursor).await?;
         self.cursor = Some(delta.cursor.clone());
         self.mapping.delta_cursor = delta.cursor.clone();
+
+        // Feed master keys from delta items first (so encrypted notes can decrypt)
+        {
+            let mk_items: Vec<JoplinItem> = delta.items.iter()
+                .filter_map(|d| d.item.as_ref().filter(|i| i.type_ == 9).cloned())
+                .collect();
+            self.feed_server_master_keys(&mk_items)?;
+        }
 
         for d in &delta.items {
             if d.event_type == 3 {

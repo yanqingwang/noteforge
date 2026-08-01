@@ -191,3 +191,61 @@ async fn test_e2ee_encrypted_sync_cycle() {
         panic!("Expected encrypted body with JED01 header");
     }
 }
+
+#[tokio::test]
+async fn test_obsidian_encrypted_data_decryptable() {
+    use nf_sync::drivers::joplin_server::JoplinItem;
+    use std::collections::HashMap;
+
+    // ── Simulate Obsidian/official Joplin side: generate master key + encrypt note ──
+    let password = "obsidian-e2ee-password";
+    let mk_id = "01234568abcdefgh01234568abcdefgh";
+
+    let mut obsidian_e2ee = nf_crypto::JoplinE2ee::new();
+    let (_, mk_content) = obsidian_e2ee.generate_master_key(password, mk_id).unwrap();
+    obsidian_e2ee.load_master_key(mk_id, password, &mk_content).unwrap();
+    let note_plain = "This note was created and encrypted in Obsidian! 跨应用加密验证";
+    let note_cipher = obsidian_e2ee.encrypt_item(note_plain, mk_id).unwrap();
+
+    // ── Server state: master key item + encrypted note item ──
+    let mut mk_extra = HashMap::new();
+    mk_extra.insert("content".into(), serde_json::Value::String(mk_content));
+    mk_extra.insert("encryption_method".into(), serde_json::json!(8)); // KeyV1
+    let master_key_item = JoplinItem {
+        id: mk_id.into(), parent_id: String::new(), title: "MasterKey".into(), body: String::new(),
+        type_: 9, encryption_applied: 1, encryption_cipher_text: String::new(),
+        created_time: 0, updated_time: 0, is_deleted: false,
+        mime: String::new(), filename: String::new(), file_extension: String::new(), size: 0,
+        note_id: String::new(), tag_id: String::new(), extra: mk_extra,
+    };
+    let mut note_extra = HashMap::new();
+    note_extra.insert("title".into(), serde_json::json!("Obsidian Note"));
+    let encrypted_note = JoplinItem {
+        id: "note1234567890abcdef".into(), parent_id: String::new(), title: "Obsidian Note".into(),
+        body: String::new(), type_: 1, encryption_applied: 1,
+        encryption_cipher_text: note_cipher.clone(),
+        created_time: 0, updated_time: 0, is_deleted: false,
+        mime: String::new(), filename: String::new(), file_extension: String::new(), size: 0,
+        note_id: String::new(), tag_id: String::new(), extra: note_extra,
+    };
+
+    // ── NoteForge side: engine with E2EE + password, feed server master key, decrypt ──
+    let dir = tempfile::tempdir().unwrap();
+    let driver = FsDriver::new(dir.path().join("x"));
+    let mut e2ee_layer = nf_sync::encryption::JoplinE2eeLayer::new();
+    let mut engine = SyncEngine::new(Box::new(driver));
+    engine = engine
+        .with_e2ee(e2ee_layer, None) // no active key yet — must load from server
+        .with_e2ee_password(Some(password.to_string()));
+
+    // Feed master key from server state
+    engine.feed_server_master_keys(&[master_key_item]).unwrap();
+    assert!(engine.e2ee_enabled(), "E2EE enabled");
+    assert!(engine.get_active_master_key_id().is_some(), "master key loaded from server");
+
+    // Decrypt the Obsidian-encrypted note
+    let decrypted = engine.decrypt_joplin_item(&encrypted_note).unwrap();
+    assert_eq!(decrypted, note_plain, "Obsidian-encrypted note decrypts in NoteForge");
+    println!("✅ Obsidian-encrypted note successfully decrypted by NoteForge");
+    println!("   plain: {}", decrypted);
+}
