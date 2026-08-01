@@ -14,6 +14,7 @@ interface EditorPaneProps {
   onNavigate?: (path: string) => void;
   mode?: ViewMode;
   onSetMode?: (m: ViewMode) => void;
+  onContentChange?: (content: string) => void;
 }
 
 export type { ViewMode };
@@ -54,7 +55,7 @@ function highlightSource(text: string): string {
     .replace(/(\[.+\]\([^)]+\))/g, '<span class="hl-link">$1</span>');
 }
 
-const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode: externalSetMode }: EditorPaneProps) {
+const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode: externalSetMode, onContentChange }: EditorPaneProps) {
   const [internalMode, internalSetMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
@@ -163,7 +164,8 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/<[^>]*>/g, '');
     setEditContent(md);
-  }, []);
+    onContentChange?.(md);
+  }, [onContentChange]);
 
   // Re-render live mode from markdown, preserving cursor
   useEffect(() => {
@@ -223,6 +225,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
   const handleSourceChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setEditContent(val);
+    onContentChange?.(val);
     const pos = e.target.selectionStart;
     const before = val.slice(0, pos);
     const lastOpen = before.lastIndexOf('[[');
@@ -237,7 +240,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
     } else {
       setAutocomplete(null);
     }
-  }, []);
+  }, [onContentChange]);
 
   const handleAutocompleteSelect = useCallback((path: string) => {
     if (!textareaRef.current) return;
@@ -251,7 +254,7 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
       setAutocomplete(null);
       setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = lastOpen + path.length + 4; }, 0);
     }
-  }, []);
+  }, [onContentChange]);
 
   // Live mode: Typora-like WYSIWYG via contentEditable with cursor preservation
   if (!activeFile) {

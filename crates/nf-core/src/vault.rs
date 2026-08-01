@@ -17,6 +17,16 @@ impl LineEnding {
     }
 }
 
+/// Encryption mode for vault content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EncryptMode {
+    /// Only encrypt note content; metadata (TOC, links, tags) stays plain.
+    ContentOnly,
+    /// Encrypt everything including metadata.
+    Full,
+}
+
 /// Configuration for a vault.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VaultConfig {
@@ -27,6 +37,18 @@ pub struct VaultConfig {
     pub exclude_dirs: Vec<String>,
     #[serde(default)]
     pub show_hidden: bool,
+    /// Whether the vault is encrypted.
+    #[serde(default)]
+    pub encrypted: bool,
+    /// Argon2id password hash (base64), present only when encrypted=true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_hash: Option<String>,
+    /// Key derivation salt (base64), present only when encrypted=true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub salt: Option<String>,
+    /// Encryption mode, defaults to ContentOnly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypt_mode: Option<EncryptMode>,
 }
 
 impl Default for VaultConfig {
@@ -37,6 +59,10 @@ impl Default for VaultConfig {
             line_ending: LineEnding::Lf,
             exclude_dirs: Vec::new(),
             show_hidden: false,
+            encrypted: false,
+            password_hash: None,
+            salt: None,
+            encrypt_mode: None,
         }
     }
 }
@@ -66,5 +92,8 @@ mod tests {
         assert_eq!(cfg.line_ending, LineEnding::Lf);
         assert!(cfg.exclude_dirs.is_empty());
         assert!(!cfg.show_hidden);
+        assert!(!cfg.encrypted);
+        assert!(cfg.password_hash.is_none());
+        assert!(cfg.salt.is_none());
     }
 }

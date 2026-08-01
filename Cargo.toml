@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/nf-core",
+    "crates/nf-crypto",
     "crates/nf-editor",
     "crates/nf-graph",
     "crates/nf-index",

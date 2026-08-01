@@ -1,7 +1,7 @@
 use crate::error::SyncError;
 use crate::file_api::{FileApi, FileEntry};
 use async_trait::async_trait;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct FsDriver {
     root: PathBuf,

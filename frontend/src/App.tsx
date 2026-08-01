@@ -8,6 +8,8 @@ import EditorPane from "./components/EditorPane";
 import type { ViewMode } from "./components/EditorPane";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
+import VaultPasswordDialog from "./components/VaultPasswordDialog";
+import type { PasswordMode } from "./components/VaultPasswordDialog";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
@@ -39,6 +41,12 @@ function App() {
   });
   const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
 
+  // Vault encryption state
+  const [vaultEncrypted, setVaultEncrypted] = useState(false);
+  const [vaultLocked, setVaultLocked] = useState(true);
+  const [passwordMode, setPasswordMode] = useState<PasswordMode>("unlock");
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+
   // Auto-open last vault on startup
   useEffect(() => {
     if (!initialized) {
@@ -54,6 +62,21 @@ function App() {
       const tree: FileEntry[] = await invoke("open_vault", { path });
       setVaultPath(path); setFiles(tree);
       localStorage.setItem('nf-last-vault', path);
+      // Check encryption state
+      try {
+        const encrypted: boolean = await invoke("vault_is_encrypted", {});
+        setVaultEncrypted(encrypted);
+        if (encrypted) {
+          setVaultLocked(true);
+          setPasswordMode("unlock");
+          setShowPasswordDialog(true);
+          dispatch({ type: 'SET_STATUS', text: `库已加密，请解锁` } as any);
+        } else {
+          setVaultLocked(false);
+        }
+      } catch (_) {
+        // vault_is_encrypted not available (vault not open)
+      }
       // Load plugins
       pluginManager.loadPlugins(path);
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
@@ -160,6 +183,36 @@ function App() {
 
   const vaultStats = useCallback(async () => {
     try { const s: any = await invoke("vault_stats", {}); dispatch({ type: 'SET_STATUS', text: s } as any); } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `失败: ${e}` } as any); }
+  }, []);
+
+  // Vault encryption actions
+  const handleSetPassword = useCallback(() => {
+    setPasswordMode("set");
+    setShowPasswordDialog(true);
+  }, []);
+
+  const handleUnlock = useCallback(() => {
+    setPasswordMode("unlock");
+    setShowPasswordDialog(true);
+  }, []);
+
+  const handleLock = useCallback(async () => {
+    try {
+      await invoke("vault_lock", {});
+      setVaultLocked(true);
+      dispatch({ type: 'SET_STATUS', text: '库已锁定' } as any);
+    } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `锁定失败: ${e}` } as any); }
+  }, []);
+
+  const handleChangePassword = useCallback(() => {
+    setPasswordMode("change");
+    setShowPasswordDialog(true);
+  }, []);
+
+  const onPasswordUnlocked = useCallback(() => {
+    setVaultLocked(false);
+    setVaultEncrypted(true);
+    dispatch({ type: 'SET_STATUS', text: '库已解锁' } as any);
   }, []);
 
   const fileMenu = [
@@ -289,6 +342,16 @@ function App() {
         <button style={btnBase} onClick={() => setShowCommandPalette(true)} title="命令面板 (Ctrl+P)">⌘</button>
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
         <button style={btnBase} onClick={() => setSidebarVisible(s => !s)} title="切换侧栏">📁</button>
+        {vaultEncrypted && (
+          vaultLocked ? (
+            <button style={{ ...btnBase, color: "#e53e3e" }} onClick={handleUnlock} title="解锁库">🔒</button>
+          ) : (
+            <button style={{ ...btnBase, color: "#38a169" }} onClick={handleLock} title="锁定库">🔓</button>
+          )
+        )}
+        {vaultPath && !vaultEncrypted && (
+          <button style={btnBase} onClick={handleSetPassword} title="设置加密密码">🔐</button>
+        )}
         <DropdownMenu label="..." items={quickActions} />
         <div style={{ flex: 1 }} />
         {vaultPath && <span style={{ fontSize: 12, color: "#999", marginRight: 8 }}>{noteCount} 篇笔记</span>}
@@ -307,7 +370,17 @@ function App() {
         )}
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
           activeFile={activeFile || ""} files={files} onNavigate={readNote}
-          mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }} />
+          mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }}
+          onContentChange={(newContent) => {
+            if (activeFile) {
+              const re = invoke("render_markdown", { content: newContent }) as any;
+              re.then((html: string) => {
+                setContentCache(c => ({ ...c, [activeFile]: { content: newContent, html } }));
+              }).catch(() => {
+                setContentCache(c => ({ ...c, [activeFile]: { content: newContent, html: cache?.html || "" } }));
+              });
+            }
+          }} />
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "4px 12px", background: "#f8f8f8", borderBottom: "1px solid #ddd", fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
@@ -337,7 +410,14 @@ function App() {
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onVaultReopen={reopenVault} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onVaultReopen={reopenVault}
+        vaultEncrypted={vaultEncrypted}
+        onPasswordChange={handleChangePassword}
+        onSetPassword={handleSetPassword}
+        onSyncStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
+      <VaultPasswordDialog open={showPasswordDialog} mode={passwordMode}
+        onClose={() => setShowPasswordDialog(false)}
+        onUnlocked={onPasswordUnlocked} />
     </div>
   );
 }

@@ -10,4 +10,4 @@ pub use link::{Link, LinkKind};
 pub use note::{BlockId, Frontmatter, Heading, NoteMeta};
 pub use span::Span;
 pub use tag::Tag;
-pub use vault::{LineEnding, Vault, VaultConfig};
+pub use vault::{EncryptMode, LineEnding, Vault, VaultConfig};

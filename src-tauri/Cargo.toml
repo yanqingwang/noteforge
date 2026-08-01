@@ -14,6 +14,7 @@ tauri-plugin-dialog = "2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 nf-core = { path = "../crates/nf-core" }
+nf-crypto = { path = "../crates/nf-crypto" }
 nf-vault = { path = "../crates/nf-vault" }
 nf-markdown = { path = "../crates/nf-markdown" }
 nf-index = { path = "../crates/nf-index" }
@@ -26,3 +27,10 @@ nf-sync = { path = "../crates/nf-sync" }
 comrak.workspace = true
 tokio = { version = "1", features = ["full"] }
 base64 = "0.22"
+walkdir.workspace = true
+rand.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

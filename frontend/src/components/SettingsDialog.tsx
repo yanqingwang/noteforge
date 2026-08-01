@@ -1,17 +1,29 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   onVaultReopen?: () => void;
+  onPasswordChange?: () => void;
+  onSetPassword?: () => void;
+  vaultEncrypted?: boolean;
+  onSyncStatus?: (msg: string) => void;
 }
 
-export default function SettingsDialog({ open, onClose, onVaultReopen }: SettingsDialogProps) {
+export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswordChange, onSetPassword, vaultEncrypted, onSyncStatus }: SettingsDialogProps) {
   const [excludeDirs, setExcludeDirs] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [attachmentDirs, setAttachmentDirs] = useState("");
   const [message, setMessage] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  const showStatus = (msg: string) => {
+    setSyncStatus(msg);
+    onSyncStatus?.(msg);
+  };
+
   // Sync settings
   const [syncType, setSyncType] = useState("webdav");
   const [syncUrl, setSyncUrl] = useState("");
@@ -31,6 +43,12 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
     invoke("sync_get_config", {}).then((cfg: any) => {
       if (cfg) { setSyncType(cfg.target_type); setSyncUrl(cfg.url); setSyncUser(cfg.username); setSyncPass(cfg.password); }
     }).catch(() => {});
+    // Listen for sync progress events from backend
+    const unlisten = listen<string>("sync-progress", (event) => {
+      setSyncStatus(event.payload);
+      onSyncStatus?.(event.payload);
+    });
+    return () => { unlisten.then(fn => fn()).catch(() => {}); };
   }, [open]);
 
   useEffect(() => {
@@ -100,6 +118,31 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
         </p>
 
         <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
+        <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>🔐 加密设置</h3>
+
+        {vaultEncrypted ? (
+          <div style={{ marginBottom: 4 }}>
+            <p style={{ fontSize: 13, color: "#38a169", margin: "0 0 8px" }}>
+              ✅ 此知识库已加密（AES-256-GCM）
+            </p>
+            <button onClick={() => onPasswordChange?.()}
+              style={{ padding: "6px 16px", border: "1px solid #e53e3e", borderRadius: 6, background: "#fff", color: "#e53e3e", cursor: "pointer", fontSize: 12 }}>
+              修改密码
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 4 }}>
+            <p style={{ fontSize: 13, color: "#999", margin: "0 0 8px" }}>
+              加密后所有笔记内容将以 AES-256-GCM 加密存储。密码遗失无法恢复。
+            </p>
+            <button onClick={() => onSetPassword?.()}
+              style={{ padding: "6px 16px", border: "none", borderRadius: 6, background: "#2563eb", color: "#fff", cursor: "pointer", fontSize: 12 }}>
+              设置密码
+            </button>
+          </div>
+        )}
+
+        <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
         <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>🔄 同步设置</h3>
 
         <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>同步目标</label>
@@ -122,25 +165,75 @@ export default function SettingsDialog({ open, onClose, onVaultReopen }: Setting
 
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <button onClick={async () => {
+            if (syncing) return;
+            setSyncing(true); showStatus("⏳ 正在测试连接...");
             try {
               await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
               const res = await invoke("sync_test", {});
-              setSyncStatus(`✅ ${res}`);
-            } catch (e: any) { setSyncStatus(`❌ ${e}`); }
-          }} style={{ padding: "6px 16px", border: "1px solid #2563eb", borderRadius: 6, background: "#fff", color: "#2563eb", cursor: "pointer", fontSize: 12 }}>
-            测试连接
+              showStatus(`✅ ${res}`);
+            } catch (e: any) { showStatus(`❌ ${e}`); }
+            finally { setSyncing(false); }
+          }} disabled={syncing}
+            style={{ padding: "6px 16px", border: "1px solid #2563eb", borderRadius: 6,
+              background: "#fff", color: syncing ? "#999" : "#2563eb", cursor: syncing ? "not-allowed" : "pointer", fontSize: 12 }}>
+            {syncing ? "⏳ ..." : "测试连接"}
           </button>
           <button onClick={async () => {
+            if (syncing) return;
+            setSyncing(true); showStatus("⏳ 正在同步...");
             try {
               await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
               const res = await invoke("sync_start", {});
-              setSyncStatus(`✅ ${res}`);
-            } catch (e: any) { setSyncStatus(`❌ ${e}`); }
-          }} style={{ padding: "6px 16px", border: "none", borderRadius: 6, background: "#2563eb", color: "#fff", cursor: "pointer", fontSize: 12 }}>
-            立即同步
+              showStatus(`✅ ${res}`);
+            } catch (e: any) { showStatus(`❌ ${e}`); }
+            finally { setSyncing(false); }
+          }} disabled={syncing}
+            style={{ padding: "6px 16px", border: "none", borderRadius: 6,
+              background: syncing ? "#93c5fd" : "#2563eb", color: "#fff",
+              cursor: syncing ? "not-allowed" : "pointer", fontSize: 12 }}>
+            {syncing ? "⏳ 同步中..." : "立即同步"}
           </button>
         </div>
-        {syncStatus && <p style={{ fontSize: 12, margin: "4px 0" }}>{syncStatus}</p>}
+        <p style={{ fontSize: 11, color: "#999", margin: "4px 0 8px" }}>
+          本地优先同步：推送本地修改到服务器，拉取远程修改到本地。冲突通过时间戳解决。
+        </p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 8, borderTop: "1px solid #ffe0e0", paddingTop: 8 }}>
+          <button onClick={async () => {
+            if (syncing) return;
+            if (!confirm("⚠️ 将覆盖服务器上所有文件，不可撤销。确定继续？")) return;
+            setSyncing(true); showStatus("⏳ 正在初始化上传...");
+            try {
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              const res = await invoke("sync_initial_upload", {});
+              showStatus(`✅ ${res}`);
+            } catch (e: any) { showStatus(`❌ ${e}`); }
+            finally { setSyncing(false); }
+          }} disabled={syncing}
+            style={{ padding: "6px 12px", border: "1px solid #e53e3e", borderRadius: 6,
+              background: "#fff", color: syncing ? "#ccc" : "#e53e3e", cursor: syncing ? "not-allowed" : "pointer", fontSize: 11 }}>
+            ⬆ 覆盖服务器
+          </button>
+          <button onClick={async () => {
+            if (syncing) return;
+            if (!confirm("⚠️ 将覆盖本地所有文件，不可撤销。确定继续？")) return;
+            setSyncing(true); showStatus("⏳ 正在初始化下载...");
+            try {
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              const res = await invoke("sync_initial_download", {});
+              showStatus(`✅ ${res}`);
+            } catch (e: any) { showStatus(`❌ ${e}`); }
+            finally { setSyncing(false); }
+          }} disabled={syncing}
+            style={{ padding: "6px 12px", border: "1px solid #e53e3e", borderRadius: 6,
+              background: "#fff", color: syncing ? "#ccc" : "#e53e3e", cursor: syncing ? "not-allowed" : "pointer", fontSize: 11 }}>
+            ⬇ 覆盖本地
+          </button>
+        </div>
+        <p style={{ fontSize: 10, color: "#e53e3e", margin: "0 0 8px" }}>
+          ⚠️ 覆盖操作将完全替换目标端数据，请谨慎使用。
+        </p>
+        {syncStatus && <p style={{ fontSize: 12, margin: "4px 0", maxWidth: "100%", wordBreak: "break-word" }}>{syncStatus}</p>}
 
         {message && <p style={{ fontSize: 13, margin: "8px 0 0" }}>{message}</p>}
 
