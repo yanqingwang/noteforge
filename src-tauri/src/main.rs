@@ -60,13 +60,6 @@ impl AppState {
         v.as_ref().ok_or_else(|| "No vault open".to_string()).and_then(f)
     }
 
-    fn with_vault_mut<F, R>(&self, f: F) -> Result<R, String>
-    where
-        F: FnOnce(&mut Vault) -> Result<R, String>,
-    {
-        let mut v = self.vault.lock().map_err(|e| e.to_string())?;
-        v.as_mut().ok_or_else(|| "No vault open".to_string()).and_then(f)
-    }
 }
 
 // ── Command structs ─────────────────────────────────────────────────
@@ -554,10 +547,20 @@ pub(crate) async fn run_sync_start(
         match client.get_delta(&mapping.delta_cursor).await {
             Ok(delta) => {
                 mapping.delta_cursor = delta.cursor;
+
+                // Build folder id → local path map (from mapping + this delta)
+                let mut folder_paths: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                for e in &mapping.entries {
+                    if e.item_type == 2 {
+                        if let Some(rid) = &e.remote_id {
+                            folder_paths.insert(rid.clone(), e.local_path.clone());
+                        }
+                    }
+                }
+
                 for d in delta.items {
-                    // Only ever touch the user's real `<hex>.md` notes; skip `nf-`
-                    // uploads and junk so a sync never pulls or deletes local
-                    // files for them.
+                    // Only pull real Joplin items (<hex>.md); skip NoteForge's
+                    // own nf-<id>.md uploads and junk to avoid pull-back loops.
                     if !is_hex_note_name(&d.name) {
                         continue;
                     }
@@ -570,15 +573,53 @@ pub(crate) async fn run_sync_start(
                             pulled += 1;
                         }
                     } else if let Some(ref item) = d.item {
-                        if item.type_ == 1 {
+                        if item.type_ == 2 {
+                            // Folder create/update — resolve parent path, create dir
+                            let parent_path = if item.parent_id.is_empty() {
+                                String::new()
+                            } else {
+                                folder_paths.get(&item.parent_id).cloned().unwrap_or_default()
+                            };
+                            let path = std::path::Path::new(&parent_path)
+                                .join(&item.title)
+                                .to_string_lossy()
+                                .to_string();
+                            let full = vault_root.join(&path);
+                            std::fs::create_dir_all(&full).ok();
+                            folder_paths.insert(item.id.clone(), path.clone());
+                            mapping.upsert(nf_sync::MappingEntry {
+                                joplin_name: d.name.clone(),
+                                remote_id: Some(item.id.clone()),
+                                local_path: format!("{}/", path),
+                                item_type: 2,
+                                local_hash: None,
+                                remote_updated_time: item.updated_time,
+                                synced_at: chrono::Utc::now().timestamp(),
+                            });
+                            pulled += 1;
+                        } else if item.type_ == 1 {
                             if let Some((title, body)) = parse_joplin_body(item.body.as_bytes()) {
+                                // Resolve folder hierarchy from parent_id
+                                let parent_path = if item.parent_id.is_empty() {
+                                    String::new()
+                                } else {
+                                    folder_paths.get(&item.parent_id).cloned().unwrap_or_default()
+                                };
                                 let filename = format!("{}.md", sanitize_filename_simple(&title));
-                                std::fs::write(vault_root.join(&filename), &body).map_err(|e| e.to_string()).ok();
+                                let rel = std::path::Path::new(&parent_path)
+                                    .join(&filename)
+                                    .to_string_lossy()
+                                    .to_string();
+                                let full = vault_root.join(&rel);
+                                if let Some(parent) = full.parent() {
+                                    std::fs::create_dir_all(parent).ok();
+                                }
+                                std::fs::write(&full, &body).map_err(|e| e.to_string()).ok();
                                 let hash = sha256_str(&body);
                                 mapping.upsert(nf_sync::MappingEntry {
                                     joplin_name: d.name.clone(),
                                     remote_id: Some(item.id.clone()),
-                                    local_path: sanitize_filename_simple(&title),
+                                    local_path: rel.clone(),
                                     item_type: 1,
                                     local_hash: Some(hash),
                                     remote_updated_time: item.updated_time,
@@ -707,6 +748,7 @@ async fn sync_initial_download(window: tauri::Window, state: tauri::State<'_, Ap
 }
 
 /// Download every remote item into the vault, recording each in a fresh mapping.
+/// Handles both folders (type_=2) and notes (type_=1) with proper hierarchy.
 pub(crate) async fn run_sync_initial_download(
     client: &SyncClient,
     vault_root: &std::path::Path,
@@ -714,51 +756,120 @@ pub(crate) async fn run_sync_initial_download(
 ) -> Result<String, String> {
     emit("⏳ 正在列出远程文件...");
     let children = client.list_all_children().await.map_err(|e| e.to_string())?;
-    // Only pull the user's real notes (`<hex>.md`). Skip NoteForge's own `nf-`
-    // uploads and any test/garbage items (`probe-*`, `info.json`, …) so a sync
-    // never pulls junk back into the vault.
+    // Only pull the user's real items (`<hex>.md`). Skip NoteForge's own `nf-`
+    // uploads and any test/garbage items (`probe-*`, `info.json`, …).
     let children: Vec<_> = children.into_iter().filter(|c| is_hex_note_name(&c.name)).collect();
     let total = children.len();
-    emit(&format!("⏳ 找到 {} 个远程笔记，正在下载...", total));
+    emit(&format!("⏳ 找到 {} 个远程条目，正在下载...", total));
 
     let mut mapping = nf_sync::MappingStore::new();
     let mut downloaded: usize = 0;
     let mut errors: usize = 0;
+    let mut items: Vec<(String, String, String, i32, String, i64)> = Vec::new(); // (name,id,title,type,parent,updated)
     for (i, child) in children.iter().enumerate() {
         match client.get_item(&child.name).await {
             Ok(raw) => {
-                if let Some((title, body)) = parse_joplin_body(&raw) {
+                if let Some((title, body, type_, parent_id)) = parse_joplin_item_meta(&raw) {
                     if title.trim().is_empty() {
-                        // Skip items that have no usable title (junk/empty server items).
                         errors += 1;
                         continue;
                     }
-                    let filename = format!("{}.md", sanitize_filename_simple(&title));
-                    if std::fs::write(vault_root.join(&filename), &body).is_ok() {
-                        let hash = sha256_str(&body);
-                        mapping.upsert(nf_sync::MappingEntry {
-                            joplin_name: child.name.clone(),
-                            remote_id: Some(child.id.clone()),
-                            local_path: sanitize_filename_simple(&title),
-                            item_type: 1,
-                            local_hash: Some(hash),
-                            remote_updated_time: child.updated_time,
-                            synced_at: chrono::Utc::now().timestamp(),
-                        });
-                        downloaded += 1;
-                    } else {
-                        errors += 1;
+                    items.push((child.name.clone(), child.id.clone(), title, type_, parent_id, child.updated_time));
+                    if type_ == 1 {
+                        // Store note body to write later (after folders resolved)
+                        let _ = body;
                     }
+                } else {
+                    errors += 1;
                 }
             }
             Err(e) => { errors += 1; eprintln!("Download failed {}: {}", child.name, e); }
         }
         if (i + 1) % 10 == 0 || i == total - 1 {
-            emit(&format!("⏳ 下载 {}/{}", i + 1, total));
+            emit(&format!("⏳ 读取 {}/{}", i + 1, total));
         }
     }
+
+    // First pass: create folders (type_=2), resolve id → local dir path
+    let mut folder_paths: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (name, id, title, type_, parent_id, updated) in &items {
+        if *type_ != 2 { continue; }
+        let parent_path = if parent_id.is_empty() {
+            String::new()
+        } else {
+            folder_paths.get(parent_id).cloned().unwrap_or_default()
+        };
+        let path = std::path::Path::new(&parent_path)
+            .join(sanitize_filename_simple(title))
+            .to_string_lossy()
+            .to_string();
+        let full = vault_root.join(&path);
+        std::fs::create_dir_all(&full).ok();
+        folder_paths.insert(id.clone(), path.clone());
+        mapping.upsert(nf_sync::MappingEntry {
+            joplin_name: name.clone(),
+            remote_id: Some(id.clone()),
+            local_path: format!("{}/", path),
+            item_type: 2,
+            local_hash: None,
+            remote_updated_time: *updated,
+            synced_at: chrono::Utc::now().timestamp(),
+        });
+        downloaded += 1;
+    }
+
+    // Second pass: write notes (type_=1) into their folder hierarchy
+    emit("⏳ 正在写入笔记...");
+    let mut note_idx = 0;
+    let note_total = items.iter().filter(|i| i.3 == 1).count();
+    for (name, id, title, type_, parent_id, updated) in &items {
+        if *type_ != 1 { continue; }
+        note_idx += 1;
+        // Re-fetch body for this note
+        let raw = match client.get_item(name).await {
+            Ok(r) => r,
+            Err(e) => { errors += 1; eprintln!("Re-fetch {} failed: {}", name, e); continue; }
+        };
+        let body = match parse_joplin_body(&raw) {
+            Some((_, b)) => b,
+            None => { errors += 1; continue; }
+        };
+        let parent_path = if parent_id.is_empty() {
+            String::new()
+        } else {
+            folder_paths.get(parent_id).cloned().unwrap_or_default()
+        };
+        let filename = format!("{}.md", sanitize_filename_simple(title));
+        let rel = std::path::Path::new(&parent_path)
+            .join(&filename)
+            .to_string_lossy()
+            .to_string();
+        let full = vault_root.join(&rel);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        if std::fs::write(&full, &body).is_ok() {
+            let hash = sha256_str(&body);
+            mapping.upsert(nf_sync::MappingEntry {
+                joplin_name: name.clone(),
+                remote_id: Some(id.clone()),
+                local_path: rel.clone(),
+                item_type: 1,
+                local_hash: Some(hash),
+                remote_updated_time: *updated,
+                synced_at: chrono::Utc::now().timestamp(),
+            });
+            downloaded += 1;
+        } else {
+            errors += 1;
+        }
+        if note_idx % 10 == 0 || note_idx == note_total {
+            emit(&format!("⏳ 写入笔记 {}/{}", note_idx, note_total));
+        }
+    }
+
     save_mapping(vault_root, &mapping).ok();
-    let msg = format!("✅ 下载完成: {} 个文件, {} 个错误", downloaded, errors);
+    let msg = format!("✅ 下载完成: {} 个条目, {} 个错误", downloaded, errors);
     emit(&msg);
     Ok(msg)
 }
@@ -991,6 +1102,34 @@ fn parse_joplin_body(raw: &[u8]) -> Option<(String, String)> {
     }
 }
 
+/// Parse a serialized Joplin item, extracting title, body, type_ and parent_id.
+/// Folders (type_=2) have empty body; notes (type_=1) have markdown body.
+fn parse_joplin_item_meta(raw: &[u8]) -> Option<(String, String, i32, String)> {
+    let text = String::from_utf8_lossy(raw);
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() { return None; }
+    let title = lines.first().map(|s| s.to_string()).unwrap_or_default();
+    let mut body = String::new();
+    let mut type_: i32 = 1;
+    let mut parent_id = String::new();
+    // Find blank-line separator before metadata; body is before it, meta after.
+    if let Some(sep) = lines.iter().rposition(|l| l.trim().is_empty()) {
+        body = lines[1..sep.min(lines.len())].join("\n");
+        for line in &lines[sep + 1..] {
+            if let Some((k, v)) = line.split_once(": ") {
+                match k {
+                    "type_" => type_ = v.trim().parse().unwrap_or(1),
+                    "parent_id" => parent_id = v.trim().to_string(),
+                    _ => {}
+                }
+            }
+        }
+    } else {
+        body = lines[1..].join("\n");
+    }
+    Some((title, body, type_, parent_id))
+}
+
 fn sanitize_filename_simple(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ' ' || c > '\u{7f}' { c } else { '_' })
@@ -1012,31 +1151,8 @@ fn is_hex_note_name(name: &str) -> bool {
 }
 
 // ── E2EE Commands ──────────────────────────────────────────────────
-
-#[tauri::command]
-fn vault_set_password(password: &str, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault_mut(|vault| vault.set_password(password).map_err(|e| e.to_string()))
-}
-
-#[tauri::command]
-fn vault_unlock(password: &str, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault_mut(|vault| vault.unlock(password).map_err(|e| e.to_string()))
-}
-
-#[tauri::command]
-fn vault_lock(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault_mut(|vault| { vault.lock(); Ok(()) })
-}
-
-#[tauri::command]
-fn vault_is_encrypted(state: tauri::State<'_, AppState>) -> Result<bool, String> {
-    state.with_vault(|vault| Ok(vault.is_encrypted()))
-}
-
-#[tauri::command]
-fn vault_change_password(old_password: &str, new_password: &str, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault_mut(|vault| vault.change_password(old_password, new_password).map_err(|e| e.to_string()))
-}
+// Local vault encryption was removed by design — NoteForge uses only the
+// Joplin-compatible E2EE (JoplinE2eeLayer) for sync encryption.
 
 fn main() {
     tauri::Builder::default()
@@ -1067,11 +1183,6 @@ fn main() {
             sync_test,
             sync_initial_upload,
             sync_initial_download,
-            vault_set_password,
-            vault_unlock,
-            vault_lock,
-            vault_is_encrypted,
-            vault_change_password,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

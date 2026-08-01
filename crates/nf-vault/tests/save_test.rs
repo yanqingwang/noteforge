@@ -39,31 +39,22 @@ mod tests {
     }
 
     #[test]
-    fn test_create_write_read_with_encryption_roundtrip() {
+    fn test_create_write_read_plaintext_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("enc-vault");
+        let root = dir.path().join("plain-vault");
         std::fs::create_dir_all(&root).unwrap();
 
-        let mut vault = Vault::open(&root).unwrap();
-        vault.set_password("mypass").unwrap();
+        let vault = Vault::open(&root).unwrap();
 
-        // Create and write encrypted
-        vault.create_note("secret.md").unwrap();
-        vault.write_note("secret.md", b"Top secret content").unwrap();
+        vault.create_note("note.md").unwrap();
+        vault.write_note("note.md", b"Plain content").unwrap();
 
-        // Read back (should auto-decrypt)
-        let content = vault.read_note("secret.md").unwrap();
-        assert_eq!(content, b"Top secret content");
+        let content = vault.read_note("note.md").unwrap();
+        assert_eq!(content, b"Plain content");
 
-        // Lock and read raw format
-        vault.lock();
-        let raw = std::fs::read_to_string(root.join("secret.md")).unwrap();
-        assert!(raw.starts_with("NFC1:"), "should be encrypted format: {}", raw);
-
-        // Unlock and verify
-        vault.unlock("mypass").unwrap();
-        let decrypted = vault.read_note("secret.md").unwrap();
-        assert_eq!(decrypted, b"Top secret content");
+        // Local vault is NOT encrypted — file is stored as plaintext
+        let raw = std::fs::read_to_string(root.join("note.md")).unwrap();
+        assert_eq!(raw, "Plain content", "plaintext stored on disk");
     }
 
     #[test]

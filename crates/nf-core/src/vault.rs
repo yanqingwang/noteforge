@@ -92,8 +92,5 @@ mod tests {
         assert_eq!(cfg.line_ending, LineEnding::Lf);
         assert!(cfg.exclude_dirs.is_empty());
         assert!(!cfg.show_hidden);
-        assert!(!cfg.encrypted);
-        assert!(cfg.password_hash.is_none());
-        assert!(cfg.salt.is_none());
     }
 }

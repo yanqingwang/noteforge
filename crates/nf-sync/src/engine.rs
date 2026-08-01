@@ -424,18 +424,23 @@ impl SyncEngine {
                 self.mapping.remove(&d.id);
                 report.downloaded += 1;
             } else if let Some(ref item) = d.item {
-                if item.type_ == 1 {
-                    // Note create/update
-                    let body = if item.encryption_applied > 0 {
+                if item.type_ == 1 || item.type_ == 2 {
+                    // Note or Folder create/update
+                    let item_type = if item.type_ == 1 {
+                        crate::item::ItemType::Note
+                    } else {
+                        crate::item::ItemType::Folder
+                    };
+                    let body = if item.type_ == 1 && item.encryption_applied > 0 {
                         item.encryption_cipher_text.clone()
                     } else {
                         item.body.clone()
                     };
                     let sync_item = SyncItem {
                         id: item.id.clone(),
-                        item_type: crate::item::ItemType::Note,
+                        item_type,
                         title: item.title.clone(),
-                        body: Some(body),
+                        body: if item.type_ == 1 { Some(body) } else { None },
                         parent_id: if item.parent_id.is_empty() { None } else { Some(item.parent_id.clone()) },
                         created_time: item.created_time,
                         updated_time: item.updated_time,

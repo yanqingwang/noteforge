@@ -6,13 +6,10 @@ interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   onVaultReopen?: () => void;
-  onPasswordChange?: () => void;
-  onSetPassword?: () => void;
-  vaultEncrypted?: boolean;
   onSyncStatus?: (msg: string) => void;
 }
 
-export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswordChange, onSetPassword, vaultEncrypted, onSyncStatus }: SettingsDialogProps) {
+export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncStatus }: SettingsDialogProps) {
   const [excludeDirs, setExcludeDirs] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [attachmentDirs, setAttachmentDirs] = useState("");
@@ -124,31 +121,6 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
         <p style={{ color: "#999", fontSize: 11, margin: "6px 0 0" }}>
           每行一个目录名，保存后生效。排除的目录不会出现在文件树中。
         </p>
-
-        <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
-        <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>🔐 加密设置</h3>
-
-        {vaultEncrypted ? (
-          <div style={{ marginBottom: 4 }}>
-            <p style={{ fontSize: 13, color: "#38a169", margin: "0 0 8px" }}>
-              ✅ 此知识库已加密（AES-256-GCM）
-            </p>
-            <button onClick={() => onPasswordChange?.()}
-              style={{ padding: "6px 16px", border: "1px solid #e53e3e", borderRadius: 6, background: "#fff", color: "#e53e3e", cursor: "pointer", fontSize: 12 }}>
-              修改密码
-            </button>
-          </div>
-        ) : (
-          <div style={{ marginBottom: 4 }}>
-            <p style={{ fontSize: 13, color: "#999", margin: "0 0 8px" }}>
-              加密后所有笔记内容将以 AES-256-GCM 加密存储。密码遗失无法恢复。
-            </p>
-            <button onClick={() => onSetPassword?.()}
-              style={{ padding: "6px 16px", border: "none", borderRadius: 6, background: "#2563eb", color: "#fff", cursor: "pointer", fontSize: 12 }}>
-              设置密码
-            </button>
-          </div>
-        )}
 
         <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
         <h3 style={{ fontSize: 15, margin: "0 0 8px" }}>🔄 同步设置</h3>

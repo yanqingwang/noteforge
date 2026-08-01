@@ -1,5 +1,4 @@
 use nf_core::vault::VaultConfig;
-use nf_crypto::VaultKey;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,8 +7,6 @@ use std::path::{Path, PathBuf};
 pub struct Vault {
     root: PathBuf,
     config: VaultConfig,
-    /// Decryption key (present only when the vault is encrypted and unlocked).
-    key: Option<VaultKey>,
 }
 
 /// A single entry in the vault file tree.
@@ -42,7 +39,7 @@ impl Vault {
             cfg
         };
 
-        Ok(Vault { root, config, key: None })
+        Ok(Vault { root, config })
     }
 
     /// The vault root path.
@@ -53,112 +50,6 @@ impl Vault {
     /// The vault config.
     pub fn config(&self) -> &VaultConfig {
         &self.config
-    }
-
-    /// Whether the vault is encrypted and currently locked.
-    pub fn is_encrypted(&self) -> bool {
-        self.config.encrypted
-    }
-
-    /// Whether the vault is unlocked (key is available).
-    pub fn is_unlocked(&self) -> bool {
-        self.key.is_some()
-    }
-
-    // ── Encryption management ──────────────────────────────────────────────
-
-    /// Set the vault password. Uses a single salt for key derivation
-    /// (stored in config) and a separate PHC hash for verification.
-    pub fn set_password(&mut self, password: &str) -> Result<(), VaultError> {
-        // Generate the key-derivation salt (store in config for unlock)
-        let key_salt = nf_crypto::generate_salt();
-        let key_salt_b64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            &key_salt,
-        );
-        let key = VaultKey::derive_with_salt(password, &key_salt)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        // Generate a separate PHC hash for password verification
-        let (hash, _) = VaultKey::password_hash(password)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        self.config.encrypted = true;
-        self.config.password_hash = Some(hash);
-        self.config.salt = Some(key_salt_b64);
-        self.config.save(&self.root)?;
-        self.key = Some(key);
-        Ok(())
-    }
-
-    /// Unlock the vault with a password. Derives key from stored salt + password.
-    pub fn unlock(&mut self, password: &str) -> Result<(), VaultError> {
-        if !self.config.encrypted {
-            return Err(VaultError::NotEncrypted);
-        }
-
-        let hash = self.config.password_hash.as_ref()
-            .ok_or(VaultError::Encryption("no password hash stored".into()))?;
-        let salt = self.config.salt.as_ref()
-            .ok_or(VaultError::Encryption("no salt stored".into()))?;
-
-        if !VaultKey::verify_password(password, hash, salt)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?
-        {
-            return Err(VaultError::WrongPassword);
-        }
-
-        let salt_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            salt,
-        ).map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        let key = VaultKey::derive_with_salt(password, &salt_bytes)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        self.key = Some(key);
-        Ok(())
-    }
-
-    /// Lock the vault (discard in-memory key).
-    pub fn lock(&mut self) {
-        self.key = None;
-    }
-
-    /// Change the vault password. Requires correct current password.
-    pub fn change_password(&mut self, old_password: &str, new_password: &str) -> Result<(), VaultError> {
-        if !self.config.encrypted {
-            return Err(VaultError::NotEncrypted);
-        }
-
-        let hash = self.config.password_hash.as_ref()
-            .ok_or(VaultError::Encryption("no password hash stored".into()))?;
-        let salt = self.config.salt.as_ref()
-            .ok_or(VaultError::Encryption("no salt stored".into()))?;
-
-        if !VaultKey::verify_password(old_password, hash, salt)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?
-        {
-            return Err(VaultError::WrongPassword);
-        }
-
-        // Derive new hash and salt
-        let (new_hash, new_salt) = VaultKey::password_hash(new_password)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        // Derive new key from new salt + password
-        let new_salt_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &new_salt,
-        ).map_err(|e| VaultError::Encryption(e.to_string()))?;
-        let new_key = VaultKey::derive_with_salt(new_password, &new_salt_bytes)
-            .map_err(|e| VaultError::Encryption(e.to_string()))?;
-
-        self.config.password_hash = Some(new_hash);
-        self.config.salt = Some(new_salt);
-        self.config.save(&self.root)?;
-        self.key = Some(new_key);
-        Ok(())
     }
 
     // ── File tree ──────────────────────────────────────────────────────────
@@ -208,51 +99,24 @@ impl Vault {
 
     // ── Note I/O ───────────────────────────────────────────────────────────
 
-    /// Read a note's content by relative path. If the vault is unlocked and
-    /// content is encrypted, returns decrypted plaintext.
+    /// Read a note's content by relative path (plaintext — local vault is not encrypted).
     pub fn read_note(&self, rel_path: &str) -> Result<Vec<u8>, VaultError> {
         let full = self.root.join(rel_path);
         if !full.exists() {
             return Err(VaultError::NotFound(rel_path.into()));
         }
-        let raw = fs::read(&full).map_err(|e| VaultError::Read(rel_path.into(), e))?;
-
-        // Auto-decrypt if key is available and content looks encrypted
-        if let Some(ref key) = self.key {
-            // Check string format first (our default write format)
-            if is_encrypted_str(&raw) {
-                let plaintext = decrypt_content(key, &raw)?;
-                return Ok(plaintext.into_bytes());
-            }
-            // Then check binary format
-            if is_encrypted_binary_slice(&raw) {
-                let plaintext = decrypt_content(key, &raw)?;
-                return Ok(plaintext.into_bytes());
-            }
-        }
-
-        Ok(raw)
+        fs::read(&full).map_err(|e| VaultError::Read(rel_path.into(), e))
     }
 
-    /// Write a note using atomic save. If the vault is unlocked, encrypts
-    /// content before writing.
+    /// Write a note using atomic save (plaintext — local vault is not encrypted).
     pub fn write_note(&self, rel_path: &str, content: &[u8]) -> Result<(), VaultError> {
         let full = self.root.join(rel_path);
         if let Some(parent) = full.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| VaultError::Write(rel_path.into(), e))?;
         }
-
-        let data = if let Some(ref key) = self.key {
-            nf_crypto::encrypt(key, content)
-                .map_err(|e| VaultError::Encryption(e.to_string()))?
-                .into_bytes()
-        } else {
-            content.to_vec()
-        };
-
         let tmp = full.with_extension("tmp");
-        fs::write(&tmp, &data)
+        fs::write(&tmp, content)
             .map_err(|e| VaultError::Write(rel_path.into(), e))?;
         fs::rename(&tmp, &full)
             .map_err(|e| VaultError::Write(rel_path.into(), e))?;
@@ -269,14 +133,7 @@ impl Vault {
             fs::create_dir_all(parent)
                 .map_err(|e| VaultError::Write(rel_path.into(), e))?;
         }
-        let data = if let Some(ref key) = self.key {
-            nf_crypto::encrypt(key, b"")
-                .map_err(|e| VaultError::Encryption(e.to_string()))?
-                .into_bytes()
-        } else {
-            Vec::new()
-        };
-        fs::write(&full, &data)
+        fs::write(&full, b"")
             .map_err(|e| VaultError::Write(rel_path.into(), e))?;
         Ok(())
     }
@@ -308,33 +165,6 @@ impl Vault {
         fs::remove_file(&full).map_err(|e| VaultError::Delete(rel_path.into(), e))?;
         Ok(())
     }
-}
-
-/// Check if raw bytes start with NFC1 magic.
-fn is_encrypted_binary_slice(data: &[u8]) -> bool {
-    nf_crypto::is_encrypted_binary(data)
-}
-
-/// Check if raw bytes decode to an NFC1-prefixed string.
-fn is_encrypted_str(data: &[u8]) -> bool {
-    if let Ok(s) = std::str::from_utf8(data) {
-        return nf_crypto::is_encrypted(s);
-    }
-    false
-}
-
-/// Decrypt content using the vault key. Tries string format first.
-fn decrypt_content(key: &VaultKey, data: &[u8]) -> Result<String, VaultError> {
-    // Try string format first (our default write format)
-    if let Ok(s) = std::str::from_utf8(data) {
-        if nf_crypto::is_encrypted(s) {
-            return nf_crypto::decrypt(key, s)
-                .map_err(|e| VaultError::Encryption(e.to_string()));
-        }
-    }
-    // Try binary format
-    nf_crypto::decrypt_binary(key, data)
-        .map_err(|e| VaultError::Encryption(e.to_string()))
 }
 
 fn is_hidden(entry: &walkdir::DirEntry) -> bool {
@@ -445,7 +275,6 @@ mod tests {
         let (_tmp, vault_path) = create_smoke_vault();
         let vault = Vault::open(&vault_path).unwrap();
         assert!(vault.root().exists());
-        assert!(!vault.is_encrypted());
     }
 
     #[test]
@@ -498,72 +327,4 @@ mod tests {
         assert_eq!(cfg.line_ending, loaded.line_ending);
     }
 
-    #[test]
-    fn test_encrypt_decrypt_vault() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("enc-vault");
-        std::fs::create_dir_all(&root).unwrap();
-        let mut vault = Vault::open(&root).unwrap();
-
-        vault.set_password("test123").unwrap();
-        vault.write_note("test.md", b"Hello encrypted world!").unwrap();
-
-        // Read back without any intermediate operations
-        let content = vault.read_note("test.md").unwrap();
-        assert_eq!(content, b"Hello encrypted world!");
-
-        // Verify raw format
-        vault.lock();
-        let raw = std::fs::read_to_string(root.join("test.md")).unwrap();
-        assert!(raw.starts_with("NFC1:"));
-
-        // Re-unlock and verify
-        vault.unlock("test123").unwrap();
-        let decrypted = vault.read_note("test.md").unwrap();
-        assert_eq!(decrypted, b"Hello encrypted world!");
-    }
-
-    #[test]
-    fn test_wrong_password_fails() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("wrong-pw-vault");
-        fs::create_dir_all(&root).unwrap();
-
-        let mut vault = Vault::open(&root).unwrap();
-        vault.set_password("correct").unwrap();
-        vault.lock();
-
-        let result = vault.unlock("wrong");
-        assert!(result.is_err());
-        match result {
-            Err(VaultError::WrongPassword) => {} // Expected
-            _ => panic!("expected WrongPassword error"),
-        }
-    }
-
-    #[test]
-    fn test_change_password() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("chpw-vault");
-        std::fs::create_dir_all(&root).unwrap();
-        let mut vault = Vault::open(&root).unwrap();
-
-        vault.set_password("old-pass").unwrap();
-        vault.write_note("n.md", b"test").unwrap();
-        // Verify read with old key
-        assert_eq!(vault.read_note("n.md").unwrap(), b"test");
-
-        vault.change_password("old-pass", "new-pass").unwrap();
-        // After password change, write & read a new file with new key
-        vault.write_note("n2.md", b"test2").unwrap();
-        assert_eq!(vault.read_note("n2.md").unwrap(), b"test2");
-
-        vault.lock();
-        vault.unlock("new-pass").unwrap();
-        // After unlock, read files encrypted with new key
-        assert_eq!(vault.read_note("n2.md").unwrap(), b"test2");
-
-        vault.lock();
-        assert!(vault.unlock("old-pass").is_err());
-    }
 }
