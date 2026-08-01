@@ -134,3 +134,60 @@ async fn test_sync_joplin_format() {
 
     println!("✅ Joplin format sync test passed");
 }
+use nf_crypto::JoplinE2ee;
+
+#[tokio::test]
+async fn test_e2ee_encrypted_sync_cycle() {
+    let dir = tempfile::tempdir().unwrap();
+    let sync_path = dir.path().join("e2ee_sync");
+
+    // Setup E2EE layer with master key
+    let mut e2ee = nf_sync::encryption::JoplinE2eeLayer::new();
+    let key_id = "01234568abcdefgh01234568abcdefgh";
+    let password = "e2ee-test-password";
+    let (_, master_key_content) = e2ee.generate_and_load_master_key(password, key_id).unwrap();
+
+    // Create engine with E2EE enabled
+    let driver = FsDriver::new(&sync_path);
+    let mut engine = SyncEngine::new(Box::new(driver));
+    engine = engine.with_e2ee(e2ee, Some(key_id.to_string()));
+
+    // Encrypt + upload a note
+    let note = SyncItem::new_note(
+        "enc-note-1".into(),
+        "Encrypted Note".into(),
+        "Secret content 加密内容 🔐".into(),
+        None,
+    );
+    engine.mark_changed(note);
+    let report = engine.sync_all().await.expect("E2EE sync should succeed");
+    assert_eq!(report.uploaded, 1, "Should upload 1 encrypted item");
+
+    // Verify stored file is encrypted (JED01 header, no plaintext)
+    let stored = std::fs::read_to_string(sync_path.join("notes/enc-note-1.json")).unwrap();
+    assert!(stored.contains("JED01"), "Stored content should be JED01-encrypted");
+    assert!(!stored.contains("Secret content"), "Plaintext should NOT be stored");
+
+    // Receive side: load master key from the SAME content, decrypt and verify
+    let driver2 = FsDriver::new(&sync_path);
+    let mut e2ee2 = nf_sync::encryption::JoplinE2eeLayer::new();
+    e2ee2.load_master_key(key_id, password, &master_key_content).unwrap();
+    let mut engine2 = SyncEngine::new(Box::new(driver2));
+    engine2 = engine2.with_e2ee(e2ee2, Some(key_id.to_string()));
+
+    let report2 = engine2.sync_all().await.expect("E2EE pull should succeed");
+    assert_eq!(report2.downloaded, 1, "Should download 1 item");
+
+    // Manually decrypt the stored cipher to verify roundtrip
+    let cipher = serde_json::from_str::<serde_json::Value>(&stored).unwrap();
+    let body = cipher["body"].as_str().unwrap_or("");
+    if body.starts_with("JED01") {
+        let mut e2ee_check = nf_crypto::JoplinE2ee::new();
+        e2ee_check.load_master_key(key_id, password, &master_key_content).unwrap();
+        let plain = e2ee_check.decrypt_item(body).unwrap();
+        assert!(plain.contains("Secret content"), "Decrypted content should match original");
+        println!("✅ E2EE roundtrip: encrypted -> sync -> decrypted matches original");
+    } else {
+        panic!("Expected encrypted body with JED01 header");
+    }
+}

@@ -22,6 +22,15 @@ struct SyncConfig {
     url: String,
     username: String,
     password: String,
+    // E2EE (Joplin-compatible)
+    #[serde(default)]
+    e2ee_enabled: bool,
+    #[serde(default)]
+    e2ee_password: String,
+    #[serde(default)]
+    e2ee_master_key_id: String,
+    #[serde(default)]
+    e2ee_master_key_content: String,
 }
 
 impl AppState {
@@ -352,25 +361,60 @@ fn load_sync_config(state: &AppState) -> Result<Option<SyncConfig>, String> {
 
 /// Create engine and login (Joplin only).
 async fn create_engine_async(config: &SyncConfig, window: &tauri::Window) -> Result<SyncEngine, String> {
-    match config.target_type.as_str() {
+    let engine = match config.target_type.as_str() {
         "joplin_server" => {
             let _ = window.emit("sync-progress", "⏳ 正在登录...");
             let mut joplin = JoplinServerDriver::new(&config.url).map_err(|e| e.to_string())?;
             joplin.login(&config.username, &config.password).await.map_err(|e| e.to_string())?;
             let _ = window.emit("sync-progress", "✅ 登录成功");
-            Ok(SyncEngine::new(Box::new(joplin)))
+            SyncEngine::new(Box::new(joplin))
         }
-        "webdav" => Ok(SyncEngine::new(Box::new(
+        "webdav" => SyncEngine::new(Box::new(
             WebDavDriver::new(&config.url, &config.username, &config.password).map_err(|e| e.to_string())?
-        ))),
-        "filesystem" => Ok(SyncEngine::new(Box::new(FsDriver::new(&config.url)))),
-        _ => Err(format!("Unknown: {}", config.target_type)),
+        )),
+        "filesystem" => SyncEngine::new(Box::new(FsDriver::new(&config.url))),
+        _ => return Err(format!("Unknown: {}", config.target_type)),
+    };
+
+    // Apply Joplin-compatible E2EE if enabled (master key already configured)
+    if config.e2ee_enabled {
+        if config.e2ee_password.is_empty() {
+            return Err("E2EE enabled but password is empty".into());
+        }
+        if config.e2ee_master_key_id.is_empty() || config.e2ee_master_key_content.is_empty() {
+            return Err("E2EE master key not generated — configure E2EE in Settings first".into());
+        }
+        let mut e2ee = nf_sync::encryption::JoplinE2eeLayer::new();
+        e2ee.load_master_key(&config.e2ee_master_key_id, &config.e2ee_password, &config.e2ee_master_key_content)
+            .map_err(|e| format!("load master key: {}", e))?;
+        let _ = window.emit("sync-progress", "🔑 已加载主密钥");
+        Ok(engine.with_e2ee(e2ee, Some(config.e2ee_master_key_id.clone())))
+    } else {
+        Ok(engine)
     }
 }
 
+fn generate_sync_key_id() -> String {
+    use rand::Rng;
+    let bytes: Vec<u8> = (0..16).map(|_| rand::rng().random_range(0..=255u8)).collect();
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 #[tauri::command]
-fn sync_configure(config: SyncConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
+fn sync_configure(mut config: SyncConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
     if config.url.is_empty() { return Err("URL is required".into()); }
+    // Generate a master key when E2EE is first enabled
+    if config.e2ee_enabled && config.e2ee_master_key_content.is_empty() {
+        if config.e2ee_password.is_empty() {
+            return Err("E2EE requires a password".into());
+        }
+        let key_id = generate_sync_key_id();
+        let mut e2ee = nf_sync::encryption::JoplinE2eeLayer::new();
+        let (_, content) = e2ee.generate_and_load_master_key(&config.e2ee_password, &key_id)
+            .map_err(|e| format!("generate master key: {}", e))?;
+        config.e2ee_master_key_id = key_id;
+        config.e2ee_master_key_content = content;
+    }
     save_sync_config(&state, &config)?;
     *state.sync_config.lock().map_err(|e| e.to_string())? = Some(config);
     Ok(())

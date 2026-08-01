@@ -33,3 +33,9 @@ pub enum SyncError {
 impl From<String> for SyncError {
     fn from(s: String) -> Self { SyncError::Other(s) }
 }
+
+impl From<nf_crypto::CryptoError> for SyncError {
+    fn from(e: nf_crypto::CryptoError) -> Self {
+        SyncError::Other(format!("crypto: {}", e))
+    }
+}

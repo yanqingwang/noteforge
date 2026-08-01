@@ -30,6 +30,10 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
   const [syncUser, setSyncUser] = useState("");
   const [syncPass, setSyncPass] = useState("");
   const [syncStatus, setSyncStatus] = useState("");
+  // E2EE settings
+  const [e2eeEnabled, setE2eeEnabled] = useState(false);
+  const [e2eePassword, setE2eePassword] = useState("");
+  const [e2eeMasterKeyId, setE2eeMasterKeyId] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +45,11 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
     }).catch((e: any) => setMessage(`加载配置失败: ${e}`));
     // Load sync config
     invoke("sync_get_config", {}).then((cfg: any) => {
-      if (cfg) { setSyncType(cfg.target_type); setSyncUrl(cfg.url); setSyncUser(cfg.username); setSyncPass(cfg.password); }
+      if (cfg) {
+        setSyncType(cfg.target_type); setSyncUrl(cfg.url); setSyncUser(cfg.username); setSyncPass(cfg.password);
+        setE2eeEnabled(!!cfg.e2ee_enabled);
+        setE2eeMasterKeyId(cfg.e2ee_master_key_id || "");
+      }
     }).catch(() => {});
     // Listen for sync progress events from backend
     const unlisten = listen<string>("sync-progress", (event) => {
@@ -163,12 +171,30 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
           type="password" placeholder="密码"
           style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }} />
 
+        {/* E2EE toggle */}
+        <label style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+          <input type="checkbox" checked={e2eeEnabled} onChange={e => setE2eeEnabled(e.target.checked)} />
+          🔐 启用端到端加密 (Joplin 兼容)
+        </label>
+        {e2eeEnabled && (
+          <>
+            <input value={e2eePassword} onChange={e => setE2eePassword(e.target.value)}
+              type="password" placeholder="E2EE 主密钥密码（保存到服务器前加密所有笔记）"
+              style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #ddd", borderRadius: 6, marginBottom: 8 }} />
+            {e2eeMasterKeyId && (
+              <p style={{ fontSize: 11, color: "#666", margin: "0 0 8px" }}>
+                主密钥 ID: <code style={{ fontSize: 11 }}>{e2eeMasterKeyId}</code>（已在服务器上启用加密）
+              </p>
+            )}
+          </>
+        )}
+
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <button onClick={async () => {
             if (syncing) return;
             setSyncing(true); showStatus("⏳ 正在测试连接...");
             try {
-              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass, e2ee_enabled: e2eeEnabled, e2ee_password: e2eePassword, e2ee_master_key_id: e2eeMasterKeyId, e2ee_master_key_content: "" } });
               const res = await invoke("sync_test", {});
               showStatus(`✅ ${res}`);
             } catch (e: any) { showStatus(`❌ ${e}`); }
@@ -182,7 +208,7 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
             if (syncing) return;
             setSyncing(true); showStatus("⏳ 正在同步...");
             try {
-              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass, e2ee_enabled: e2eeEnabled, e2ee_password: e2eePassword, e2ee_master_key_id: e2eeMasterKeyId, e2ee_master_key_content: "" } });
               const res = await invoke("sync_start", {});
               showStatus(`✅ ${res}`);
             } catch (e: any) { showStatus(`❌ ${e}`); }
@@ -204,7 +230,7 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
             if (!confirm("⚠️ 将覆盖服务器上所有文件，不可撤销。确定继续？")) return;
             setSyncing(true); showStatus("⏳ 正在初始化上传...");
             try {
-              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass, e2ee_enabled: e2eeEnabled, e2ee_password: e2eePassword, e2ee_master_key_id: e2eeMasterKeyId, e2ee_master_key_content: "" } });
               const res = await invoke("sync_initial_upload", {});
               showStatus(`✅ ${res}`);
             } catch (e: any) { showStatus(`❌ ${e}`); }
@@ -219,7 +245,7 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onPasswor
             if (!confirm("⚠️ 将覆盖本地所有文件，不可撤销。确定继续？")) return;
             setSyncing(true); showStatus("⏳ 正在初始化下载...");
             try {
-              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass } });
+              await invoke("sync_configure", { config: { target_type: syncType, url: syncUrl, username: syncUser, password: syncPass, e2ee_enabled: e2eeEnabled, e2ee_password: e2eePassword, e2ee_master_key_id: e2eeMasterKeyId, e2ee_master_key_content: "" } });
               const res = await invoke("sync_initial_download", {});
               showStatus(`✅ ${res}`);
             } catch (e: any) { showStatus(`❌ ${e}`); }

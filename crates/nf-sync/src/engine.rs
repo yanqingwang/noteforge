@@ -1,4 +1,5 @@
 use crate::drivers::joplin_server::{JoplinItem, JoplinServerDriver};
+use crate::encryption::JoplinE2eeLayer;
 use crate::error::SyncError;
 use crate::file_api::FileApi;
 use crate::item::SyncItem;
@@ -25,6 +26,9 @@ pub struct SyncEngine {
     cursor: Option<String>,
     mapping: MappingStore,
     joplin: Option<JoplinServerDriver>,
+    e2ee: Option<JoplinE2eeLayer>,
+    /// master key ID used when encrypting new items
+    active_master_key_id: Option<String>,
 }
 
 impl SyncEngine {
@@ -36,6 +40,8 @@ impl SyncEngine {
             cursor: None,
             mapping: MappingStore::new(),
             joplin: None,
+            e2ee: None,
+            active_master_key_id: None,
         }
     }
 
@@ -44,6 +50,40 @@ impl SyncEngine {
     pub fn with_joplin(mut self, joplin: JoplinServerDriver) -> Self {
         self.joplin = Some(joplin);
         self
+    }
+
+    /// Enable Joplin-compatible E2EE with the given layer.
+    pub fn with_e2ee(mut self, e2ee: JoplinE2eeLayer, active_master_key_id: Option<String>) -> Self {
+        self.e2ee = Some(e2ee);
+        self.active_master_key_id = active_master_key_id;
+        self
+    }
+
+    /// Is E2EE enabled?
+    pub fn e2ee_enabled(&self) -> bool { self.e2ee.is_some() }
+
+    /// Decrypt a Joplin item's content if it's encrypted; otherwise return body as-is.
+    fn decrypt_joplin_item(&self, item: &JoplinItem) -> Result<String, SyncError> {
+        if item.encryption_applied == 1 {
+            let e2ee = self.e2ee.as_ref()
+                .ok_or_else(|| SyncError::Other("Item is encrypted but E2EE is not enabled".into()))?;
+            if item.encryption_cipher_text.is_empty() {
+                return Err(SyncError::Other(format!(
+                    "Item {} marked encrypted but has no cipher text", item.id)));
+            }
+            e2ee.decrypt_item(&item.encryption_cipher_text)
+        } else {
+            Ok(item.body.clone())
+        }
+    }
+
+    /// Encrypt an item body if E2EE is enabled (StringV1). Returns body to store.
+    fn encrypt_body(&self, body: &str) -> Result<String, SyncError> {
+        if let (Some(e2ee), Some(key_id)) = (&self.e2ee, &self.active_master_key_id) {
+            e2ee.encrypt_item(body, key_id)
+        } else {
+            Ok(body.to_string())
+        }
     }
 
     /// Load mapping from persistence.
@@ -132,10 +172,19 @@ impl SyncEngine {
                 if let Some(parent) = full.parent() {
                     std::fs::create_dir_all(parent).ok();
                 }
-                std::fs::write(&full, &item.body)
+                // Decrypt if E2EE is enabled and item is encrypted
+                let body = match self.decrypt_joplin_item(item) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        report.errors += 1;
+                        eprintln!("Decrypt {} failed: {}", item.id, e);
+                        continue;
+                    }
+                };
+                std::fs::write(&full, &body)
                     .map_err(|e| SyncError::Other(format!("write {}: {}", rel, e)))?;
 
-                let hash = sha256(&item.body);
+                let hash = sha256(&body);
                 self.mapping.upsert(MappingEntry {
                     joplin_name: format!("nf-{}.md", item.id),
                     remote_id: Some(item.id.clone()),
@@ -236,7 +285,16 @@ impl SyncEngine {
 
             let id = generate_joplin_id();
             let name = format!("nf-{}.md", id);
-            let serialized = serialize_item(&id, title, &body, &parent_id, 1, 0, 0);
+            // Encrypt body if E2EE enabled (StringV1)
+            let (body_out, enc_applied) = if let (Some(e2ee), Some(key_id)) = (&self.e2ee, &self.active_master_key_id) {
+                match e2ee.encrypt_item(&body, key_id) {
+                    Ok(ct) => (ct, 1),
+                    Err(e) => { report.errors += 1; eprintln!("Encrypt {} failed: {}", p, e); continue; }
+                }
+            } else {
+                (body.clone(), 0)
+            };
+            let serialized = serialize_item(&id, title, &body_out, &parent_id, 1, enc_applied, 0);
             let remote_id = joplin.put_item(&name, serialized.as_bytes(), true).await?;
 
             let hash = sha256(&body);
@@ -268,8 +326,21 @@ impl SyncEngine {
         for id in &self.dirty_ids {
             if let Some(item) = self.local_items.get(id) {
                 let name = format!("nf-{}.md", id);
-                let json = serde_json::to_string(item)?;
-                match joplin.put_item(&name, json.as_bytes(), true).await {
+                // Encrypt body if E2EE enabled
+                let (body_out, enc_applied) = if let (Some(e2ee), Some(key_id)) = (&self.e2ee, &self.active_master_key_id) {
+                    let body = item.body.as_deref().unwrap_or("");
+                    match e2ee.encrypt_item(body, key_id) {
+                        Ok(ct) => (ct, 1),
+                        Err(e) => { report.errors += 1; eprintln!("Encrypt {} failed: {}", id, e); continue; }
+                    }
+                } else {
+                    (item.body.clone().unwrap_or_default(), 0)
+                };
+                let serialized = serialize_item(
+                    &item.id, &item.title, &body_out,
+                    item.parent_id.as_deref().unwrap_or(""),
+                    1, enc_applied, 0);
+                match joplin.put_item(&name, serialized.as_bytes(), true).await {
                     Ok(remote_id) => {
                         report.uploaded += 1;
                         self.mapping.upsert(MappingEntry {
@@ -345,7 +416,20 @@ impl SyncEngine {
         for id in &self.dirty_ids {
             if let Some(item) = self.local_items.get(id) {
                 let path = item_path(id, &item.item_type);
-                let json = serde_json::to_string(item)?;
+                // Encrypt body if E2EE enabled (StringV1, Joplin-compatible)
+                let json = if let (Some(e2ee), Some(key_id)) = (&self.e2ee, &self.active_master_key_id) {
+                    let body = item.body.as_deref().unwrap_or("");
+                    match e2ee.encrypt_item(body, key_id) {
+                        Ok(ct) => {
+                            let mut enc = item.clone();
+                            enc.body = Some(ct);
+                            serde_json::to_string(&enc)?
+                        }
+                        Err(e) => { report.errors += 1; eprintln!("Encrypt {} failed: {}", id, e); continue; }
+                    }
+                } else {
+                    serde_json::to_string(item)?
+                };
                 match self.target.put(&path, json.as_bytes()).await {
                     Ok(_) => report.uploaded += 1,
                     Err(e) => { report.errors += 1; eprintln!("Upload failed {}: {}", id, e); }
