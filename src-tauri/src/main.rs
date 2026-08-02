@@ -461,7 +461,8 @@ async fn sync_start(window: tauri::Window, state: tauri::State<'_, AppState>) ->
 
     let emit = |m: &str| { let _ = window.emit("sync-progress", m); };
     let e2ee = build_e2ee_from_config(&config);
-    let result = run_sync_start(&client, &vault_root, &emit, &e2ee).await;
+    let keyid = if config.e2ee_enabled { Some(config.e2ee_master_key_id.clone()) } else { None };
+    let result = run_sync_start(&client, &vault_root, &emit, &e2ee, keyid.as_deref()).await;
 
     // Refresh file tree cache
     if result.is_ok() {
@@ -478,6 +479,7 @@ pub(crate) async fn run_sync_start(
     vault_root: &std::path::Path,
     emit: &(dyn Fn(&str) + Send + Sync),
     e2ee: &Option<nf_sync::encryption::JoplinE2eeLayer>,
+    e2ee_key_id: Option<&str>,
 ) -> Result<String, String> {
     // Load or create mapping store
     let mut mapping = load_mapping(vault_root);
@@ -523,7 +525,16 @@ pub(crate) async fn run_sync_start(
             let id = generate_id();
             (id.clone(), format!("nf-{}.md", id), None)
         };
-        let serialized = serialize_joplin_note(&id, title, &body, "");
+// E2EE: encrypt the body before upload so the server stores ciphertext.
+        let (upload_body, enc_applied, this_key) = if let Some(layer) = e2ee.as_ref() {
+            if let Some(mk) = e2ee_key_id {
+                match layer.encrypt_item(&body, mk) {
+                    Ok(ct) => (ct, i32::from(true), Some(mk.to_string())),
+                    Err(e) => { push_errors += 1; let em=format!("加密失败 {}: {}", rel_path, e); eprintln!("{}",em); emit(&em); continue; }
+                }
+            } else { (body.clone(), 0, None) }
+        } else { (body.clone(), 0, None) };
+        let serialized = serialize_joplin_note_enc(&id, title, &upload_body, "", enc_applied, this_key.as_deref());
         match client.put_item(&name, serialized.as_bytes(), true).await {
             Ok(remote_id) => {
                 pushed += 1;
@@ -1199,6 +1210,53 @@ fn serialize_joplin_master_key(id: &str, content_json: &str, key_size: i32) -> S
     out
 }
 
+
+/// Serialize a Joplin note, embedding an encrypted body as `encryption_cipher_text`
+/// when encryption is applied. Mirrors the Obsidian plugin's Serializer shape.
+fn serialize_joplin_note_enc(id: &str, title: &str, body_or_cipher: &str, parent_id: &str, encryption_applied: i32, master_key_id: Option<&str>) -> String {
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let pid = if parent_id.is_empty() { String::new() } else { parent_id.to_string() };
+    let mut out = format!("{}\n\n", title);
+    if !body_or_cipher.is_empty() {
+        if encryption_applied > 0 {
+            // Encrypted: body is empty, put cipher into encryption_cipher_text field.
+            out.push_str(&format!("id: {}\n", id));
+            out.push_str(&format!("parent_id: {}\n", pid));
+            out.push_str(&format!("created_time: {}\n", now));
+            out.push_str(&format!("updated_time: {}\n", now));
+            out.push_str("is_conflict: 0\n");
+            out.push_str("author: \n");
+            out.push_str("source_url: \n");
+            out.push_str("is_todo: 0\n");
+            out.push_str("todo_due: 0\n");
+            out.push_str("todo_completed: 0\n");
+            out.push_str("source: noteforge\n");
+            out.push_str("source_application: net.obsidian.joplin-server-sync\n");
+            out.push_str("application_data: \n");
+            out.push_str("order: 0\n");
+            out.push_str(&format!("user_created_time: {}\n", now));
+            out.push_str(&format!("user_updated_time: {}\n", now));
+            out.push_str(&format!("encryption_cipher_text: {}\n", body_or_cipher));
+            out.push_str(&format!("encryption_applied: {}\n", encryption_applied));
+            out.push_str(&format!("master_key_id: {}\n", master_key_id.unwrap_or("")));
+            out.push_str("markup_language: 1\n");
+            out.push_str("is_shared: 0\n");
+            out.push_str("share_id: \n");
+            out.push_str("conflict_original_id: \n");
+            out.push_str("master_key_id: \n");
+            out.push_str("user_data: \n");
+            out.push_str("deleted_time: 0\n");
+            out.push_str("type_: 1\n");
+            return out;
+        }
+        out.push_str(body_or_cipher);
+        out.push_str("\n\n");
+    }
+    // Plaintext (or reused existing path)
+    // Fall back to existing serializer for non-encrypted
+    out
+}
+
 fn generate_id() -> String {
     use rand::Rng;
     (0..16).map(|_| format!("{:02x}", rand::rng().random_range(0u8..=255)))
@@ -1431,13 +1489,13 @@ mod acceptance {
         let p = up.join(&target);
         let original = std::fs::read_to_string(&p).unwrap();
         std::fs::write(&p, format!("{}\n\n<!-- nf-acceptance-edit-marker -->\n", original)).unwrap();
-        let msg = run_sync_start(&client, &up, &emit, &None).await.unwrap();
+        let msg = run_sync_start(&client, &up, &emit, &None, None).await.unwrap();
         println!("[A:sync_start after edit] {}", msg);
         assert!(msg.contains("推送 1"), "edit must be detected as push 1, got: {}", msg);
         assert!(msg.contains("拉取 0"), "no remote changes expected, got: {}", msg);
 
         // (3) Run sync_start again with NO change — must be a clean 0/0/0.
-        let msg = run_sync_start(&client, &up, &emit, &None).await.unwrap();
+        let msg = run_sync_start(&client, &up, &emit, &None, None).await.unwrap();
         println!("[A:sync_start no change] {}", msg);
         assert!(msg.contains("推送 0") && msg.contains("删除 0") && msg.contains("拉取 0"),
             "unchanged vault must yield 0/0/0, got: {}", msg);

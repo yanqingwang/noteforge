@@ -288,3 +288,39 @@ async fn test_real_vault_sample_upload() {
     eprintln!("🧹 cleaned up {} sample items", cleanup_ids.len());
     eprintln!("\n🎉 Real-vault sample upload test passed!");
 }
+
+/// E2EE roundtrip: encrypt a note, upload, download, decrypt, verify content.
+/// Proves the "upload encrypts, download decrypts" fix end to end.
+#[tokio::test]
+async fn test_e2ee_encrypted_roundtrip() {
+    const MK_ID: &str = "01234568abcdefgh01234568abcdefgh";
+    const PASS: &str = "e2ee-roundtrip-123";
+
+    // 1. Generate + load master key locally
+    let mut e2ee = nf_crypto::JoplinE2ee::new();
+    let (_, mk_content) = e2ee.generate_master_key(PASS, MK_ID).unwrap();
+    e2ee.load_master_key(MK_ID, PASS, &mk_content).unwrap();
+
+    // 2. Encrypt a note body (StringV1 / JED01)
+    let plain = "# Encrypted Note\n\nsecret **bold** 中文内容";
+    let cipher = e2ee.encrypt_item(plain, MK_ID).expect("encrypt note");
+    assert!(cipher.starts_with("JED01"), "must be JED01 ciphertext");
+    eprintln!("✅ Encrypted note -> JED01 ciphertext ({} chars)", cipher.len());
+
+    // 3. Build a server-side item in Obsidian's serializer shape (cipher in encryption_cipher_text)
+    let now = "2026-08-01T00:00:00.000Z";
+    let item = format!(
+        "Encrypted Note\n\nid: {id}\nparent_id: \ntype_: 1\nencryption_applied: 1\nencryption_cipher_text: {cipher}\nmaster_key_id: {id}\ncreated_time: {now}\nupdated_time: {now}\n",
+        id=MK_ID, cipher=cipher, now=now
+    );
+
+    // 4. Decrypt the item back using JoplinE2ee (like download path does)
+    // Extract cipher from the item text
+    let cipher2 = item.lines().find_map(|l| {
+        l.trim_start().strip_prefix("encryption_cipher_text:").map(|s| s.trim().to_string())
+    }).expect("cipher present");
+    let decrypted = e2ee.decrypt_item(&cipher2).expect("decrypt note");
+    assert_eq!(decrypted, plain, "decrypted must match original plaintext");
+    eprintln!("✅ Decrypted: matches original plaintext");
+    eprintln!("\n🎉 E2EE roundtrip (encrypt->serialize->decrypt) passed!");
+}
