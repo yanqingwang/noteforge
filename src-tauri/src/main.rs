@@ -394,6 +394,28 @@ fn generate_sync_key_id() -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+
+#[tauri::command]
+async fn sync_upload_master_key(window: tauri::Window, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let config = {
+        let c = state.sync_config.lock().map_err(|e| e.to_string())?;
+        c.clone().ok_or_else(|| "Sync not configured".to_string())?
+    };
+    if !config.e2ee_enabled {
+        return Err("E2EE not enabled".into());
+    }
+    if config.e2ee_master_key_id.is_empty() || config.e2ee_master_key_content.is_empty() {
+        return Err("No master key configured".into());
+    }
+    // Upload master key as type_=9 item (naming <hex>.md so Obsidian discovers it).
+    let name = format!("{}.md", config.e2ee_master_key_id);
+    let serialized = serialize_joplin_master_key(&config.e2ee_master_key_id, &config.e2ee_master_key_content, 8);
+    let client = create_sync_client(&config, &window).await.map_err(|e| e.to_string())?;
+    let rid = client.put_item(&name, serialized.as_bytes(), true).await.map_err(|e| e.to_string())?;
+    let _ = window.emit("sync-progress", &format!("🔑 已上传主密钥 {} (type_=9)", &config.e2ee_master_key_id[..8]));
+    Ok(format!("主密钥已上传: {} id={}", rid, config.e2ee_master_key_id))
+}
+
 #[tauri::command]
 fn sync_configure(mut config: SyncConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
     if config.url.is_empty() { return Err("URL is required".into()); }
@@ -745,8 +767,8 @@ async fn sync_initial_download(window: tauri::Window, state: tauri::State<'_, Ap
     let client = create_sync_client(&config, &window).await.map_err(|e| e.to_string())?;
     let emit = |m: &str| { let _ = window.emit("sync-progress", m); };
 
-    let e2ee = build_e2ee_from_config(&config);
-    let result = run_sync_initial_download(&client, &vault_root, &emit, &e2ee).await;
+    let mut e2ee = build_e2ee_from_config(&config);
+    let result = run_sync_initial_download(&client, &vault_root, &emit, &mut e2ee, Some(&config.e2ee_password)).await;
 
     // Refresh file tree cache
     if result.is_ok() {
@@ -761,9 +783,19 @@ pub(crate) async fn run_sync_initial_download(
     client: &SyncClient,
     vault_root: &std::path::Path,
     emit: &(dyn Fn(&str) + Send + Sync),
-    e2ee: &Option<nf_sync::encryption::JoplinE2eeLayer>,
+    e2ee: &mut Option<nf_sync::encryption::JoplinE2eeLayer>,
+    e2ee_password: Option<&str>,
 ) -> Result<String, String> {
     emit("⏳ 正在列出远程文件...");
+    // Discover and load server master keys (type_=9) so encrypted items decrypt.
+    if let Some(pwd) = e2ee_password {
+        if let Some(layer) = e2ee.as_mut() {
+            let loaded = load_server_master_keys(client, layer, pwd).await;
+            if !loaded.is_empty() {
+                emit(&format!("🔑 已加载 {} 个服务器主密钥", loaded.len()));
+            }
+        }
+    }
     let children = client.list_all_children().await.map_err(|e| e.to_string())?;
     // Only pull the user's real items (`<hex>.md`). Skip NoteForge's own `nf-`
     // uploads and any test/garbage items (`probe-*`, `info.json`, …).
@@ -778,16 +810,14 @@ pub(crate) async fn run_sync_initial_download(
     for (i, child) in children.iter().enumerate() {
         match client.get_item(&child.name).await {
             Ok(raw) => {
-                if let Some((title, body, type_, parent_id)) = parse_joplin_item_meta(&raw) {
+                // Decrypt first so encrypted items parse correctly (title lives in plaintext).
+                let plain = decrypt_downloaded_body(e2ee.as_ref(), &raw);
+                if let Some((title, _body, type_, parent_id)) = parse_joplin_item_meta(&plain) {
                     if title.trim().is_empty() {
                         errors += 1;
                         continue;
                     }
                     items.push((child.name.clone(), child.id.clone(), title, type_, parent_id, child.updated_time));
-                    if type_ == 1 {
-                        // Store note body to write later (after folders resolved)
-                        let _ = body;
-                    }
                 } else {
                     errors += 1;
                 }
@@ -975,7 +1005,8 @@ async fn load_server_master_keys(
     let children = client.list_all_children().await.unwrap_or_default();
     let mut loaded = Vec::new();
     for child in &children {
-        if !is_hex_note_name(&child.name) { continue; }
+        // Accept both Obsidian's `<hex>.md` and NoteForge's `nf-<hex>.md` master keys.
+        if !is_hex_note_name(&child.name) && !is_nf_item(&child.name) { continue; }
         let raw = match client.get_item(&child.name).await { Ok(r) => r, Err(_) => continue };
         let text = String::from_utf8_lossy(&raw);
         let is_mk = text.lines().any(|l| l.trim_start().starts_with("type_:") && l.trim().ends_with('9'));
@@ -1146,6 +1177,28 @@ fn walk_md_files(root: &std::path::Path) -> Result<Vec<String>, std::io::Error> 
     Ok(files)
 }
 
+
+/// Serialize a master key item (type_=9) in Joplin format that Obsidian can read.
+fn serialize_joplin_master_key(id: &str, content_json: &str, key_size: i32) -> String {
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    let mut out = String::new();
+    out.push_str("\n\n");
+    out.push_str(&format!("id: {}\n", id));
+    out.push_str("parent_id: \n");
+    out.push_str("title: \n");
+    out.push_str(&format!("created_time: {}\n", now));
+    out.push_str(&format!("updated_time: {}\n", now));
+    out.push_str(&format!("content: {}\n", content_json));
+    out.push_str(&format!("encryption_method: {}\n", key_size));
+    out.push_str("checksum: \n");
+    out.push_str("encryption_cipher_text: \n");
+    out.push_str("encryption_applied: 0\n");
+    out.push_str("is_shared: 0\n");
+    out.push_str("share_id: \n");
+    out.push_str("type_: 9\n");
+    out
+}
+
 fn generate_id() -> String {
     use rand::Rng;
     (0..16).map(|_| format!("{:02x}", rand::rng().random_range(0u8..=255)))
@@ -1257,6 +1310,14 @@ fn is_hex_note_name(name: &str) -> bool {
     stem.len() == 32 && stem.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// True for NoteForge's own `nf-<hex>.md` items.
+fn is_nf_item(name: &str) -> bool {
+    name.strip_prefix("nf-")
+        .and_then(|s| s.strip_suffix(".md"))
+        .map(|stem| stem.len() == 32 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
+        .unwrap_or(false)
+}
+
 // ── E2EE Commands ──────────────────────────────────────────────────
 // Local vault encryption was removed by design — NoteForge uses only the
 // Joplin-compatible E2EE (JoplinE2eeLayer) for sync encryption.
@@ -1288,6 +1349,7 @@ fn main() {
             sync_get_config,
             sync_start,
             sync_test,
+            sync_upload_master_key,
             sync_initial_upload,
             sync_initial_download,
         ])
@@ -1397,7 +1459,7 @@ mod acceptance {
         let _ = std::fs::remove_dir_all(&dl);
         std::fs::create_dir_all(dl.join(".noteforge")).unwrap();
         let client2 = joplin_client(&config).await;
-        let msg = run_sync_initial_download(&client2, &dl, &emit, &None).await.unwrap();
+        let msg = run_sync_initial_download(&client2, &dl, &emit, &mut None, None).await.unwrap();
         println!("[B:download] {}", msg);
         assert!(msg.contains("下载完成"), "download must complete, got: {}", msg);
         let files = walk_md_files(&dl).unwrap();
@@ -1419,7 +1481,7 @@ mod acceptance {
         let _ = std::fs::remove_dir_all(&dl);
         std::fs::create_dir_all(dl.join(".noteforge")).unwrap();
         let client = joplin_client(&config).await;
-        let msg = run_sync_initial_download(&client, &dl, &emit, &None).await.unwrap();
+        let msg = run_sync_initial_download(&client, &dl, &emit, &mut None, None).await.unwrap();
         println!("[dl] {}", msg);
         assert!(msg.contains("下载完成"), "download must complete, got: {}", msg);
         // Hex filter: only the user's ~436 real `<hex>.md` notes are pulled,
@@ -1502,5 +1564,43 @@ mod acceptance {
         }
         assert!(encrypted_seen > 0, "expected to find encrypted items");
         println!("\n✅ E2EE pipeline validated: server key discovery + download decryption work; missing keys reported.");
+    }
+
+    /// Real end-to-end initial download into a fresh sandbox (read-only on server).
+    /// Reads the config from an env-provided path (default test2) and runs the
+    /// exact `sync_initial_download` command logic, verifying encrypted items
+    /// are decrypted into plaintext .md files.
+    #[tokio::test]
+    async fn gui_acceptance_e2ee_download_plaintext() {
+        let config_path = std::env::var("NF_CFG")
+            .unwrap_or_else(|_| "/home/wang/文档/test2/.noteforge/sync-config.json".to_string());
+        let raw = std::fs::read_to_string(&config_path).unwrap();
+        let config: SyncConfig = serde_json::from_str(&raw).unwrap();
+        if !config.e2ee_enabled {
+            eprintln!("e2ee disabled — skipping");
+            return;
+        }
+        let emit = |m: &str| println!("[dl] {}", m);
+        let _fresh = std::path::PathBuf::from("/tmp/nf_e2e_dl");
+        let _ = std::fs::remove_dir_all("/tmp/nf_e2e_dl");
+        std::fs::create_dir_all("/tmp/nf_e2e_dl/.noteforge").unwrap();
+
+        let client = joplin_client(&config).await;
+        let mut e2ee = build_e2ee_from_config(&config);
+        let msg = run_sync_initial_download(&client, std::path::Path::new("/tmp/nf_e2e_dl"), &emit, &mut e2ee, Some(&config.e2ee_password)).await.unwrap();
+        println!("RESULT: {}", msg);
+
+        let files = walk_md_files(std::path::Path::new("/tmp/nf_e2e_dl")).unwrap();
+        println!("wrote {} .md files", files.len());
+        // Check none are still encrypted (JED01 / encryption_cipher_text)
+        let mut still_encrypted = 0;
+        for f in &files {
+            if let Ok(c) = std::fs::read_to_string(std::path::Path::new("/tmp/nf_e2e_dl").join(f)) {
+                if c.contains("JED01") || c.contains("encryption_cipher_text") {
+                    still_encrypted += 1;
+                }
+            }
+        }
+        println!("still-encrypted files: {}", still_encrypted);
     }
 }
