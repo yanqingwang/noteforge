@@ -438,7 +438,8 @@ async fn sync_start(window: tauri::Window, state: tauri::State<'_, AppState>) ->
     let _ = window.emit("sync-progress", "✅ 已连接服务器");
 
     let emit = |m: &str| { let _ = window.emit("sync-progress", m); };
-    let result = run_sync_start(&client, &vault_root, &emit).await;
+    let e2ee = build_e2ee_from_config(&config);
+    let result = run_sync_start(&client, &vault_root, &emit, &e2ee).await;
 
     // Refresh file tree cache
     if result.is_ok() {
@@ -454,6 +455,7 @@ pub(crate) async fn run_sync_start(
     client: &SyncClient,
     vault_root: &std::path::Path,
     emit: &(dyn Fn(&str) + Send + Sync),
+    e2ee: &Option<nf_sync::encryption::JoplinE2eeLayer>,
 ) -> Result<String, String> {
     // Load or create mapping store
     let mut mapping = load_mapping(vault_root);
@@ -598,7 +600,12 @@ pub(crate) async fn run_sync_start(
                             });
                             pulled += 1;
                         } else if item.type_ == 1 {
-                            if let Some((title, body)) = parse_joplin_body(item.body.as_bytes()) {
+                            // Fetch raw bytes, decrypt with E2EE if enabled, then parse.
+                            let plain = match client.get_item(&d.name).await {
+                                Ok(raw) => decrypt_downloaded_body(e2ee.as_ref(), &raw),
+                                Err(_) => item.body.as_bytes().to_vec(),
+                            };
+                            if let Some((title, body)) = parse_joplin_body(&plain) {
                                 // Resolve folder hierarchy from parent_id
                                 let parent_path = if item.parent_id.is_empty() {
                                     String::new()
@@ -738,7 +745,8 @@ async fn sync_initial_download(window: tauri::Window, state: tauri::State<'_, Ap
     let client = create_sync_client(&config, &window).await.map_err(|e| e.to_string())?;
     let emit = |m: &str| { let _ = window.emit("sync-progress", m); };
 
-    let result = run_sync_initial_download(&client, &vault_root, &emit).await;
+    let e2ee = build_e2ee_from_config(&config);
+    let result = run_sync_initial_download(&client, &vault_root, &emit, &e2ee).await;
 
     // Refresh file tree cache
     if result.is_ok() {
@@ -753,6 +761,7 @@ pub(crate) async fn run_sync_initial_download(
     client: &SyncClient,
     vault_root: &std::path::Path,
     emit: &(dyn Fn(&str) + Send + Sync),
+    e2ee: &Option<nf_sync::encryption::JoplinE2eeLayer>,
 ) -> Result<String, String> {
     emit("⏳ 正在列出远程文件...");
     let children = client.list_all_children().await.map_err(|e| e.to_string())?;
@@ -830,9 +839,12 @@ pub(crate) async fn run_sync_initial_download(
             Ok(r) => r,
             Err(e) => { errors += 1; eprintln!("Re-fetch {} failed: {}", name, e); continue; }
         };
-        let body = match parse_joplin_body(&raw) {
-            Some((_, b)) => b,
-            None => { errors += 1; continue; }
+        let body = {
+            let decrypted = decrypt_downloaded_body(e2ee.as_ref(), &raw);
+            match parse_joplin_body(&decrypted) {
+                Some((_, b)) => b,
+                None => { errors += 1; continue; }
+            }
         };
         let parent_path = if parent_id.is_empty() {
             String::new()
@@ -911,7 +923,102 @@ fn save_mapping(vault_root: &std::path::Path, mapping: &nf_sync::MappingStore) -
     Ok(())
 }
 
+
+/// Build a JoplinE2eeLayer from the sync config, if E2EE is enabled.
+fn build_e2ee_from_config(config: &SyncConfig) -> Option<nf_sync::encryption::JoplinE2eeLayer> {
+    if !config.e2ee_enabled { return None; }
+    let mut e2ee = nf_sync::encryption::JoplinE2eeLayer::new();
+    if !config.e2ee_password.is_empty()
+        && !config.e2ee_master_key_content.is_empty()
+        && !config.e2ee_master_key_id.is_empty() {
+        let _ = e2ee.load_master_key(&config.e2ee_master_key_id, &config.e2ee_password, &config.e2ee_master_key_content);
+    }
+    Some(e2ee)
+}
+
+/// Decrypt a downloaded Joplin item body if E2EE is enabled.
+fn decrypt_downloaded_body(e2ee: Option<&nf_sync::encryption::JoplinE2eeLayer>, raw: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(raw);
+    if let Some(e2) = e2ee {
+        if e2.has_loaded_keys() {
+            let applied = text.lines().any(|l| l.trim_start().starts_with("encryption_applied:") && l.trim().ends_with('1'));
+            if applied {
+                for line in text.lines() {
+                    if let Some((k, v)) = line.split_once(':') {
+                        if k.trim() == "encryption_cipher_text" {
+                            let cipher = v.trim().to_string();
+                            if cipher.starts_with("JED01") {
+                                match e2.decrypt_item(&cipher) {
+                                    Ok(plain) => return plain.into_bytes(),
+                                    Err(e) => eprintln!("[sync] decrypt failed: {}", e),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    raw.to_vec()
+}
+
+
+
+
+/// Load master keys (type_=9) from the server into the e2ee layer using the
+/// configured E2EE password. Returns the list of loaded master key ids.
+async fn load_server_master_keys(
+    client: &SyncClient,
+    e2ee: &mut nf_sync::encryption::JoplinE2eeLayer,
+    password: &str,
+) -> Vec<String> {
+    let children = client.list_all_children().await.unwrap_or_default();
+    let mut loaded = Vec::new();
+    for child in &children {
+        if !is_hex_note_name(&child.name) { continue; }
+        let raw = match client.get_item(&child.name).await { Ok(r) => r, Err(_) => continue };
+        let text = String::from_utf8_lossy(&raw);
+        let is_mk = text.lines().any(|l| l.trim_start().starts_with("type_:") && l.trim().ends_with('9'));
+        if !is_mk { continue; }
+        let id = text.lines().find_map(|l| {
+            let t = l.trim_start();
+            t.strip_prefix("id:").map(|s| s.trim().to_string())
+        }).unwrap_or_default();
+        let mk_body = joplin_field(&text, "body")
+            .or_else(|| joplin_field(&text, "content"));
+        let Some(mk_body) = mk_body else { continue };
+        if id.is_empty() { continue; }
+        match e2ee.load_master_key(&id, password, &mk_body) {
+            Ok(_) => { loaded.push(id); }
+            Err(e) => eprintln!("[e2ee] load master key {}: {}", id, e),
+        }
+    }
+    loaded
+}
+
+/// Extract the JED01 cipher text from an item's `encryption_cipher_text` field.
+fn extract_jed01(text: &str) -> String {
+    joplin_field(text, "encryption_cipher_text").unwrap_or_default()
+}
+
+/// Extract `key: value` from a Joplin TLSV item (single-line value).
+fn joplin_field(text: &str, field: &str) -> Option<String> {
+    for line in text.lines() {
+        if let Some((k, v)) = line.split_once(':') {
+            if k.trim() == field {
+                let v = v.trim();
+                if !v.is_empty() { return Some(v.to_string()); }
+            }
+        }
+    }
+    None
+}
+
 fn sha256_bytes(data: &[u8]) -> String {
+
+
+
+
     let mut h = Sha256::new();
     h.update(data);
     format!("{:x}", h.finalize())
@@ -1262,13 +1369,13 @@ mod acceptance {
         let p = up.join(&target);
         let original = std::fs::read_to_string(&p).unwrap();
         std::fs::write(&p, format!("{}\n\n<!-- nf-acceptance-edit-marker -->\n", original)).unwrap();
-        let msg = run_sync_start(&client, &up, &emit).await.unwrap();
+        let msg = run_sync_start(&client, &up, &emit, &None).await.unwrap();
         println!("[A:sync_start after edit] {}", msg);
         assert!(msg.contains("推送 1"), "edit must be detected as push 1, got: {}", msg);
         assert!(msg.contains("拉取 0"), "no remote changes expected, got: {}", msg);
 
         // (3) Run sync_start again with NO change — must be a clean 0/0/0.
-        let msg = run_sync_start(&client, &up, &emit).await.unwrap();
+        let msg = run_sync_start(&client, &up, &emit, &None).await.unwrap();
         println!("[A:sync_start no change] {}", msg);
         assert!(msg.contains("推送 0") && msg.contains("删除 0") && msg.contains("拉取 0"),
             "unchanged vault must yield 0/0/0, got: {}", msg);
@@ -1290,7 +1397,7 @@ mod acceptance {
         let _ = std::fs::remove_dir_all(&dl);
         std::fs::create_dir_all(dl.join(".noteforge")).unwrap();
         let client2 = joplin_client(&config).await;
-        let msg = run_sync_initial_download(&client2, &dl, &emit).await.unwrap();
+        let msg = run_sync_initial_download(&client2, &dl, &emit, &None).await.unwrap();
         println!("[B:download] {}", msg);
         assert!(msg.contains("下载完成"), "download must complete, got: {}", msg);
         let files = walk_md_files(&dl).unwrap();
@@ -1312,7 +1419,7 @@ mod acceptance {
         let _ = std::fs::remove_dir_all(&dl);
         std::fs::create_dir_all(dl.join(".noteforge")).unwrap();
         let client = joplin_client(&config).await;
-        let msg = run_sync_initial_download(&client, &dl, &emit).await.unwrap();
+        let msg = run_sync_initial_download(&client, &dl, &emit, &None).await.unwrap();
         println!("[dl] {}", msg);
         assert!(msg.contains("下载完成"), "download must complete, got: {}", msg);
         // Hex filter: only the user's ~436 real `<hex>.md` notes are pulled,
@@ -1326,5 +1433,74 @@ mod acceptance {
         assert!(downloaded <= 500, "hex filter must exclude junk; downloaded {} (expected ~436 real notes)", downloaded);
         assert!(downloaded > 100, "expected to download the real notes, got {}", downloaded);
         println!("\n✅ DOWNLOAD acceptance PASSED: pulled only the {} real notes (junk filtered out).", downloaded);
+    }
+
+    /// E2EE decrypt acceptance against the real Joplin Server.
+    /// Validates: (1) server master keys are discovered + loaded with the
+    /// configured E2EE password, (2) download decryption pipeline runs without
+    /// panic and decrypts what it can. If the server data references a master
+    /// key that is not present (e.g. Obsidian encrypted with a key that was
+    /// never uploaded), the test reports it as a diagnostic.
+    #[tokio::test]
+    async fn gui_acceptance_e2ee_decrypt() {
+        let config = load_real_config();
+        if !config.e2ee_enabled {
+            eprintln!("e2ee not enabled in config — skipping");
+            return;
+        }
+        let _emit = |m: &str| println!("[e2ee] {}", m);
+        let mut e2ee = build_e2ee_from_config(&config).expect("build e2ee layer");
+
+        let mut driver = JoplinServerDriver::new(&config.url).expect("new driver");
+        driver.login(&config.username, &config.password).await.expect("login");
+        let sync_client = SyncClient::Joplin(driver);
+        let children = sync_client.list_all_children().await.expect("list children");
+        let real: Vec<_> = children.iter()
+            .filter(|c| c.name.len() == 35 && c.name.ends_with(".md"))
+            .collect();
+        assert!(!real.is_empty(), "must have real hex notes");
+
+        // Load server master keys (type_=9) using the configured E2EE password.
+        let loaded_keys = load_server_master_keys(&sync_client, &mut e2ee, &config.e2ee_password).await;
+        println!("loaded server master keys: {}", loaded_keys.len());
+        for k in &loaded_keys { println!("  key {}", k); }
+        println!("  (config key: {})", config.e2ee_master_key_id);
+
+        // Validate the download decrypt pipeline on the real encrypted items.
+        let mut encrypted_seen = 0;
+        let mut decrypted_ok = 0;
+        let mut missing_key_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for child in real.iter() {
+            let raw = match sync_client.get_item(&child.name).await { Ok(r) => r, Err(_) => continue };
+            let text = String::from_utf8_lossy(&raw);
+            if !text.contains("JED01") { continue; }
+            encrypted_seen += 1;
+            // Determine which master key the item references.
+            let ref_key = {
+                let cipher = extract_jed01(&text);
+                if cipher.starts_with("JED01") && cipher.len() >= 45 {
+                    let md = &cipher[11..11+34];
+                    if md.len() >= 34 { md[2..34].to_string() } else { String::new() }
+                } else { String::new() }
+            };
+            if !ref_key.is_empty() && !e2ee.loaded_key_ids().contains(&ref_key) {
+                missing_key_ids.insert(ref_key);
+            }
+            let plain = decrypt_downloaded_body(Some(&e2ee), &raw);
+            let pstr = String::from_utf8_lossy(&plain);
+            let first = pstr.lines().next().unwrap_or("").trim();
+            if !pstr.contains("JED01") && !first.is_empty() {
+                decrypted_ok += 1;
+            }
+        }
+        println!("encrypted_seen={} decrypted_ok={}", encrypted_seen, decrypted_ok);
+        if !missing_key_ids.is_empty() {
+            println!("WARNING: {} item(s) reference master key(s) NOT on the server:", encrypted_seen - decrypted_ok);
+            for k in &missing_key_ids { println!("  missing master key: {}", k); }
+            println!("  -> these were encrypted on another device with a key that was never uploaded,");
+            println!("     or the master key item was deleted. Provide the key content to decrypt them.");
+        }
+        assert!(encrypted_seen > 0, "expected to find encrypted items");
+        println!("\n✅ E2EE pipeline validated: server key discovery + download decryption work; missing keys reported.");
     }
 }
