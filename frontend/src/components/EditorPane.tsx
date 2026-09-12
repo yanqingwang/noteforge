@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, useCallback, memo } from "react";
-import hljs from "highlight.js";
-import "highlight.js/styles/github.css";
-import WikilinkAutocomplete from "./WikilinkAutocomplete";
-import { pluginManager } from "../plugins/PluginManager";
+import { useEffect, useRef, useState, memo } from "react";
+import { EditorView, keymap, lineNumbers as cmLineNumbers, highlightActiveLine, drawSelection, dropCursor } from "@codemirror/view";
+import { EditorState, Compartment } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
+import { markdown } from "@codemirror/lang-markdown";
+import { GFM } from "@lezer/markdown";
+import { nfExtensions } from "../editor/extensions";
 
 type ViewMode = "source" | "preview" | "split" | "live";
 
@@ -15,261 +18,167 @@ interface EditorPaneProps {
   mode?: ViewMode;
   onSetMode?: (m: ViewMode) => void;
   onContentChange?: (content: string) => void;
+  /** 自动保存 / 状态提示回调（可选） */
+  onStatus?: (msg: string) => void;
 }
 
 export type { ViewMode };
 
-function mdToHtml(md: string): string {
-  let html = md
-    // ![[image.png]] embedded image via wikilink
-    .replace(/!\[\[([^\]]+)\]\]/g, (_, target) => {
-      const t = target.split('|')[0];
-      if (/\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i.test(t))
-        return `<img src="note://${t}" alt="${t}" style="max-width:100%" />`;
-      return `<a href="#" data-note="${t}">${t}</a>`;
-    })
-    // [[target|display]] wikilink
-    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, display) =>
-      `<a href="#" data-note="${target}" class="wikilink">${display || target}</a>`)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%"/>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/~~(.+?)~~/g, '<del>$1</del>').replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/^\- (.+)$/gm, '<li>$1</li>').replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/\n\n/g, '</p><p>');
-  return '<p>' + html + '</p>';
-}
+const AUTO_SAVE_MS = 2000;
 
-/** Highlight wikilinks & formatting in source for overlay display */
-function highlightSource(text: string): string {
-  return text
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/(\[\[[^\]]+\]\])/g, '<span class="hl-wikilink">$1</span>')
-    .replace(/(#{1,6}\s.+)/g, '<span class="hl-heading">$1</span>')
-    .replace(/(\*\*.+?\*\*)/g, '<span class="hl-bold">$1</span>')
-    .replace(/(\*.+?\*)/g, '<span class="hl-italic">$1</span>')
-    .replace(/(`[^`]+`)/g, '<span class="hl-code">$1</span>')
-    .replace(/(~~.+?~~)/g, '<span class="hl-del">$1</span>')
-    .replace(/(\[.+\]\([^)]+\))/g, '<span class="hl-link">$1</span>');
-}
-
-const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode: externalSetMode, onContentChange }: EditorPaneProps) {
-  const [internalMode, internalSetMode] = useState<ViewMode>(() => {
+const EditorPane = memo(function EditorPane({
+  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus,
+}: EditorPaneProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const liveComp = useRef(new Compartment());
+  // 外部未传 mode 时的兜底内部状态
+  const [internalMode, setInternalMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
   });
   const mode = externalMode ?? internalMode;
-  const setMode = externalSetMode ?? internalSetMode;
-  // Persist view mode to localStorage when using internal state
-  useEffect(() => { if (!externalMode) localStorage.setItem('nf-view-mode', mode); }, [mode, externalMode]);
-  const [editContent, setEditContent] = useState(content);
-  const [autocomplete, setAutocomplete] = useState<{ rect: DOMRect; filter: string } | null>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const liveRef = useRef<HTMLDivElement>(null);
-  const [liveHtml, setLiveHtml] = useState(previewHtml);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const syncing = useRef(false);
+  const setMode = onSetMode ?? setInternalMode;
 
-  useEffect(() => { setEditContent(content); setLiveHtml(previewHtml); }, [content, previewHtml]);
+  // 最新 props 的 ref 镜像（避免重建 EditorView）
+  const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files });
+  cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files };
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
-  useEffect(() => {
-    if (editContent === content) return;
-    if (mode === "live") {
-      setLiveHtml(mdToHtml(editContent));
-    } else {
-      const t = setTimeout(() => setLiveHtml(mdToHtml(editContent)), 150);
-      return () => clearTimeout(t);
+  const dirtyRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const doSave = async () => {
+    const view = viewRef.current;
+    const file = cbRef.current.activeFile;
+    if (!view || !file || !dirtyRef.current) return;
+    try {
+      await import("@tauri-apps/api/core").then(({ invoke }) =>
+        invoke("write_note", { notePath: file, content: view.state.doc.toString() }));
+      dirtyRef.current = false;
+      cbRef.current.onStatus?.(`✅ 已保存: ${file}`);
+    } catch (e) {
+      cbRef.current.onStatus?.(`❌ 保存失败: ${e}`);
     }
-  }, [editContent, content, mode]);
+  };
 
-  // Sync textarea ↔ overlay ↔ preview scroll
-  const handleScroll = useCallback(() => {
-    if (syncing.current) return;
-    const ta = textareaRef.current;
-    if (!ta) return;
-    if (lineNumRef.current) lineNumRef.current.scrollTop = ta.scrollTop;
-    if (overlayRef.current) overlayRef.current.scrollTop = ta.scrollTop;
-    if (mode !== "split") return;
-    const pr = previewRef.current;
-    if (!pr) return;
-    const pct = ta.scrollHeight > ta.clientHeight ? ta.scrollTop / (ta.scrollHeight - ta.clientHeight) : 0;
-    syncing.current = true;
-    pr.scrollTop = pct * (pr.scrollHeight - pr.clientHeight);
-    syncing.current = false;
-  }, [mode]);
+  const scheduleAutoSave = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(doSave, AUTO_SAVE_MS);
+  };
 
-  // Sync preview → source scroll (split mode)
-  const handlePreviewScroll = useCallback(() => {
-    if (syncing.current || mode !== "split") return;
-    const pr = previewRef.current;
-    const ta = textareaRef.current;
-    if (!pr || !ta) return;
-    const pct = pr.scrollHeight > pr.clientHeight ? pr.scrollTop / (pr.scrollHeight - pr.clientHeight) : 0;
-    syncing.current = true;
-    ta.scrollTop = pct * (ta.scrollHeight - ta.clientHeight);
-    syncing.current = false;
-  }, [mode]);
-
-  // Cursor preservation for live mode
-  const saveCursor = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || !liveRef.current) return null;
-    const range = sel.getRangeAt(0);
-    const pre = document.createRange();
-    pre.selectNodeContents(liveRef.current);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString().length;
+  // ── 创建 EditorView（一次） ──
+  useEffect(() => {
+    if (!hostRef.current) return;
+    const isLive = () => modeRef.current === "live";
+    const view = new EditorView({
+      parent: hostRef.current,
+      state: EditorState.create({
+        doc: cbRef.current.content || "",
+        extensions: [
+          markdown({ extensions: [GFM] }),
+          history(),
+          drawSelection(),
+          dropCursor(),
+          EditorView.lineWrapping,
+          highlightActiveLine(),
+          highlightSelectionMatches(),
+          search(),
+          cmLineNumbers(),
+          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+          // 可重组部分：live 装饰（含主题/快捷键/补全）
+          liveComp.current.of(nfExtensions({
+            live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
+          })),
+          EditorView.updateListener.of((u) => {
+            if (u.docChanged) {
+              dirtyRef.current = true;
+              cbRef.current.onContentChange?.(u.state.doc.toString());
+              scheduleAutoSave();
+            }
+          }),
+          keymap.of([
+            { key: "Mod-s", preventDefault: true, run: () => { doSave(); return true; } },
+          ]),
+        ],
+      }),
+    });
+    viewRef.current = view;
+    return () => { view.destroy(); viewRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const restoreCursor = useCallback((pos: number | null) => {
-    if (pos === null || !liveRef.current) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-    const walker = document.createTreeWalker(liveRef.current, NodeFilter.SHOW_TEXT);
-    let current = 0;
-    let node;
-    while ((node = walker.nextNode())) {
-      const len = node.textContent?.length || 0;
-      if (current + len >= pos) {
-        const offset = pos - current;
-        const range = document.createRange();
-        range.setStart(node, offset);
-        range.setEnd(node, offset);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        return;
-      }
-      current += len;
-    }
-  }, []);
-
-  // Handle input in live mode
-  const handleLiveInput = useCallback(() => {
-    if (!liveRef.current) return;
-    const html = liveRef.current.innerHTML;
-    const md = html
-      .replace(/<h1[^>]*>/g, '# ').replace(/<\/h1>/g, '\n\n')
-      .replace(/<h2[^>]*>/g, '## ').replace(/<\/h2>/g, '\n\n').replace(/<h3[^>]*>/g, '### ').replace(/<\/h3>/g, '\n\n')
-      .replace(/<strong>/g, '**').replace(/<\/strong>/g, '**')
-      .replace(/<em>/g, '*').replace(/<\/em>/g, '*')
-      .replace(/<code>/g, '\`').replace(/<\/code>/g, '\`')
-      .replace(/<li[^>]*>/g, '- ').replace(/<\/li>/g, '\n')
-      .replace(/<blockquote>/g, '> ').replace(/<\/blockquote>/g, '\n')
-      .replace(/<p>/g, '').replace(/<\/p>/g, '\n\n')
-      .replace(/<br\s*\/?>/g, '\n').replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/<[^>]*>/g, '');
-    setEditContent(md);
-    onContentChange?.(md);
-  }, [onContentChange]);
-
-  // Re-render live mode from markdown, preserving cursor
+  // ── 模式切换：reconfigure live 装饰与行号 ──
   useEffect(() => {
-    if (mode !== "live" || !liveRef.current) return;
-    if (editContent === content && previewHtml) {
-      liveRef.current.innerHTML = previewHtml;
-      return;
-    }
-    const pos = saveCursor();
-    liveRef.current.innerHTML = liveHtml;
-    restoreCursor(pos);
-  }, [liveHtml, mode, previewHtml, content, editContent]);
+    const view = viewRef.current;
+    if (!view) return;
+    const isLive = mode === "live";
+    view.dispatch({
+      effects: liveComp.current.reconfigure(nfExtensions({
+        live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
+      })),
+    });
+  }, [mode]);
 
-  // Wikilink click → navigate (document-level delegation, no re-attach needed)
-  const navRef = useRef(onNavigate);
-  navRef.current = onNavigate;
+  // ── 外部内容变化（文件切换 / 缓存加载）→ 全文替换 ──
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    if (activeFile && view.state.doc.toString() !== content) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+      dirtyRef.current = false;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    }
+  }, [content, activeFile]);
+
+  // ── wikilink / data-note 点击跳转（文档级委托，live 装饰与预览共用） ──
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      const t = (e.target as HTMLElement).closest('[data-note]') as HTMLElement;
+      const t = (e.target as HTMLElement).closest('[data-note]') as HTMLElement | null;
       if (t) {
         e.preventDefault();
         const path = t.getAttribute('data-note');
-        if (path && navRef.current) navRef.current(path);
+        if (path) cbRef.current.onNavigate?.(path);
       }
     };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, []);
 
-  // Syntax highlighting in preview
+  // ── split 模式滚动同步（编辑器 → 预览） ──
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const scroller = view.scrollDOM;
+    let syncing = false;
+    const onScroll = () => {
+      if (syncing || modeRef.current !== "split") return;
+      const pr = previewRef.current;
+      if (!pr) return;
+      const pct = scroller.scrollHeight > scroller.clientHeight
+        ? scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight) : 0;
+      syncing = true;
+      pr.scrollTop = pct * (pr.scrollHeight - pr.clientHeight);
+      syncing = false;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ── preview/split 预览面板的代码高亮 ──
   useEffect(() => {
     if (!previewRef.current) return;
-    // Style data-note links as wikilinks (from Rust renderer)
     previewRef.current.querySelectorAll('a[data-note]').forEach(a => a.classList.add('wikilink'));
-    previewRef.current.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b as HTMLElement));
   }, [previewHtml, mode]);
 
-  // Plugin markdown post-processors (html-effect etc.)
-  useEffect(() => {
-    const el = mode === "preview" || mode === "split" ? previewRef.current : null;
-    if (!el) return;
-    for (const [lang, processor] of pluginManager.getPostProcessors()) {
-      el.querySelectorAll(`pre > code.language-${CSS.escape(lang)}`).forEach(code => {
-        const pre = code.parentElement;
-        if (!pre || pre.dataset.heProcessed) return;
-        pre.dataset.heProcessed = "true";
-        const source = code.textContent || "";
-        const container = document.createElement("div");
-        container.className = "he-container";
-        pre.parentNode?.replaceChild(container, pre);
-        processor(source, container);
-      });
-    }
-  }, [previewHtml, mode]);
+  // 组件卸载前保存
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
-  // Source input handler + [[ autocomplete
-  const handleSourceChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setEditContent(val);
-    onContentChange?.(val);
-    const pos = e.target.selectionStart;
-    const before = val.slice(0, pos);
-    const lastOpen = before.lastIndexOf('[[');
-    const lastClose = before.lastIndexOf(']]');
-    if (lastOpen > lastClose && lastOpen >= 0) {
-      const filter = before.slice(lastOpen + 2);
-      const ta = e.target;
-      const rect = ta.getBoundingClientRect();
-      const lines = before.slice(0, pos).split('\n');
-      const top = rect.top + (lines.length - 1) * 18 + 38;
-      setAutocomplete({ rect: new DOMRect(rect.left + 16, top, 0, 0), filter });
-    } else {
-      setAutocomplete(null);
-    }
-  }, [onContentChange]);
-
-  const handleAutocompleteSelect = useCallback((path: string) => {
-    if (!textareaRef.current) return;
-    const ta = textareaRef.current;
-    const pos = ta.selectionStart;
-    const before = ta.value.slice(0, pos);
-    const lastOpen = before.lastIndexOf('[[');
-    if (lastOpen >= 0) {
-      const newContent = ta.value.slice(0, lastOpen) + `[[${path}]]` + ta.value.slice(pos);
-      setEditContent(newContent);
-      setAutocomplete(null);
-      setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = lastOpen + path.length + 4; }, 0);
-    }
-  }, [onContentChange]);
-
-  // Live mode: Typora-like WYSIWYG via contentEditable with cursor preservation
   if (!activeFile) {
     return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}><p>选择笔记查看内容</p></div>;
   }
-
-  const currentHtml = editContent !== content ? liveHtml : previewHtml;
-  const lines = editContent.split('\n');
-  const textareaStyle: React.CSSProperties = {
-    flex: 1, padding: "12px 16px", border: "none", outline: "none", resize: "none",
-    fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace',
-    fontSize: 14, lineHeight: 1.6, color: "transparent", caretColor: "#222",
-    background: "transparent", tabSize: 4, whiteSpace: "pre", overflowWrap: "normal",
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 2,
-  };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -289,29 +198,9 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
 
       {/* Editor area */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-        {/* Source mode - line numbers + overlay + textarea */}
-        {(mode === "source" || mode === "split") && (
-          <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#fefefe" }}>
-            {/* Line numbers */}
-            <div ref={lineNumRef} style={{ padding: "12px 8px", textAlign: "right", color: "#999", fontSize: 12,
-              fontFamily: '"SF Mono", Consolas, monospace', lineHeight: 1.6, overflow: "hidden",
-              userSelect: "none", minWidth: 42, borderRight: "1px solid #eee", background: "#fafafa" }}>
-              {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-            </div>
-            {/* Wrapper: overlay behind textarea */}
-            <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              {/* Highlight overlay */}
-              <div ref={overlayRef} style={{ padding: "12px 16px", whiteSpace: "pre", overflowWrap: "normal",
-                fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace',
-                fontSize: 14, lineHeight: 1.6, overflow: "hidden", position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-                zIndex: 1, pointerEvents: "none" }}
-                dangerouslySetInnerHTML={{ __html: highlightSource(editContent) + '\n' }} />
-              {/* Transparent textarea */}
-              <textarea ref={textareaRef} value={editContent} onChange={handleSourceChange}
-                onScroll={handleScroll} onKeyUp={handleScroll}
-                style={textareaStyle} spellCheck={false} />
-            </div>
-          </div>
+        {(mode === "source" || mode === "split" || mode === "live") && (
+          <div ref={hostRef} style={{ flex: 1, overflow: "hidden", minWidth: 0 }}
+            className={mode === "live" ? "nf-live" : "nf-source"} />
         )}
 
         {/* Preview pane */}
@@ -320,37 +209,18 @@ const EditorPane = memo(function EditorPane({ content, previewHtml, activeFile, 
             width: mode === "split" ? "50%" : "100%",
             borderLeft: mode === "split" ? "1px solid #ddd" : "none",
             overflowY: "auto", padding: 16
-          }} className="markdown-body" dangerouslySetInnerHTML={{ __html: currentHtml }}
-            onScroll={handlePreviewScroll} />
-        )}
-
-        {/* Live mode: Typora-style WYSIWYG */}
-        {mode === "live" && (
-          <div ref={liveRef} contentEditable suppressContentEditableWarning onInput={handleLiveInput}
-            style={{ flex: 1, padding: 16, overflowY: "auto", outline: "none",
-              fontFamily: '"SF Mono", "Fira Code", Consolas, monospace', fontSize: 14, lineHeight: 1.8 }}
-            className="markdown-body" />
+          }} className="markdown-body"
+            dangerouslySetInnerHTML={{ __html: previewHtml }} />
         )}
       </div>
 
-      {/* Wikilink autocomplete */}
-      {autocomplete && files.length > 0 && (
-        <WikilinkAutocomplete files={files} filter={autocomplete.filter}
-          anchorRect={autocomplete.rect} onSelect={handleAutocompleteSelect} onClose={() => setAutocomplete(null)} />
-      )}
-
       <style>{`
-        .hl-wikilink { color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 0 2px; }
-        .hl-heading { color: #0550ae; font-weight: 600; }
-        .hl-bold { color: #222; font-weight: 600; }
-        .hl-italic { color: #444; font-style: italic; }
-        .hl-code { color: #cf222e; background: #f6f8fa; border-radius: 3px; padding: 0 2px; font-size: 0.9em; }
-        .hl-del { color: #999; text-decoration: line-through; }
-        .hl-link { color: #0969da; }
-        .markdown-body a.wikilink { color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; }
-        .markdown-body a.wikilink:hover { background: #b6e0ff; text-decoration: underline; }
-        .markdown-body a[data-note] { color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; cursor: pointer; }
+        .markdown-body a[data-note], .markdown-body a.wikilink {
+          color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; cursor: pointer;
+        }
         .markdown-body a[data-note]:hover { background: #b6e0ff; text-decoration: underline; }
+        .cm-editor { height: 100%; }
+        .cm-editor.cm-focused { outline: none; }
       `}</style>
     </div>
   );
