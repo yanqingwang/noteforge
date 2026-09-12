@@ -83,8 +83,9 @@ pub fn encrypt_binary(key: &VaultKey, plaintext: &[u8]) -> Result<Vec<u8>, Crypt
     Ok(result)
 }
 
-/// Decrypt binary format produced by `encrypt_binary()`.
-pub fn decrypt_binary(key: &VaultKey, data: &[u8]) -> Result<String, CryptoError> {
+/// Decrypt binary format produced by `encrypt_binary()` to raw bytes
+/// (works for attachments as well as UTF-8 text).
+pub fn decrypt_binary_bytes(key: &VaultKey, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
     if data.len() < 4 + NONCE_LEN + TAG_LEN {
         return Err(CryptoError::DataTooShort);
     }
@@ -100,10 +101,14 @@ pub fn decrypt_binary(key: &VaultKey, data: &[u8]) -> Result<String, CryptoError
     let nonce = make_nonce(nonce_bytes);
 
     let cipher = key.cipher();
-    let plaintext = cipher
+    cipher
         .decrypt(&nonce, ciphertext)
-        .map_err(|e| CryptoError::DecryptionFailed(e.to_string()))?;
+        .map_err(|e| CryptoError::DecryptionFailed(e.to_string()))
+}
 
+/// Decrypt binary format produced by `encrypt_binary()` (UTF-8 text).
+pub fn decrypt_binary(key: &VaultKey, data: &[u8]) -> Result<String, CryptoError> {
+    let plaintext = decrypt_binary_bytes(key, data)?;
     String::from_utf8(plaintext)
         .map_err(|e| CryptoError::DecryptionFailed(format!("invalid UTF-8: {}", e)))
 }

@@ -14,17 +14,20 @@ pub enum SyncError {
     #[error("URL parse error: {0}")]
     Url(#[from] url::ParseError),
 
-    #[error("Auth failed: {0}")]
+    #[error("认证失败: {0}")]
     AuthFailed(String),
 
-    #[error("Delta cursor expired, full resync required")]
-    ResyncRequired,
-
-    #[error("Not found: {0}")]
+    #[error("未找到: {0}")]
     NotFound(String),
 
-    #[error("Conflict: {0}")]
-    Conflict(String),
+    #[error("解密失败: {0}")]
+    DecryptFailed(String),
+
+    #[error("配置错误: {0}")]
+    Config(String),
+
+    #[error("远端已存在其他数据: {0}")]
+    RemoteNotEmpty(String),
 
     #[error("{0}")]
     Other(String),
@@ -34,8 +37,12 @@ impl From<String> for SyncError {
     fn from(s: String) -> Self { SyncError::Other(s) }
 }
 
+impl From<&str> for SyncError {
+    fn from(s: &str) -> Self { SyncError::Other(s.to_string()) }
+}
+
 impl From<nf_crypto::CryptoError> for SyncError {
     fn from(e: nf_crypto::CryptoError) -> Self {
-        SyncError::Other(format!("crypto: {}", e))
+        SyncError::DecryptFailed(e.to_string())
     }
 }
