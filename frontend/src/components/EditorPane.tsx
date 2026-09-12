@@ -176,15 +176,16 @@ const EditorPane = memo(function EditorPane({
   // 组件卸载前保存
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
-  if (!activeFile) {
-    return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}><p>选择笔记查看内容</p></div>;
-  }
+  // 预览模式隐藏编辑器后恢复时，让 CM6 重新测量尺寸
+  useEffect(() => {
+    if (mode !== "preview") viewRef.current?.requestMeasure();
+  }, [mode]);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       {/* Tab bar */}
       <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", background: "#f8f8f8", borderBottom: "1px solid #eee", gap: 4 }}>
-        <span style={{ flex: 1, fontSize: 13, color: "#666" }}>📄 {activeFile}</span>
+        <span style={{ flex: 1, fontSize: 13, color: "#666" }}>📄 {activeFile || "未打开笔记"}</span>
         <div style={{ display: "flex", gap: 2, background: "#e8e8e8", borderRadius: 4, padding: 2 }}>
           {(["source", "split", "live", "preview"] as ViewMode[]).map(m => (
             <button key={m} onClick={() => setMode(m)}
@@ -198,9 +199,16 @@ const EditorPane = memo(function EditorPane({
 
       {/* Editor area */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-        {(mode === "source" || mode === "split" || mode === "live") && (
-          <div ref={hostRef} style={{ flex: 1, overflow: "hidden", minWidth: 0 }}
-            className={mode === "live" ? "nf-live" : "nf-source"} />
+        {/* 宿主 div 常驻：mode 切换只控制显隐，避免卸载导致 CM6 DOM 脱离文档 */}
+        <div ref={hostRef} style={{
+          flex: 1, minWidth: 0, overflow: "hidden",
+          display: mode === "preview" ? "none" : "block",
+        }} />
+        {!activeFile && mode !== "preview" && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center",
+            justifyContent: "center", color: "#999", pointerEvents: "none", background: "#fefefe" }}>
+            <p>选择笔记查看内容</p>
+          </div>
         )}
 
         {/* Preview pane */}
