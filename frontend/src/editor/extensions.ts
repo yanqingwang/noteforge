@@ -13,10 +13,11 @@ import { livePreview } from "./livePreview";
 
 const LIST_RE = /^(\s*)([-*+]\s\[( |x|X)\]\s|[-*+]\s|(\d+)([.)])\s|>\s?)/;
 
-/** 回车：续行列表/引用/任务；空项回车取消列表。 */
-function listContinue(view: EditorView): boolean {
+/** 回车：续行列表/引用/任务；空项回车取消列表。（导出供测试） */
+export function listContinue(view: EditorView): boolean {
   const { state } = view;
   const changes: { from: number; to: number; insert: string }[] = [];
+  const cursors: number[] = [];
   let matched = false;
   for (const range of state.selection.ranges) {
     if (!range.empty) continue;
@@ -29,6 +30,7 @@ function listContinue(view: EditorView): boolean {
     // 空项回车 → 清掉列表标记
     if (rest.trim() === "") {
       changes.push({ from: line.from, to: line.to, insert: m[1] });
+      cursors.push(line.from + m[1].length);
       continue;
     }
     // 任务列表续行为 `- [ ] `；有序列表数字 +1
@@ -37,10 +39,17 @@ function listContinue(view: EditorView): boolean {
     if (taskMatch) nextMarker = `${taskMatch[1]}[ ] `;
     const olMatch = marker.match(/^(\d+)([.)])\s$/);
     if (olMatch) nextMarker = `${parseInt(olMatch[1]) + 1}${olMatch[2]} `;
-    changes.push({ from: range.head, to: range.head, insert: "\n" + m[1] + nextMarker });
+    const insert = "\n" + m[1] + nextMarker;
+    changes.push({ from: range.head, to: range.head, insert });
+    // 光标置于新标记末尾
+    cursors.push(range.head + insert.length);
   }
   if (!matched) return false;
-  view.dispatch({ changes });
+  view.dispatch({
+    changes,
+    selection: EditorSelection.create(cursors.map(c => EditorSelection.cursor(c))),
+    scrollIntoView: true,
+  });
   return true;
 }
 
@@ -56,15 +65,15 @@ function toggleWrap(view: EditorView, mark: string, placeholder = "文本"): boo
     const text = state.sliceDoc(range.from, range.to);
     const before = state.sliceDoc(Math.max(0, range.from - m), range.from);
     const after = state.sliceDoc(range.to, Math.min(state.doc.length, range.to + m));
-    if (text.startsWith(mark) && text.endsWith(mark) && text.length >= m * 2) {
-      // 已包裹 → 取消
-      changes.push({ from: range.from, to: range.to, insert: text.slice(m, -m) });
-      cursors.push(range.from + text.length - m * 2);
-    } else if (before === mark && after === mark && range.empty) {
-      // 光标在标记内 → 取消
+    if (before === mark && after === mark) {
+      // 选区/光标在成对标记内 → 取消包裹
       changes.push({ from: range.from - m, to: range.from, insert: "" });
       changes.push({ from: range.to, to: range.to + m, insert: "" });
-      cursors.push(range.from - m);
+      cursors.push(range.from - m + text.length);
+    } else if (text.startsWith(mark) && text.endsWith(mark) && text.length >= m * 2) {
+      // 选区本身含标记 → 剥掉
+      changes.push({ from: range.from, to: range.to, insert: text.slice(m, -m) });
+      cursors.push(range.from + text.length - m * 2);
     } else if (range.empty) {
       changes.push({ from: range.from, to: range.to, insert: `${mark}${placeholder}${mark}` });
       cursors.push(range.from + m);
@@ -197,17 +206,24 @@ function makeWikilinkSource(getFiles: () => string[]) {
 
 // ── 主题 ────────────────────────────────────────────────────────────
 
-export const nfTheme = EditorView.theme({
-  "&": { fontSize: "14px", backgroundColor: "#fefefe" },
+const lpThemeStyles = (dark: boolean) => ({
+  "&": {
+    fontSize: "14px",
+    backgroundColor: dark ? "#1e1e1e" : "#fefefe",
+    color: dark ? "#d4d4d4" : "#24292f",
+  },
   ".cm-scroller": {
     fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace',
     lineHeight: "1.7",
     padding: "12px 16px",
   },
-  ".cm-content": { caretColor: "#222" },
-  ".cm-gutters": { backgroundColor: "#fafafa", color: "#bbb", border: "none" },
-  ".cm-activeLine": { backgroundColor: "rgba(0,0,0,0.03)" },
-  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "#666" },
+  ".cm-content": { caretColor: dark ? "#e6e6e6" : "#222" },
+  ".cm-gutters": {
+    backgroundColor: dark ? "#252526" : "#fafafa",
+    color: dark ? "#5a5a5a" : "#bbb", border: "none",
+  },
+  ".cm-activeLine": { backgroundColor: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent", color: dark ? "#cfcfcf" : "#666" },
   // Live preview 视觉
   ".lp-heading": { fontWeight: 600 },
   ".lp-h1": { fontSize: "1.9em", lineHeight: "1.4" },
@@ -215,31 +231,44 @@ export const nfTheme = EditorView.theme({
   ".lp-h3": { fontSize: "1.35em" },
   ".lp-h4": { fontSize: "1.2em" },
   ".lp-h5": { fontSize: "1.1em" },
-  ".lp-h6": { fontSize: "1em", color: "#666" },
+  ".lp-h6": { fontSize: "1em", color: dark ? "#9a9a9a" : "#666" },
   ".lp-bold": { fontWeight: 700 },
   ".lp-italic": { fontStyle: "italic" },
-  ".lp-del": { textDecoration: "line-through", color: "#999" },
+  ".lp-del": { textDecoration: "line-through", color: dark ? "#808080" : "#999" },
   ".lp-inline-code": {
-    background: "#f0f1f3", borderRadius: "4px",
-    padding: "1px 4px", color: "#cf222e", fontSize: "0.92em",
+    background: dark ? "#2d2d30" : "#f0f1f3", borderRadius: "4px",
+    padding: "1px 4px", color: dark ? "#f0a5a5" : "#cf222e", fontSize: "0.92em",
   },
-  ".lp-mark": { color: "#b3b3b3" },
-  ".lp-quote": { borderLeft: "3px solid #d0d7de", paddingLeft: "10px", color: "#57606a" },
-  ".lp-codeline": { background: "#f6f8fa" },
+  ".lp-mark": { color: dark ? "#5a5a5a" : "#b3b3b3" },
+  ".lp-quote": {
+    borderLeft: dark ? "3px solid #3c3c3c" : "3px solid #d0d7de",
+    paddingLeft: "10px", color: dark ? "#a0a0a0" : "#57606a",
+  },
+  ".lp-codeline": { background: dark ? "#252526" : "#f6f8fa" },
   ".lp-codeblock": {
-    background: "#f6f8fa", borderRadius: "6px", padding: "10px 12px",
-    margin: "4px 0", fontSize: "0.92em", overflowX: "auto", display: "block",
+    background: dark ? "#252526" : "#f6f8fa", borderRadius: "6px",
+    margin: "0", overflowX: "auto", display: "block",
   },
   ".lp-tableline": { fontFamily: '"SF Mono", Consolas, monospace', fontSize: "0.95em" },
-  ".lp-link": { color: "#0969da", textDecoration: "underline" },
+  ".lp-link": { color: dark ? "#6cb2ff" : "#0969da", textDecoration: "underline" },
   ".lp-wikilink": {
-    color: "#0969da", background: "#ddf4ff", borderRadius: "3px",
-    padding: "1px 4px", cursor: "pointer",
+    color: dark ? "#6cb2ff" : "#0969da", background: dark ? "#1c3a5e" : "#ddf4ff",
+    borderRadius: "3px", padding: "1px 4px", cursor: "pointer",
   },
-  ".lp-wikilink:hover": { background: "#b6e0ff", textDecoration: "underline" },
+  ".lp-wikilink:hover": { background: dark ? "#26507f" : "#b6e0ff", textDecoration: "underline" },
   ".lp-embed-image": { display: "block", margin: "6px 0" },
   ".lp-task-checkbox": { marginRight: "4px", cursor: "pointer" },
+  ".cm-selectionBackground": { backgroundColor: dark ? "#264f78 !important" : "#b4d5fe !important" },
+  ".cm-searchMatch": { backgroundColor: dark ? "#5a3d10" : "#fff3c4" },
+  ".cm-searchMatch-selected": { backgroundColor: dark ? "#8a5a12" : "#ffd700" },
 });
+
+export const nfTheme = EditorView.theme(lpThemeStyles(false));
+export const nfThemeDark = EditorView.theme(lpThemeStyles(true));
+
+export function themeFor(name: "light" | "dark"): Extension {
+  return name === "dark" ? nfThemeDark : nfTheme;
+}
 
 // ── 汇总 ────────────────────────────────────────────────────────────
 
@@ -250,13 +279,15 @@ export interface EditorExtOptions {
   lineNumbers: boolean;
   /** wikilink 补全文件列表 */
   getFiles: () => string[];
+  /** 亮/暗主题 */
+  theme?: "light" | "dark";
   /** 追加 keymap（Ctrl+S 等，优先级更高） */
   extraKeys?: any[];
 }
 
 export function nfExtensions(opts: EditorExtOptions): Extension[] {
   return [
-    nfTheme,
+    themeFor(opts.theme ?? "light"),
     ...(opts.live ? [livePreview()] : []),
     autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
     closeBrackets(),

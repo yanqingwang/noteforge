@@ -40,6 +40,12 @@ pub struct NextcloudConfig {
     /// Whether content encryption is enabled (default true).
     #[serde(default = "default_true")]
     pub encrypted: bool,
+    /// Auto-sync interval in minutes (0 = disabled).
+    #[serde(default)]
+    pub auto_sync_minutes: u32,
+    /// Run a sync when the app starts with this vault.
+    #[serde(default)]
+    pub sync_on_startup: bool,
 }
 
 fn default_remote_root() -> String { "NoteForge".into() }
@@ -56,6 +62,8 @@ pub struct NextcloudConfigView {
     pub direction: String,
     pub encrypted: bool,
     pub has_password: bool,
+    pub auto_sync_minutes: u32,
+    pub sync_on_startup: bool,
 }
 
 impl NextcloudConfig {
@@ -68,6 +76,8 @@ impl NextcloudConfig {
             direction: self.direction.clone(),
             encrypted: self.encrypted,
             has_password: !self.sync_password.is_empty() && !self.app_password.is_empty(),
+            auto_sync_minutes: self.auto_sync_minutes,
+            sync_on_startup: self.sync_on_startup,
         }
     }
 }
@@ -312,6 +322,8 @@ mod tests {
             direction: "bidirectional".into(),
             sync_password: "pw".into(),
             encrypted: true,
+            auto_sync_minutes: 0,
+            sync_on_startup: false,
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let back: NextcloudConfig = serde_json::from_str(&json).unwrap();
@@ -342,6 +354,8 @@ mod tests {
             direction: "upload".into(),
             sync_password: "pw".into(),
             encrypted: true,
+            auto_sync_minutes: 0,
+            sync_on_startup: false,
         };
         let view = cfg.view();
         assert!(view.has_password);

@@ -47,7 +47,7 @@ class EmbedImageWidget extends WidgetType {
     wrap.className = "lp-embed-image";
     const img = document.createElement("img");
     img.style.maxWidth = "100%";
-    img.style.maxHeight = "320px";
+    img.style.maxHeight = "220px";
     img.style.borderRadius = "6px";
     img.alt = this.target;
     const cached = EmbedImageWidget.cache.get(this.target);

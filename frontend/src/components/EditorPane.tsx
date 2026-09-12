@@ -6,6 +6,9 @@ import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/sea
 import { markdown } from "@codemirror/lang-markdown";
 import { GFM } from "@lezer/markdown";
 import { nfExtensions } from "../editor/extensions";
+import { editorBridge, shouldSyncExternal } from "../editor/bridge";
+import type { OutlineItem } from "../editor/bridge";
+import { extractOutline } from "../editor/bridge";
 
 type ViewMode = "source" | "preview" | "split" | "live";
 
@@ -20,6 +23,10 @@ interface EditorPaneProps {
   onContentChange?: (content: string) => void;
   /** 自动保存 / 状态提示回调（可选） */
   onStatus?: (msg: string) => void;
+  /** 文档大纲变化回调（M6 大纲面板） */
+  onOutline?: (items: OutlineItem[]) => void;
+  /** 亮/暗主题 */
+  theme?: "light" | "dark";
 }
 
 export type { ViewMode };
@@ -27,7 +34,7 @@ export type { ViewMode };
 const AUTO_SAVE_MS = 2000;
 
 const EditorPane = memo(function EditorPane({
-  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus,
+  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light",
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -42,13 +49,16 @@ const EditorPane = memo(function EditorPane({
   const setMode = onSetMode ?? setInternalMode;
 
   // 最新 props 的 ref 镜像（避免重建 EditorView）
-  const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files });
-  cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files };
+  const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme });
+  cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme };
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
   const dirtyRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // 最近一次从编辑器发出的内容——用于识别 App 异步回写的 echo，
+  // 防止连续打字时旧值回来触发全文重置（丢字 + 光标跳）。
+  const lastEmittedRef = useRef<string | null>(null);
 
   const doSave = async () => {
     const view = viewRef.current;
@@ -67,6 +77,10 @@ const EditorPane = memo(function EditorPane({
   const scheduleAutoSave = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(doSave, AUTO_SAVE_MS);
+  };
+
+  const emitOutline = (docStr: string) => {
+    cbRef.current.onOutline?.(extractOutline(docStr));
   };
 
   // ── 创建 EditorView（一次） ──
@@ -91,11 +105,16 @@ const EditorPane = memo(function EditorPane({
           // 可重组部分：live 装饰（含主题/快捷键/补全）
           liveComp.current.of(nfExtensions({
             live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
+            theme: cbRef.current.theme,
           })),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) {
               dirtyRef.current = true;
-              cbRef.current.onContentChange?.(u.state.doc.toString());
+              const docStr = u.state.doc.toString();
+              lastEmittedRef.current = docStr;
+              editorBridge.latestDoc = docStr;
+              cbRef.current.onContentChange?.(docStr);
+              emitOutline(docStr);
               scheduleAutoSave();
             }
           }),
@@ -106,7 +125,25 @@ const EditorPane = memo(function EditorPane({
       }),
     });
     viewRef.current = view;
-    return () => { view.destroy(); viewRef.current = null; };
+    // 桥接：App 的保存按钮用最新文档，避免 React 缓存滞后
+    editorBridge.requestSave = () => { doSave(); };
+    // 注册大纲跳转监听
+    const jumpListener = (item: OutlineItem) => {
+      const v = viewRef.current;
+      if (!v) return;
+      const pos = Math.min(item.pos, v.state.doc.length);
+      v.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      v.focus();
+    };
+    editorBridge.jumpListeners.push(jumpListener);
+    // 初始大纲
+    emitOutline(view.state.doc.toString());
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+      editorBridge.requestSave = null;
+      editorBridge.jumpListeners = editorBridge.jumpListeners.filter(f => f !== jumpListener);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -118,19 +155,28 @@ const EditorPane = memo(function EditorPane({
     view.dispatch({
       effects: liveComp.current.reconfigure(nfExtensions({
         live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
+        theme: cbRef.current.theme,
       })),
     });
-  }, [mode]);
+  }, [mode, theme]);
 
   // ── 外部内容变化（文件切换 / 缓存加载）→ 全文替换 ──
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    if (activeFile && view.state.doc.toString() !== content) {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-      dirtyRef.current = false;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+    const docStr = view.state.doc.toString();
+    // 自己发出的 echo（App 异步渲染回写）：绝不回灌，否则连续输入会被旧值覆盖
+    if (!shouldSyncExternal(docStr, content, lastEmittedRef.current)) {
+      if (docStr === content) lastEmittedRef.current = content;
+      return;
     }
+    view.dispatch({ changes: { from: 0, to: docStr.length, insert: content } });
+    lastEmittedRef.current = content;
+    editorBridge.latestDoc = content;
+    editorBridge.activeFile = activeFile;
+    emitOutline(content);
+    dirtyRef.current = false;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
   }, [content, activeFile]);
 
   // ── wikilink / data-note 点击跳转（文档级委托，live 装饰与预览共用） ──

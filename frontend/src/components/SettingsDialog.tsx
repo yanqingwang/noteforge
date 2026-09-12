@@ -47,6 +47,8 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
   const [syncPassword, setSyncPassword] = useState("");
   const [direction, setDirection] = useState("bidirectional");
   const [ignoreRules, setIgnoreRules] = useState("");
+  const [autoSyncMinutes, setAutoSyncMinutes] = useState(0);
+  const [syncOnStartup, setSyncOnStartup] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
   const [report, setReport] = useState<SyncReport | null>(null);
   const [showFirstSyncChoice, setShowFirstSyncChoice] = useState(false);
@@ -67,6 +69,8 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
         setEncrypted(cfg.encrypted !== false);
         setDirection(cfg.direction || "bidirectional");
         setIgnoreRules((cfg.ignore_rules || []).join("\n"));
+        setAutoSyncMinutes(cfg.auto_sync_minutes || 0);
+        setSyncOnStartup(!!cfg.sync_on_startup);
       }
     }).catch(() => {});
     const unlisten = listen<any>("sync-progress", (event) => {
@@ -99,6 +103,8 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
     direction,
     sync_password: syncPassword,
     encrypted,
+    auto_sync_minutes: autoSyncMinutes,
+    sync_on_startup: syncOnStartup,
   });
 
   const saveSyncConfig = async () => {
@@ -256,6 +262,22 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
         <p style={{ color: "#999", fontSize: 11, margin: "-4px 0 8px" }}>
           每行一个通配规则。默认已忽略 .noteforge/、.obsidian/、.git/、*.tmp 等。
         </p>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>自动同步</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <select value={autoSyncMinutes} onChange={e => setAutoSyncMinutes(Number(e.target.value))}
+            style={{ ...inputStyle, marginBottom: 0, flex: 1 }}>
+            <option value={0}>关闭</option>
+            <option value={5}>每 5 分钟</option>
+            <option value={15}>每 15 分钟</option>
+            <option value={30}>每 30 分钟</option>
+            <option value={60}>每 60 分钟</option>
+          </select>
+          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={syncOnStartup} onChange={e => setSyncOnStartup(e.target.checked)} />
+            启动时同步
+          </label>
+        </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
           <button onClick={handleTest} disabled={syncing}

@@ -28,6 +28,42 @@ pub struct WebDavDriver {
     password: String,
 }
 
+/// Files larger than this use Nextcloud chunking v2 (10 MB).
+pub const CHUNK_THRESHOLD: usize = 10 * 1024 * 1024;
+/// Chunk size for chunking v2 uploads (5 MB).
+pub const CHUNK_SIZE: usize = 5 * 1024 * 1024;
+
+/// Split data into fixed-size chunks (pure, unit-testable).
+pub fn chunk_bytes(data: &[u8], chunk_size: usize) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let mut rest = data;
+    while !rest.is_empty() {
+        let take = rest.len().min(chunk_size);
+        out.push(&rest[..take]);
+        rest = &rest[take..];
+    }
+    if out.is_empty() {
+        out.push(&[]);
+    }
+    out
+}
+
+/// Upload session base URL: `<origin>/remote.php/dav/uploads/<user>/<id>/`.
+pub fn chunk_session_url(server_origin: &str, username: &str, session_id: &str) -> String {
+    format!(
+        "{}/remote.php/dav/uploads/{}/{}/",
+        server_origin.trim_end_matches('/'),
+        username,
+        session_id
+    )
+}
+
+fn random_session_id() -> String {
+    use rand::Rng;
+    let bytes: [u8; 16] = rand::rng().random();
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 /// Build the WebDAV files endpoint for a Nextcloud instance.
 /// Accepts either a bare server URL (`https://nc.example.com`) or a full
 /// DAV path (already contains `remote.php/dav`).
@@ -151,6 +187,59 @@ impl WebDavDriver {
         let text = resp.text().await?;
         Ok(extract_tag(&text, "getetag").map(|s| s.trim().trim_matches('"').to_string()))
     }
+
+    /// Nextcloud chunking v2 upload for large files:
+    /// MKCOL session dir → PUT numbered chunks → MOVE .file to destination.
+    async fn put_chunked(&self, path: &str, data: &[u8]) -> Result<Option<String>, SyncError> {
+        let origin = format!(
+            "{}://{}{}",
+            self.base_url.scheme(),
+            self.base_url.host_str().unwrap_or_default(),
+            self.base_url.port().map(|p| format!(":{}", p)).unwrap_or_default(),
+        );
+        let origin = origin.as_str();
+        let session = chunk_session_url(origin, &self.username, &random_session_id());
+
+        // 1. Create upload session directory
+        let resp = self.client.request(mkcol(), Url::parse(&session).map_err(|e| SyncError::Url(e))?)
+            .basic_auth(&self.username, Some(&self.password))
+            .send().await?;
+        if !resp.status().is_success() && resp.status().as_u16() != 405 {
+            return Err(SyncError::Other(format!("chunking MKCOL 失败: {}", resp.status())));
+        }
+
+        // 2. Upload chunks
+        let chunks = chunk_bytes(data, CHUNK_SIZE);
+        for (i, chunk) in chunks.iter().enumerate() {
+            let chunk_url = Url::parse(&format!("{}{:05}", session, i)).map_err(|e| SyncError::Url(e))?;
+            let resp = self.client.put(chunk_url)
+                .body(chunk.to_vec())
+                .header("Content-Type", "application/octet-stream")
+                .basic_auth(&self.username, Some(&self.password))
+                .send().await?;
+            if !resp.status().is_success() {
+                let _ = self.client.delete(Url::parse(&session).unwrap()).send().await;
+                return Err(SyncError::Other(format!("分块 {} 上传失败: {}", i, resp.status())));
+            }
+        }
+
+        // 3. Assemble: MOVE <session>.file → destination
+        let dest = self.url_for(path);
+        let from = Url::parse(&format!("{}.file", session)).map_err(|e| SyncError::Url(e))?;
+        let move_ = Method::from_bytes(b"MOVE").expect("MOVE is a valid method");
+        let resp = self.client.request(move_, from)
+            .header("Destination", dest.as_str())
+            .header("OWS-Final-Upload-Length", data.len().to_string())
+            .basic_auth(&self.username, Some(&self.password))
+            .send().await?;
+        let ok = resp.status().is_success() || resp.status().as_u16() == 201;
+        // 4. Cleanup session dir regardless
+        let _ = self.client.delete(Url::parse(&session).unwrap()).send().await;
+        if !ok {
+            return Err(SyncError::Other(format!("分块组装失败 (MOVE): {} {}", resp.status(), path)));
+        }
+        self.etag_of(path).await
+    }
 }
 
 /// Split a multistatus body into `<response>…</response>` chunks,
@@ -208,6 +297,10 @@ impl FileApi for WebDavDriver {
             .unwrap_or_default();
         if !parent.is_empty() && parent != "/" {
             self.mkdir(&parent).await?;
+        }
+        // Large files: Nextcloud chunking v2
+        if data.len() > CHUNK_THRESHOLD {
+            return self.put_chunked(path, data).await;
         }
         let url = self.url_for(path);
         let resp = self.client.put(url)
@@ -375,5 +468,36 @@ mod tests {
         );
         assert_eq!(d.rel_from_href("/remote.php/dav/files/alice/NoteForge/").as_deref(), None);
         assert_eq!(d.rel_from_href("/remote.php/dav/files/alice/NoteForge/dir/sub/a.md").as_deref(), Some("dir/sub/a.md"));
+    }
+
+    #[test]
+    fn chunk_bytes_boundaries() {
+        let data: Vec<u8> = (0..11u8).collect();
+        let chunks = chunk_bytes(&data, 4);
+        assert_eq!(chunks, vec![&data[0..4], &data[4..8], &data[8..11]]);
+        // exact fit
+        let chunks = chunk_bytes(&data, 11);
+        assert_eq!(chunks.len(), 1);
+        // empty input still yields one (empty) chunk
+        assert_eq!(chunk_bytes(&[], 4).len(), 1);
+        // chunk size larger than data
+        assert_eq!(chunk_bytes(&data, 100).len(), 1);
+        // 5 MB chunking of 12 MB → 3 chunks (matches CHUNK_SIZE/CHUNK_THRESHOLD ratio)
+        let big = vec![0u8; 12 * 1024 * 1024];
+        let chunks = chunk_bytes(&big, CHUNK_SIZE);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), big.len());
+    }
+
+    #[test]
+    fn chunk_session_url_shape() {
+        assert_eq!(
+            chunk_session_url("https://nc.example.com", "alice", "abc123"),
+            "https://nc.example.com/remote.php/dav/uploads/alice/abc123/"
+        );
+        assert_eq!(
+            chunk_session_url("https://nc.example.com/", "alice", "abc123"),
+            "https://nc.example.com/remote.php/dav/uploads/alice/abc123/"
+        );
     }
 }
