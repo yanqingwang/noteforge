@@ -47,6 +47,7 @@ function App() {
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("nf-theme") === "dark" ? "dark" : "light");
   const autoSyncTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const renderTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // 主题：document 属性 + 持久化（CSS 由此切换亮暗）
   useEffect(() => {
@@ -386,14 +387,19 @@ function App() {
           mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }}
           onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
           onContentChange={(newContent) => {
-            if (activeFile) {
-              const re = invoke("render_markdown", { content: newContent }) as any;
-              re.then((html: string) => {
-                setContentCache(c => ({ ...c, [activeFile]: { content: newContent, html } }));
-              }).catch(() => {
-                setContentCache(c => ({ ...c, [activeFile]: { content: newContent, html: cache?.html || "" } }));
-              });
-            }
+            if (!activeFile) return;
+            // 防抖 250ms：降低 render_markdown 乱序回写压力（编辑器侧另有 echo 守卫兜底）
+            if (renderTimer.current) clearTimeout(renderTimer.current);
+            renderTimer.current = setTimeout(() => {
+              const file = activeFile;
+              invoke<string>("render_markdown", { content: newContent })
+                .then((html: string) => {
+                  setContentCache(c => ({ ...c, [file]: { content: newContent, html } }));
+                })
+                .catch(() => {
+                  setContentCache(c => ({ ...c, [file]: { content: newContent, html: "" } }));
+                });
+            }, 250);
           }} />
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

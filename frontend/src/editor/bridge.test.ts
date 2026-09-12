@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractOutline, shouldSyncExternal, editorBridge, requestOutlineJump } from "./bridge";
+import { extractOutline, EchoTracker, editorBridge, requestOutlineJump } from "./bridge";
 
 describe("extractOutline", () => {
   it("extracts headings with level/line/pos", () => {
@@ -30,22 +30,44 @@ describe("extractOutline", () => {
   });
 });
 
-describe("shouldSyncExternal（光标跳动修复核心）", () => {
-  it("rejects the editor's own echo even when doc raced ahead", () => {
-    // 连续打字：doc = "ab"，App 只回写了 "a"（上一次的 echo）
-    expect(shouldSyncExternal("ab", "a", "a")).toBe(false);
+describe("EchoTracker（页面被清空修复核心）", () => {
+  it("single stale echo is rejected (old behaviour already covered)", () => {
+    const t = new EchoTracker();
+    t.mark("a"); t.mark("ab");
+    expect(t.isEcho("a")).toBe(true);
+    expect(t.isEcho("ab")).toBe(true);
   });
 
-  it("rejects no-op when content equals doc", () => {
-    expect(shouldSyncExternal("abc", "abc", null)).toBe(false);
+  it("out-of-order echoes never clobber: any previously emitted value is an echo", () => {
+    // 模拟真实场景：打字 abc，render_markdown promise 乱序完成
+    const t = new EchoTracker();
+    t.mark("a"); t.mark("ab"); t.mark("abc");
+    // P3 先到（最新值），再 P1 晚到（旧值 "a"）——旧值也必须被丢弃
+    expect(t.isEcho("a")).toBe(true);
+    expect(t.isEcho("ab")).toBe(true);
+    // 只有从未发过的外部内容才允许回灌
+    expect(t.isEcho("external load")).toBe(false);
   });
 
-  it("accepts genuine external load (file switch)", () => {
-    expect(shouldSyncExternal("old doc", "new file content", "old doc")).toBe(true);
+  it("reset after external load clears fingerprints", () => {
+    const t = new EchoTracker();
+    t.mark("old");
+    t.reset("new file");
+    expect(t.isEcho("old")).toBe(false);
+    expect(t.isEcho("new file")).toBe(true);
   });
 
-  it("accepts stale content that differs from both doc and echo marker", () => {
-    expect(shouldSyncExternal("ab", "X", "a")).toBe(true);
+  it("capacity bounded: very old fingerprints expire", () => {
+    const t = new EchoTracker(4);
+    for (let i = 0; i < 10; i++) t.mark("v" + i);
+    expect(t.isEcho("v0")).toBe(false);
+    expect(t.isEcho("v9")).toBe(true);
+  });
+
+  it("identical content typed twice still tracked", () => {
+    const t = new EchoTracker();
+    t.mark("x"); t.mark("y"); t.mark("x");
+    expect(t.isEcho("x")).toBe(true);
   });
 });
 

@@ -6,7 +6,7 @@ import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/sea
 import { markdown } from "@codemirror/lang-markdown";
 import { GFM } from "@lezer/markdown";
 import { nfExtensions } from "../editor/extensions";
-import { editorBridge, shouldSyncExternal } from "../editor/bridge";
+import { editorBridge, EchoTracker } from "../editor/bridge";
 import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
 
@@ -56,9 +56,10 @@ const EditorPane = memo(function EditorPane({
 
   const dirtyRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  // 最近一次从编辑器发出的内容——用于识别 App 异步回写的 echo，
-  // 防止连续打字时旧值回来触发全文重置（丢字 + 光标跳）。
-  const lastEmittedRef = useRef<string | null>(null);
+  // 编辑器 echo 指纹（乱序安全）：App 异步渲染回写的任何近期旧值都不回灌
+  const echoTracker = useRef(new EchoTracker());
+  // 当前已加载的文件（区分文件切换与同文件外部修改）
+  const fileRef = useRef<string>("");
 
   const doSave = async () => {
     const view = viewRef.current;
@@ -111,7 +112,7 @@ const EditorPane = memo(function EditorPane({
             if (u.docChanged) {
               dirtyRef.current = true;
               const docStr = u.state.doc.toString();
-              lastEmittedRef.current = docStr;
+              echoTracker.current.mark(docStr);
               editorBridge.latestDoc = docStr;
               cbRef.current.onContentChange?.(docStr);
               emitOutline(docStr);
@@ -165,15 +166,29 @@ const EditorPane = memo(function EditorPane({
     const view = viewRef.current;
     if (!view) return;
     const docStr = view.state.doc.toString();
-    // 自己发出的 echo（App 异步渲染回写）：绝不回灌，否则连续输入会被旧值覆盖
-    if (!shouldSyncExternal(docStr, content, lastEmittedRef.current)) {
-      if (docStr === content) lastEmittedRef.current = content;
+    const isFileSwitch = activeFile !== fileRef.current;
+
+    if (isFileSwitch) {
+      // 真正的文件切换：加载外部内容
+      fileRef.current = activeFile;
+      echoTracker.current.reset(activeFile ? content : undefined);
+      if (activeFile && docStr !== content) {
+        view.dispatch({ changes: { from: 0, to: docStr.length, insert: content } });
+      }
+      editorBridge.latestDoc = content;
+      editorBridge.activeFile = activeFile;
+      emitOutline(content);
+      dirtyRef.current = false;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
       return;
     }
+
+    // 同一文件：App 异步渲染的回写（含乱序到达的旧值）一律丢弃
+    if (echoTracker.current.isEcho(content) || docStr === content) return;
+    // 到这里才是同文件的真正外部修改（如磁盘重载）：允许覆盖
     view.dispatch({ changes: { from: 0, to: docStr.length, insert: content } });
-    lastEmittedRef.current = content;
+    echoTracker.current.reset(content);
     editorBridge.latestDoc = content;
-    editorBridge.activeFile = activeFile;
     emitOutline(content);
     dirtyRef.current = false;
     if (saveTimer.current) clearTimeout(saveTimer.current);
