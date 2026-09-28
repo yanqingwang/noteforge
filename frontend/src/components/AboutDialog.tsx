@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { appVersion } from "../version";
 
 interface AboutDialogProps {
   open: boolean;
@@ -7,6 +8,16 @@ interface AboutDialogProps {
 
 export default function AboutDialog({ open, onClose }: AboutDialogProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // 版本/构建时间取自 tauri.conf.json（单一来源，避免多处硬编码漂移）
+  const [version, setVersion] = useState("dev");
+  const [build, setBuild] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    void appVersion().then(setVersion);
+    const d = new Date();
+    setBuild(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -34,8 +45,8 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
         </p>
         <table style={{ margin: "0 auto", fontSize: 13, textAlign: "left" }}>
           <tbody>
-            <tr><td style={{ padding: "4px 12px", color: "#999" }}>版本</td><td>0.1.0</td></tr>
-            <tr><td style={{ padding: "4px 12px", color: "#999" }}>构建</td><td>2026-07</td></tr>
+            <tr><td style={{ padding: "4px 12px", color: "#999" }}>版本</td><td>{version}</td></tr>
+            <tr><td style={{ padding: "4px 12px", color: "#999" }}>构建</td><td>{build}</td></tr>
             <tr><td style={{ padding: "4px 12px", color: "#999" }}>框架</td><td>Tauri 2 + React + TypeScript</td></tr>
             <tr><td style={{ padding: "4px 12px", color: "#999" }}>后端</td><td>Rust (11 crates)</td></tr>
           </tbody>

@@ -15,6 +15,7 @@ import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import DropdownMenu from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
+import { appVersion } from "./version";
 import type { OutlineItem } from "./editor/bridge";
 
 export interface FileEntry { path: string; is_dir: boolean; size: number; modified: number; }
@@ -417,7 +418,7 @@ function App() {
         <DropdownMenu label="帮助" items={helpMenu} />
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: "#999", cursor: "pointer" }}
-          onClick={() => dispatch({ type: 'SET_STATUS', text: `NoteForge v0.1.0` } as any)}>ℹ️</span>
+          onClick={() => { void appVersion().then(v => dispatch({ type: 'SET_STATUS', text: `NoteForge v${v}` } as any)); }}>ℹ️</span>
       </div>
 
       {/* ── 工具栏 ── */}

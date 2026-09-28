@@ -49,11 +49,12 @@ sudo pacman -S webkit2gtk base-devel curl wget file libxdo
 # 前端
 cd frontend && npm install && npm run build
 
-# Tauri 应用
-cargo build -p noteforge
+# Tauri 应用（必须用 cargo tauri：它会注入 custom-protocol 特性，
+# 否则产物会去连 vite devUrl，真机打开是空白）
+cargo tauri build --no-bundle
 
-# 运行
-cargo run -p noteforge
+# 运行（开发模式，需先 npm run dev 起 vite）
+cargo tauri dev
 ```
 
 ### 仅 CLI 版本
