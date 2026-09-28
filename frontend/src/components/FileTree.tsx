@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useEffect, useState, memo } from "react";
 import type { FileEntry } from "../App";
 
 type SortMode = "name-asc" | "name-desc" | "modified-desc" | "modified-asc" | "size-desc" | "size-asc";
@@ -7,15 +7,75 @@ interface FileTreeProps {
   files: FileEntry[];
   activeFile: string;
   onSelect: (path: string) => void;
+  /** 当前 vault 路径，用于按 vault 持久化文件夹展开状态（缺省不持久化） */
+  vaultPath?: string;
 }
 
-const FileTree = memo(function FileTree({ files, activeFile, onSelect }: FileTreeProps) {
+/** 树中展示的文件类型：Markdown 笔记 + HTML 报告 */
+export function isRenderableFile(path: string): boolean {
+  return /\.(?:md|html?)$/i.test(path);
+}
+
+/** 收集一个文件路径的全部祖先目录（vault 相对路径） */
+export function ancestorDirs(path: string): string[] {
+  const parts = path.split("/");
+  parts.pop();
+  const dirs: string[] = [];
+  let acc = "";
+  for (const p of parts) {
+    acc = acc ? `${acc}/${p}` : p;
+    dirs.push(acc);
+  }
+  return dirs;
+}
+
+const storageKey = (vaultPath?: string) => (vaultPath ? `nf-expanded:${vaultPath}` : "");
+
+const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath }: FileTreeProps) {
   const [sortMode, setSortMode] = useState<SortMode>("modified-desc");
   const [dirsFirst, setDirsFirst] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 展开状态取反义（默认空集 = 全部折叠，类 Obsidian）；按 vault 持久化
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey(vaultPath));
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* 损坏则回退默认 */ }
+    return new Set();
+  });
 
   const tree = buildTree(files, sortMode, dirsFirst);
-  const noteCount = files.filter(f => !f.is_dir && f.path.endsWith(".md")).length;
+  const noteCount = files.filter(f => !f.is_dir && isRenderableFile(f.path)).length;
+
+  // 持久化展开状态（仅针对当前 vault）
+  useEffect(() => {
+    if (!vaultPath) return;
+    try { localStorage.setItem(storageKey(vaultPath), JSON.stringify([...expanded])); } catch { /* 忽略 */ }
+  }, [expanded, vaultPath]);
+
+  // 打开/跳转文件时自动展开其所在目录（Obsidian 行为）
+  useEffect(() => {
+    if (!activeFile) return;
+    const dirs = ancestorDirs(activeFile);
+    if (dirs.length === 0) return;
+    setExpanded(prev => {
+      if (dirs.every(d => prev.has(d))) return prev;
+      const next = new Set(prev);
+      for (const d of dirs) next.add(d);
+      return next;
+    });
+  }, [activeFile]);
+
+  const collectDirKeys = (nodes: TreeNode[], acc = new Set<string>()): Set<string> => {
+    for (const n of nodes) {
+      if (n.isDir) { acc.add(n.path || n.name); collectDirKeys(n.children, acc); }
+    }
+    return acc;
+  };
+
+  const smallBtn: React.CSSProperties = {
+    flex: 1, fontSize: 11, padding: "2px 0", border: "1px solid #ddd", borderRadius: 3,
+    background: "#fff", cursor: "pointer", color: "#555",
+  };
 
   return (
     <div style={{ width: 260, minWidth: 200, background: "#fafafa", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -37,6 +97,11 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect }: FileTre
           <option value="size-desc">大小 ↓</option>
           <option value="size-asc">大小 ↑</option>
         </select>
+        {/* 批量展开/折叠 */}
+        <div style={{ display: "flex", gap: 4 }}>
+          <button style={smallBtn} onClick={() => setExpanded(collectDirKeys(tree))}>展开全部</button>
+          <button style={smallBtn} onClick={() => setExpanded(new Set())}>折叠全部</button>
+        </div>
       </div>
 
       {/* Tree */}
@@ -44,7 +109,7 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect }: FileTre
         {tree.map(item => (
           <TreeItem key={item.path || item.name} item={item} depth={0}
             activeFile={activeFile} onSelect={onSelect}
-            collapsed={collapsed} setCollapsed={setCollapsed} />
+            expanded={expanded} setExpanded={setExpanded} />
         ))}
       </div>
     </div>
@@ -53,37 +118,44 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect }: FileTre
 
 interface TreeNode { name: string; path?: string; isDir: boolean; modified: number; size: number; children: TreeNode[]; }
 
-function TreeItem({ item, depth, activeFile, onSelect, collapsed, setCollapsed }: {
+function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded }: {
   item: TreeNode; depth: number; activeFile: string; onSelect: (p: string) => void;
-  collapsed: Set<string>; setCollapsed: (s: Set<string>) => void;
+  expanded: Set<string>; setExpanded: (s: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
 }) {
   const key = item.path || item.name;
-  const isCollapsed = collapsed.has(key);
+  const isCollapsed = item.isDir && !expanded.has(key);
   const indent = depth * 16;
 
   if (item.isDir) {
     return (
       <>
-        <div style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13, color: "#555", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}
-          onClick={() => { const n = new Set(collapsed); if (isCollapsed) n.delete(key); else n.add(key); setCollapsed(n); }}>
+        <div data-nf-dir={item.name}
+          style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13, color: "#555", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}
+          onClick={() => setExpanded(prev => {
+            const n = new Set(prev);
+            if (isCollapsed) n.add(key); else n.delete(key);
+            return n;
+          })}>
           <span>{isCollapsed ? "▶" : "▼"}</span>
           <span>📁 {item.name}</span>
         </div>
         {!isCollapsed && item.children.map(c => (
           <TreeItem key={c.path || c.name} item={c} depth={depth + 1}
-            activeFile={activeFile} onSelect={onSelect} collapsed={collapsed} setCollapsed={setCollapsed} />
+            activeFile={activeFile} onSelect={onSelect} expanded={expanded} setExpanded={setExpanded} />
         ))}
       </>
     );
   }
 
+  const isHtml = /\.html?$/i.test(item.name);
   return (
-    <div style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13,
-      background: activeFile === item.path ? "#d2e3fc" : "transparent", color: "#333", display: "flex", alignItems: "center", gap: 4 }}
+    <div data-nf-file={item.name}
+      style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13,
+        background: activeFile === item.path ? "#d2e3fc" : "transparent", color: "#333", display: "flex", alignItems: "center", gap: 4 }}
       onClick={() => item.path && onSelect(item.path)}
       onMouseEnter={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "#e8f0fe"; }}
       onMouseLeave={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "transparent"; }}>
-      <span>📝</span>
+      <span>{isHtml ? "🌐" : "📝"}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{item.name}</span>
       <span style={{ fontSize: 10, color: "#999" }}>{fmtTime(item.modified)}</span>
     </div>
@@ -99,11 +171,11 @@ function fmtTime(ts: number): string {
 }
 
 function buildTree(files: FileEntry[], sortMode: SortMode, dirsFirst: boolean): TreeNode[] {
-  const mdFiles = files.filter(f => !f.is_dir && f.path.endsWith(".md"));
+  const visible = files.filter(f => !f.is_dir && isRenderableFile(f.path));
   const root: TreeNode[] = [];
   const dirMap = new Map<string, TreeNode>();
 
-  const sorted = [...mdFiles].sort((a, b) => {
+  const sorted = [...visible].sort((a, b) => {
     let cmp = 0;
     if (sortMode === "name-asc") cmp = a.path.localeCompare(b.path);
     else if (sortMode === "name-desc") cmp = b.path.localeCompare(a.path);
@@ -131,7 +203,7 @@ function buildTree(files: FileEntry[], sortMode: SortMode, dirsFirst: boolean): 
     const name = parts[parts.length - 1];
     const parentPath = parts.slice(0, -1).join('/');
     const dirEntry = files.find(f => f.is_dir && f.path === dirPath);
-    existing = { name, isDir: true, modified: dirEntry?.modified || 0, size: 0, children: [] };
+    existing = { name, path: dirPath, isDir: true, modified: dirEntry?.modified || 0, size: 0, children: [] };
     dirMap.set(dirPath, existing);
     if (parentPath) {
       const parent = ensureDir(parentPath);

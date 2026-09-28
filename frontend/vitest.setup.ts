@@ -1,3 +1,6 @@
+// 组件测试需要 React act() 支持
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
 // jsdom 缺少的布局 API —— CM6 测量需要
 if (typeof Range !== "undefined" && !(Range.prototype as any).getClientRects) {
   (Range.prototype as any).getClientRects = function () {

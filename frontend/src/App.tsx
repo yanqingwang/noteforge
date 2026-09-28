@@ -12,6 +12,7 @@ import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
+import HtmlViewer from "./components/HtmlViewer";
 import DropdownMenu from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
 import type { OutlineItem } from "./editor/bridge";
@@ -193,6 +194,23 @@ function App() {
     } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
   }, [vaultPath, activeFile, cache]);
 
+  // ── 全局快捷键：Ctrl+O 快速切换 / Ctrl+P 命令面板 / Ctrl+S 保存 / Ctrl+N 新建 ──
+  // （与菜单标注及 Obsidian 习惯一致；编辑器已处理的按键让其自行 preventDefault）
+  const newNoteRef = useRef(newNote);
+  newNoteRef.current = newNote;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.defaultPrevented) return;
+      const k = e.key.toLowerCase();
+      if (k === "o") { e.preventDefault(); setShowQuickSwitcher(true); }
+      else if (k === "p") { e.preventDefault(); setShowCommandPalette(true); }
+      else if (k === "s") { e.preventDefault(); editorBridge.requestSave?.(); }
+      else if (k === "n") { e.preventDefault(); newNoteRef.current(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
   const reopenVault = useCallback(async () => {
     if (!vaultPath) return;
     try {
@@ -208,7 +226,7 @@ function App() {
   }, []);
 
   const fileMenu = [
-    { label: "打开 Vault", shortcut: "Ctrl+O", action: () => handleBrowse() },
+    { label: "打开 Vault", action: () => handleBrowse() },
     { label: "新建笔记", shortcut: "Ctrl+N", action: newNote },
     { divider: true as const },
     { label: "保存", shortcut: "Ctrl+S", action: saveNote },
@@ -275,7 +293,7 @@ function App() {
   ];
 
   const quickActions = [
-    { label: "打开 Vault", shortcut: "Ctrl+O", action: () => handleBrowse() },
+    { label: "打开 Vault", action: () => handleBrowse() },
     { label: "新建笔记", shortcut: "Ctrl+N", action: newNote },
     { divider: true as const },
     { label: "保存", shortcut: "Ctrl+S", action: saveNote },
@@ -289,7 +307,7 @@ function App() {
 
   const commands = useMemo(() => {
     const cmds = [
-      { id: 'open-vault', name: '打开 Vault', shortcut: 'Ctrl+O', action: () => handleBrowse() },
+      { id: 'open-vault', name: '打开 Vault', action: () => handleBrowse() },
       { id: 'quick-switcher', name: '快速切换器', shortcut: 'Ctrl+O', action: () => setShowQuickSwitcher(true) },
       { id: 'command-palette', name: '命令面板', shortcut: 'Ctrl+P', action: () => setShowCommandPalette(true) },
       { id: 'toggle-sidebar', name: '切换侧栏', action: () => setSidebarVisible(s => !s) },
@@ -335,7 +353,7 @@ function App() {
       {/* ── 工具栏 ── */}
       <div style={{ display: "flex", alignItems: "center", height: 40, background: "#fafafa",
         borderBottom: "1px solid #e0e0e0", padding: "0 8px", gap: 2 }}>
-        <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault (Ctrl+O)">📂</button>
+        <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault">📂</button>
         <button style={btnBase} onClick={newNote} title="新建笔记">📄</button>
         <button style={btnBase} onClick={saveNote} title="保存 (Ctrl+S)">💾</button>
         <button style={btnBase} onClick={() => {
@@ -376,7 +394,7 @@ function App() {
               </button>
             </div>
             {sidebarMode === "files"
-              ? <FileTree files={files} activeFile={activeFile || ""} onSelect={readNote} />
+              ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} />
               : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
           </div>
         )}
@@ -412,8 +430,8 @@ function App() {
             {htmlViewFile.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) ? (
               <ImageViewer filePath={htmlViewFile} />
             ) : (
-              <div ref={(el) => { if (el && htmlViewFile) { const view = pluginManager.getViews().find(v => v.type === "html-effectiveness-view"); if (view) { el.innerHTML = ""; view.render(el, htmlViewFile); } } }}
-                style={{ flex: 1, overflow: "hidden" }} />
+              <HtmlViewer filePath={htmlViewFile}
+                onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
             )}
           </div>
         )}
