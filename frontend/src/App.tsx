@@ -12,7 +12,6 @@ import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
-import HtmlViewer from "./components/HtmlViewer";
 import DropdownMenu from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
 import type { OutlineItem } from "./editor/bridge";
@@ -41,6 +40,9 @@ function App() {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
   });
+  // HTML 只是与源码并列的一种显示格式，独立记忆其选择
+  const [htmlMode, setHtmlMode] = useState<ViewMode>(
+    () => (localStorage.getItem('nf-html-mode') === 'source' ? 'source' : 'html'));
   const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
   const [sidebarMode, setSidebarMode] = useState<"files" | "outline">("files");
@@ -124,13 +126,9 @@ function App() {
       const fuzzy = files.find(f => f.path.toLowerCase().includes(withMd.toLowerCase()) || f.path.toLowerCase().includes(resolved.toLowerCase()));
       if (fuzzy) resolved = fuzzy.path;
     }
-    // .html files use the HTML viewer
-    if (resolved.endsWith(".html")) {
-      setHtmlViewFile(resolved);
-      return;
-    }
-    // Other attachments (images, PDFs) - open in viewer or OS
-    if (!resolved.endsWith(".md")) {
+    // .html 作为普通文件走编辑器（源码/HTML 两种并列格式在 EditorPane 内切换）
+    // 其他附件（图片、PDF）仍走独立查看面板
+    if (!resolved.endsWith(".md") && !/\.html?$/i.test(resolved)) {
       setHtmlViewFile(resolved);
       return;
     }
@@ -157,6 +155,19 @@ function App() {
   };
 
   const activeFile = findActivePath(state.main);
+  // HTML 是与源码并列的显示格式，不占独立 block
+  const htmlActive = !!activeFile && /\.html?$/i.test(activeFile);
+  const paneMode: ViewMode = htmlActive ? htmlMode : viewMode;
+  const handleSetMode = (m: ViewMode) => {
+    if (htmlActive) {
+      const next = m === "html" ? "html" : "source";
+      setHtmlMode(next);
+      localStorage.setItem('nf-html-mode', next);
+    } else {
+      setViewMode(m);
+      localStorage.setItem('nf-view-mode', m);
+    }
+  };
   const activeGroup = (() => {
     const find = (n: any): any => {
       if (n?.tabs?.length > 0) return n;
@@ -402,7 +413,8 @@ function App() {
           activeFile={activeFile || ""} files={files} onNavigate={readNote}
           theme={theme}
           onOutline={setOutlineItems}
-          mode={viewMode} onSetMode={(m) => { setViewMode(m); localStorage.setItem('nf-view-mode', m); }}
+          htmlFile={htmlActive ? activeFile : null}
+          mode={paneMode} onSetMode={handleSetMode}
           onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
           onContentChange={(newContent) => {
             if (!activeFile) return;
@@ -422,17 +434,12 @@ function App() {
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "4px 12px", background: "#f8f8f8", borderBottom: "1px solid #ddd", fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
-              <span>{htmlViewFile.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) ? "🖼" : "🌐"}</span>
+              <span>🖼</span>
               <span style={{ flex: 1 }}>{htmlViewFile}</span>
               <button onClick={() => setHtmlViewFile(null)}
                 style={{ padding: "2px 8px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#999", fontSize: 16 }}>✕</button>
             </div>
-            {htmlViewFile.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) ? (
-              <ImageViewer filePath={htmlViewFile} />
-            ) : (
-              <HtmlViewer filePath={htmlViewFile}
-                onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
-            )}
+            <ImageViewer filePath={htmlViewFile} />
           </div>
         )}
       </div>

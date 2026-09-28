@@ -9,8 +9,9 @@ import { nfExtensions } from "../editor/extensions";
 import { editorBridge, EchoTracker } from "../editor/bridge";
 import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
+import HtmlViewer from "./HtmlViewer";
 
-type ViewMode = "source" | "preview" | "split" | "live";
+type ViewMode = "source" | "preview" | "split" | "live" | "html";
 
 interface EditorPaneProps {
   content: string;
@@ -27,6 +28,8 @@ interface EditorPaneProps {
   onOutline?: (items: OutlineItem[]) => void;
   /** 亮/暗主题 */
   theme?: "light" | "dark";
+  /** 当前激活文件是 .html：额外提供「HTML」显示格式，与源码并列切换 */
+  htmlFile?: string | null;
 }
 
 export type { ViewMode };
@@ -34,7 +37,7 @@ export type { ViewMode };
 const AUTO_SAVE_MS = 2000;
 
 const EditorPane = memo(function EditorPane({
-  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light",
+  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light", htmlFile = null,
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -47,6 +50,10 @@ const EditorPane = memo(function EditorPane({
   });
   const mode = externalMode ?? internalMode;
   const setMode = onSetMode ?? setInternalMode;
+  // HTML 只是一种显示格式，与源码并列；切走（打开 md）时回落到源码
+  const isHtmlFile = !!htmlFile;
+  const showHtml = isHtmlFile && mode === "html";
+  const effectiveMode: ViewMode = isHtmlFile && mode === "html" ? "source" : mode;
 
   // 最新 props 的 ref 镜像（避免重建 EditorView）
   const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme });
@@ -239,16 +246,23 @@ const EditorPane = memo(function EditorPane({
 
   // 预览模式隐藏编辑器后恢复时，让 CM6 重新测量尺寸
   useEffect(() => {
-    if (mode !== "preview") viewRef.current?.requestMeasure();
-  }, [mode]);
+    if (effectiveMode !== "preview" && !showHtml) viewRef.current?.requestMeasure();
+  }, [mode, showHtml, effectiveMode]);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       {/* Tab bar */}
       <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", background: "#f8f8f8", borderBottom: "1px solid #eee", gap: 4 }}>
         <span style={{ flex: 1, fontSize: 13, color: "#666" }}>📄 {activeFile || "未打开笔记"}</span>
-        <div style={{ display: "flex", gap: 2, background: "#e8e8e8", borderRadius: 4, padding: 2 }}>
-          {(["source", "split", "live", "preview"] as ViewMode[]).map(m => (
+        <div className="view-mode-bar" style={{ display: "flex", gap: 2, background: "#e8e8e8", borderRadius: 4, padding: 2 }}>
+          {/* HTML 文件：只给「源码 / HTML」两种并列格式 */}
+          {isHtmlFile ? (["source", "html"] as ViewMode[]).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              style={{ padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer", fontSize: 12,
+                background: mode === m ? "#fff" : "transparent", boxShadow: mode === m ? "0 1px 2px rgba(0,0,0,0.1)" : "none" }}>
+              {m === "html" ? "HTML" : "源码"}
+            </button>
+          )) : (["source", "split", "live", "preview"] as ViewMode[]).map(m => (
             <button key={m} onClick={() => setMode(m)}
               style={{ padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer", fontSize: 12,
                 background: mode === m ? "#fff" : "transparent", boxShadow: mode === m ? "0 1px 2px rgba(0,0,0,0.1)" : "none" }}>
@@ -263,9 +277,9 @@ const EditorPane = memo(function EditorPane({
         {/* 宿主 div 常驻：mode 切换只控制显隐，避免卸载导致 CM6 DOM 脱离文档 */}
         <div ref={hostRef} style={{
           flex: 1, minWidth: 0, overflow: "hidden",
-          display: mode === "preview" ? "none" : "block",
+          display: showHtml || effectiveMode === "preview" ? "none" : "block",
         }} />
-        {!activeFile && mode !== "preview" && (
+        {!activeFile && effectiveMode !== "preview" && !showHtml && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center",
             justifyContent: "center", color: "#999", pointerEvents: "none", background: "#fefefe" }}>
             <p>选择笔记查看内容</p>
@@ -273,13 +287,18 @@ const EditorPane = memo(function EditorPane({
         )}
 
         {/* Preview pane */}
-        {(mode === "preview" || mode === "split") && (
+        {!isHtmlFile && (effectiveMode === "preview" || effectiveMode === "split") && (
           <div ref={previewRef} style={{
-            width: mode === "split" ? "50%" : "100%",
-            borderLeft: mode === "split" ? "1px solid #ddd" : "none",
+            width: effectiveMode === "split" ? "50%" : "100%",
+            borderLeft: effectiveMode === "split" ? "1px solid #ddd" : "none",
             overflowY: "auto", padding: 16
           }} className="markdown-body"
             dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        )}
+
+        {/* HTML 显示格式：与源码共用同一区域，不单独占 block */}
+        {showHtml && htmlFile && (
+          <HtmlViewer filePath={htmlFile} onStatus={onStatus} />
         )}
       </div>
 

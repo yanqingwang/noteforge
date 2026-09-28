@@ -3,10 +3,13 @@
  * mode="live" 挂载后 CM6 渲染富文本装饰（隐藏语法），而非显示源码。
  * 这是 App 层问题「即输即显显示源代码」的组件级证据。
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import EditorPane from "./EditorPane";
+
+const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 const DOC = "开头一行\n# 标题行\n- [ ] 待办任务\n**加粗文本**";
 
@@ -95,6 +98,43 @@ describe("EditorPane live 模式（即输即显）", () => {
     expect(editor!.textContent).toContain("控制台执行 SQL");
 
     act(() => root.unmount());
+    container.remove();
+  });
+
+  it("htmlFile 提供时：源码与 HTML 两种格式并列切换，共用同一编辑区", async () => {
+    invokeMock.mockResolvedValue("<h1>hi</h1>");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+
+    // 1) HTML 格式：源码编辑器隐藏，HtmlViewer 在同一区域渲染
+    await act(async () => {
+      root.render(
+        <EditorPane content={"<h1>hi</h1>"} previewHtml="" activeFile="reports/a.html"
+          mode="html" htmlFile="reports/a.html" />,
+      );
+    });
+    const editor = container.querySelector(".cm-editor") as HTMLElement;
+    expect(editor).toBeTruthy();
+    // 宿主保留但隐藏（CM6 不脱离文档），HTML 查看器占据内容区
+    expect(editor.parentElement!.style.display).toBe("none");
+    expect(container.querySelector("iframe")).toBeTruthy();
+    // 标签栏：HTML 文件只提供 源码 / HTML 两个并列按钮，不再有分栏/即输即显/预览
+    const labels = [...container.querySelectorAll(".view-mode-bar button")].map(b => b.textContent);
+    expect(labels).toEqual(["源码", "HTML"]);
+
+    // 2) 切到源码：HTML 查看器消失，编辑器显示
+    await act(async () => {
+      root.render(
+        <EditorPane content={"<h1>hi</h1>"} previewHtml="" activeFile="reports/a.html"
+          mode="source" htmlFile="reports/a.html" />,
+      );
+    });
+    expect(container.querySelector("iframe")).toBeNull();
+    expect((container.querySelector(".cm-editor") as HTMLElement).parentElement!.style.display)
+      .toBe("block");
+
+    await act(async () => root.unmount());
     container.remove();
   });
 
