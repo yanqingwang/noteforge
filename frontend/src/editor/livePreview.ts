@@ -94,22 +94,32 @@ class TaskCheckboxWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-/** 代码块内容 → hljs 高亮 */
+/**
+ * 代码块内容 → hljs 高亮。
+ * 跨行代码块在 decoration block 中渲染（见 FencedCode 分支）：
+ * `part="open"` 输出 <pre>，中间行由 CSS 撑开，`part="close"` 只闭合 </pre>。
+ */
 class CodeBlockWidget extends WidgetType {
   code: string;
   lang: string;
-  constructor(code: string, lang: string) {
+  part: "whole" | "open" | "close";
+  constructor(code: string, lang: string, part: "whole" | "open" | "close" = "whole") {
     super();
     this.code = code;
     this.lang = lang;
+    this.part = part;
   }
-  eq(other: CodeBlockWidget) { return other.code === this.code && other.lang === this.lang; }
+  eq(other: CodeBlockWidget) {
+    return other.code === this.code && other.lang === this.lang && other.part === this.part;
+  }
   toDOM() {
     const pre = document.createElement("pre");
     pre.className = "lp-codeblock";
-    const code = document.createElement("code");
-    code.innerHTML = highlightCode(this.code, this.lang);
-    pre.appendChild(code);
+    if (this.part !== "close") {   // "close" 只闭合 </pre>，不重复内容
+      const code = document.createElement("code");
+      code.innerHTML = highlightCode(this.code, this.lang);
+      pre.appendChild(code);
+    }
     return pre;
   }
   ignoreEvent() { return false; }
@@ -225,10 +235,31 @@ function buildDecorations(view: EditorView): DecorationSet {
             add(line.from, line.from, Decoration.line({ class: "lp-codeline" }));
           }
           if (text && !lineFocused(node.from, node.to)) {
-            add(text.from, text.to, Decoration.replace({
-              widget: new CodeBlockWidget(state.doc.sliceString(text.from, text.to), lang),
-              block: false,
-            }));
+            // CM6 硬约束（measure 阶段抛 RangeError → 整窗白屏）：
+            //  - 行内 replace 装饰不能跨换行
+            //  - 块级（block:true）replace 装饰不允许由 ViewPlugin 提供
+            // 所以跨行代码块不能用 replace 装饰：改用 decoration block 里的
+            // 零宽 widget 装饰（同行起止两处），块本身由行装饰的 CSS 撑开。
+            const code = state.doc.sliceString(text.from, text.to);
+            const first = state.doc.lineAt(text.from);
+            const last = state.doc.lineAt(text.to);
+            if (first.number === last.number) {
+              add(text.from, text.to, Decoration.replace({
+                widget: new CodeBlockWidget(code, lang),
+                block: false,
+              }));
+            } else {
+              add(first.from, first.from, Decoration.widget({
+                widget: new CodeBlockWidget(code, lang, "open"), side: -1,
+              }));
+              for (let l = first.number; l <= last.number; l++) {
+                const line = state.doc.line(l);
+                add(line.from, line.to, Decoration.replace({}));
+              }
+              add(last.to, last.to, Decoration.widget({
+                widget: new CodeBlockWidget(code, lang, "close"), side: 1,
+              }));
+            }
           }
           return;
         }
