@@ -319,6 +319,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn table_column_alignment_rendered() {
+        // 表格对齐由对齐行决定，渲染端（GFM table）必须体现
+        let html = render_html("| A | B | C |\n| :---: | ---: | --- |\n| 1 | 2 | 3 |");
+        assert!(html.contains("<table"), "{}", html);
+        assert!(
+            html.contains("text-align:center") || html.contains("align=\"center\""),
+            "center missing: {}", html
+        );
+        assert!(
+            html.contains("text-align:right") || html.contains("align=\"right\""),
+            "right missing: {}", html
+        );
+    }
+
+    #[test]
     fn wikilink_escapes_and_strips_subpath() {
         // 别名只影响显示，#锚点不进 data-note
         let html = render_html("见 [[docs/overview#结论|结论]] 与 [[a&b\"c]]");

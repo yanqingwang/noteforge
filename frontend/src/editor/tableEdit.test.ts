@@ -8,7 +8,8 @@ import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { GFM } from "@lezer/markdown";
 import { nfExtensions } from "./extensions";
-import { findTableAt, insertRow, deleteRow, insertCol, deleteCol, tableNavigate } from "./tableEdit";
+import { findTableAt, insertRow, deleteRow, insertCol, deleteCol, tableNavigate,
+         columnAlignAt, setColumnAlign, cycleColumnAlign } from "./tableEdit";
 
 const TABLE = [
   "| 列A | 列B |",
@@ -216,7 +217,7 @@ describe("表格工具条（鼠标操作）", () => {
     bar = view.dom.querySelector(".nf-table-bar") as HTMLElement;
     expect(bar.dataset.active).toBe("1");
     const labels = [...bar.querySelectorAll("button")].map((b) => b.textContent);
-    expect(labels).toEqual(["＋行↑", "＋行↓", "－行", "＋列←", "＋列→", "－列"]);
+    expect(labels).toEqual(["＋行↑", "＋行↓", "－行", "＋列←", "＋列→", "－列", "对齐:左"]);
     view.destroy();
   });
 
@@ -235,6 +236,77 @@ describe("表格工具条（鼠标操作）", () => {
     const del = [...view.dom.querySelectorAll(".nf-table-btn")]
       .find((b) => b.textContent === "－行") as HTMLButtonElement;
     expect(del.disabled).toBe(true);
+    view.destroy();
+  });
+});
+
+describe("列对齐（markdown 对齐行）", () => {
+  const AL = ["| A | B | C |", "| --- | :---: | ---: |", "| 1 | 2 | 3 |"].join("\n");
+
+  it("读取当前列对齐：左 / 中 / 右", () => {
+    const view = makeView(AL);
+    place(view, "| A | B | C |", 0, 0);
+    expect(columnAlignAt(view)).toBe("left");
+    place(view, "| A | B | C |", 1, 0);
+    expect(columnAlignAt(view)).toBe("center");
+    place(view, "| A | B | C |", 2, 0);
+    expect(columnAlignAt(view)).toBe("right");
+    view.destroy();
+  });
+
+  it("设置对齐只改对齐行那一格", () => {
+    const view = makeView(AL);
+    place(view, "| A | B | C |", 0, 0);
+    expect(setColumnAlign(view, "center")).toBe(true);
+    expect(view.state.doc.toString().split("\n")[1]).toBe("| :---: | :---: | ---: |");
+    expect(setColumnAlign(view, "right")).toBe(true);
+    expect(view.state.doc.toString().split("\n")[1]).toBe("| ---: | :---: | ---: |");
+    expect(setColumnAlign(view, "left")).toBe(true);
+    expect(view.state.doc.toString().split("\n")[1]).toBe("| --- | :---: | ---: |");
+    view.destroy();
+  });
+
+  it("保留原有虚线宽度", () => {
+    const view = makeView(["| A |", "| ----- |", "| 1 |"].join("\n"));
+    place(view, "| A |", 0, 0);
+    setColumnAlign(view, "center");
+    expect(view.state.doc.toString().split("\n")[1]).toBe("| :-----: |");
+    view.destroy();
+  });
+
+  it("循环：左 → 中 → 右 → 左", () => {
+    const view = makeView(AL);
+    place(view, "| A | B | C |", 0, 0);
+    cycleColumnAlign(view);
+    expect(columnAlignAt(view)).toBe("center");
+    cycleColumnAlign(view);
+    expect(columnAlignAt(view)).toBe("right");
+    cycleColumnAlign(view);
+    expect(columnAlignAt(view)).toBe("left");
+    view.destroy();
+  });
+
+  it("非表格内不生效", () => {
+    const view = makeView("段落");
+    view.dispatch({ selection: { anchor: 2 } });
+    expect(setColumnAlign(view, "center")).toBe(false);
+    expect(cycleColumnAlign(view)).toBe(false);
+    view.destroy();
+  });
+
+  it("工具条「对齐」按钮显示当前对齐并可点击循环", () => {
+    const view = makeView(AL);
+    place(view, "| A | B | C |", 1, 0);
+    const bar = view.dom.querySelector(".nf-table-bar") as HTMLElement;
+    const btn = [...bar.querySelectorAll<HTMLButtonElement>(".nf-table-btn")]
+      .find(b => b.textContent?.startsWith("对齐"))!;
+    expect(btn.textContent).toBe("对齐:中");
+    btn.click();
+    expect(columnAlignAt(view)).toBe("right");
+    const btn2 = [...(view.dom.querySelector(".nf-table-bar") as HTMLElement)
+      .querySelectorAll<HTMLButtonElement>(".nf-table-btn")]
+      .find(b => b.textContent?.startsWith("对齐"))!;
+    expect(btn2.textContent).toBe("对齐:右");
     view.destroy();
   });
 });

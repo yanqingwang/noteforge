@@ -283,6 +283,66 @@ export function deleteCol(view: EditorView): boolean {
   return true;
 }
 
+// ── 列对齐 ───────────────────────────────────────────────────────────
+
+/** markdown 的列对齐由对齐行决定：--- 左 / :---: 中 / ---: 右 */
+export type ColumnAlign = "left" | "center" | "right";
+
+const ALIGN_CYCLE: ColumnAlign[] = ["left", "center", "right"];
+
+/** 生成对齐标记，保留原有虚线宽度（至少 3 个） */
+function alignMarker(align: ColumnAlign, width = 3): string {
+  const w = Math.max(3, width);
+  const dashes = "-".repeat(w);
+  if (align === "center") return `:${dashes}:`;
+  if (align === "right") return `${dashes}:`;
+  return dashes;
+}
+
+/** 读取当前列的对齐方式（不在表格内返回 left） */
+export function columnAlignAt(view: EditorView, colIndex?: number): ColumnAlign {
+  const t = findTableAt(view.state, view.state.selection.main.head);
+  if (!t) return "left";
+  const delim = t.rows[1];
+  if (!delim?.delim) return "left";
+  const cell = delim.cells[colIndex ?? t.colIndex];
+  if (!cell) return "left";
+  const raw = view.state.sliceDoc(cell.from, cell.to).trim();
+  const hasLeft = raw.startsWith(":");
+  const hasRight = raw.endsWith(":");
+  if (hasLeft && hasRight) return "center";
+  if (hasRight) return "right";
+  return "left";
+}
+
+/** 设置当前列的对齐（只改对齐行那一格，标准 markdown 做法） */
+export function setColumnAlign(view: EditorView, align: ColumnAlign): boolean {
+  const t = findTableAt(view.state, view.state.selection.main.head);
+  if (!t) return false;
+  const delim = t.rows[1];
+  if (!delim?.delim) return false;
+  const cell = delim.cells[t.colIndex];
+  if (!cell) return false;
+  const raw = view.state.sliceDoc(cell.from, cell.to);
+  const width = (raw.match(/-/g) || []).length;
+  const marker = alignMarker(align, width);
+  view.dispatch({
+    changes: { from: cell.from, to: cell.to, insert: marker },
+    selection: EditorSelection.single(cell.from + marker.length),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+/** 循环切换：左 → 中 → 右 → 左 */
+export function cycleColumnAlign(view: EditorView): boolean {
+  const cur = columnAlignAt(view);
+  const next = ALIGN_CYCLE[(ALIGN_CYCLE.indexOf(cur) + 1) % ALIGN_CYCLE.length];
+  return setColumnAlign(view, next);
+}
+
+const ALIGN_LABEL: Record<ColumnAlign, string> = { left: "左", center: "中", right: "右" };
+
 // ── 单元格导航（Tab / Shift-Tab）─────────────────────────────────────
 
 /** 按阅读顺序列出可编辑单元格（跳过对齐行） */
@@ -437,6 +497,13 @@ class TableFloater {
       this.makeButton("＋列←", "在左侧插入一列（Alt+←）", () => insertCol(view, "left"), false),
       this.makeButton("＋列→", "在右侧插入一列（Alt+→）", () => insertCol(view, "right"), false),
       this.makeButton("－列", "删除当前列（Alt+Shift+← / →）", () => deleteCol(view), !t.canDeleteCol),
+      this.sep(),
+      this.makeButton(
+        `对齐:${ALIGN_LABEL[columnAlignAt(view)]}`,
+        "切换当前列对齐：左 → 中 → 右（Alt+Shift+A；也可 Alt+Shift+L / C / R 直接指定）",
+        () => cycleColumnAlign(view),
+        false,
+      ),
     );
 
     this.schedulePosition(view);
@@ -480,6 +547,10 @@ export function tableEditing(): Extension {
         { key: "Alt-ArrowRight", run: (v: EditorView) => insertCol(v, "right") },
         { key: "Alt-Shift-ArrowLeft", run: (v: EditorView) => deleteCol(v) },
         { key: "Alt-Shift-ArrowRight", run: (v: EditorView) => deleteCol(v) },
+        { key: "Alt-Shift-a", run: (v: EditorView) => cycleColumnAlign(v) },
+        { key: "Alt-Shift-l", run: (v: EditorView) => setColumnAlign(v, "left") },
+        { key: "Alt-Shift-c", run: (v: EditorView) => setColumnAlign(v, "center") },
+        { key: "Alt-Shift-r", run: (v: EditorView) => setColumnAlign(v, "right") },
       ]),
     ),
   ];
