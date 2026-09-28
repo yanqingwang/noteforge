@@ -6,6 +6,7 @@ import StatusBar from "./components/StatusBar";
 import FileTree from "./components/FileTree";
 import EditorPane from "./components/EditorPane";
 import type { ViewMode } from "./components/EditorPane";
+import { resolveWikilink, splitWikilink } from "./editor/wikilink";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import OutlinePanel from "./components/OutlinePanel";
@@ -105,26 +106,27 @@ function App() {
 
   const readNote = useCallback(async (notePath: string) => {
     if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '没有打开 Vault' } as any); return; }
-    dispatch({ type: 'SET_STATUS', text: `跳转: ${notePath}` } as any);
-    // Resolve wikilink target to actual file path in vault
-    let resolved = notePath;
-    if (!resolved.endsWith(".md") && !resolved.endsWith(".html")) {
-      // Search files for a matching .md file (by exact path or filename)
-      const match = files.find(f =>
-        f.path === resolved ||
-        f.path === resolved + ".md" ||
-        f.path.endsWith("/" + resolved) ||
-        f.path.endsWith("/" + resolved + ".md") ||
-        // Match by filename without extension (for [[Title]]-style wikilinks)
-        f.path.replace(/\.md$/, "").split("/").pop() === resolved
-      );
-      if (match) resolved = match.path;
+    // 统一 wikilink 解析：完整路径 → 路径后缀 → 文件名（忽略大小写）→ 唯一模糊；
+    // 别名/锚点不参与匹配，歧义时不再盲跳到某个文件。
+    const hasExt = /\.(md|markdown|html?)$/i.test(notePath);
+    const hit = hasExt
+      ? { path: notePath }
+      : resolveWikilink(notePath, files as unknown as { path: string; is_dir?: boolean }[]);
+    if (!hit.path) {
+      const { target } = splitWikilink(notePath);
+      dispatch({
+        type: 'SET_STATUS',
+        text: hit.ambiguous
+          ? `⚠ 链接「${target}」有多个同名文件，请写完整路径`
+          : `❌ 未找到链接目标: ${target}`,
+      } as any);
+      return;
     }
-    // If still no match, try fuzzy search
-    if (!resolved.endsWith(".md") && !resolved.endsWith(".html")) {
-      const withMd = resolved + ".md";
-      const fuzzy = files.find(f => f.path.toLowerCase().includes(withMd.toLowerCase()) || f.path.toLowerCase().includes(resolved.toLowerCase()));
-      if (fuzzy) resolved = fuzzy.path;
+    const resolved = hit.path;
+    if (hit.ambiguous && hit.ambiguous.length > 1) {
+      dispatch({ type: 'SET_STATUS', text: `跳转: ${resolved}（同名 ${hit.ambiguous.length} 个，取最浅路径）` } as any);
+    } else {
+      dispatch({ type: 'SET_STATUS', text: `跳转: ${resolved}` } as any);
     }
     // .html 作为普通文件走编辑器（源码/HTML 两种并列格式在 EditorPane 内切换）
     // 其他附件（图片、PDF）仍走独立查看面板
@@ -177,6 +179,62 @@ function App() {
     return find(state.main);
   })();
   const cache = activeFile ? contentCache[activeFile] : null;
+
+  // ── 外部文件变更：本地磁盘改动后自动刷新显示内容 ──────────────────
+  // 只在「编辑器无未保存修改」时覆盖，避免冲掉用户正在输入的内容。
+  const lastStampRef = useRef<Record<string, string>>({});
+  const treeSigRef = useRef("");
+  useEffect(() => {
+    if (!vaultPath) return;
+    let stopped = false;
+
+    const pollNote = async () => {
+      if (stopped) return;
+      const file = activeFile;
+      if (!file) return;
+      try {
+        const stamp = await invoke<{ mtime_ms: number; size: number }>("stat_note", { notePath: file });
+        const key = `${stamp.mtime_ms}:${stamp.size}`;
+        const last = lastStampRef.current[file];
+        lastStampRef.current[file] = key;
+        if (!last || last === key) return;
+        // 磁盘已变：先看编辑器有没有未保存修改
+        if (editorBridge.isDirty?.()) {
+          dispatch({ type: 'SET_STATUS', text: `⚠ ${file} 已在磁盘更新（当前有未保存修改，保存后生效）` } as any);
+          return;
+        }
+        const note = await invoke<any>("read_note", { notePath: file });
+        if (stopped) return;
+        setContentCache(c => ({ ...c, [file]: { content: note.content, html: note.html } }));
+        dispatch({ type: 'OPEN_FILE', path: file, content: note.content, html: note.html } as any);
+        dispatch({ type: 'SET_STATUS', text: `🔄 已从磁盘刷新: ${file}` } as any);
+      } catch {
+        /* 文件可能被删除或暂时不可读，忽略 */
+      }
+    };
+
+    const pollTree = async () => {
+      if (stopped) return;
+      try {
+        const tree = await invoke<FileEntry[]>("get_file_tree", {});
+        if (stopped) return;
+        const sig = tree.map(f => f.path).join("\u0001");
+        if (sig === treeSigRef.current) return;
+        treeSigRef.current = sig;
+        setFiles(tree);
+      } catch { /* ignore */ }
+    };
+
+    const noteTimer = setInterval(pollNote, 3000);
+    const treeTimer = setInterval(pollTree, 15000);
+    void pollTree();
+    return () => {
+      stopped = true;
+      clearInterval(noteTimer);
+      clearInterval(treeTimer);
+    };
+  }, [vaultPath, activeFile]);
+
   const noteCount = files.filter(f => !f.is_dir).length;
 
   // ── Menu actions (stable references) ──────────────────────────────
@@ -227,6 +285,7 @@ function App() {
     try {
       dispatch({ type: 'SET_STATUS', text: '重新加载...' } as any);
       const tree: FileEntry[] = await invoke("get_file_tree", {});
+      treeSigRef.current = tree.map(f => f.path).join("\u0001");
       setFiles(tree);
       dispatch({ type: 'SET_STATUS', text: `已刷新: ${vaultPath}` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `刷新失败: ${e}` } as any); }

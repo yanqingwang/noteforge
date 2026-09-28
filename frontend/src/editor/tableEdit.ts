@@ -345,6 +345,8 @@ class TableFloater {
       "box-shadow:0 1px 3px rgba(0,0,0,0.12)", "font-size:11px", "line-height:1.6", "white-space:nowrap",
     ].join(";"));
     this.el = el;
+    // 浮层用 position:absolute 挂在 view.dom 上，确保它是定位父级
+    if (!view.dom.style.position) view.dom.style.position = "relative";
     view.dom.appendChild(el);
 
     const onScroll = () => this.schedulePosition(view);

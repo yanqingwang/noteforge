@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { EditorView, keymap, lineNumbers as cmLineNumbers, highlightActiveLine, drawSelection, dropCursor } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -10,6 +10,7 @@ import { editorBridge, EchoTracker } from "../editor/bridge";
 import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
 import HtmlViewer from "./HtmlViewer";
+import { resolveWikilink } from "../editor/wikilink";
 
 type ViewMode = "source" | "preview" | "split" | "live" | "html";
 
@@ -61,6 +62,9 @@ const EditorPane = memo(function EditorPane({
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
+  // wikilink 解析（live 装饰与预览共用）：判断链接目标是否存在
+  const resolveLink = useCallback((target: string) =>
+    resolveWikilink(target, cbRef.current.files as unknown as { path: string; is_dir?: boolean }[]).path !== null, []);
   const dirtyRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 编辑器 echo 指纹（乱序安全）：App 异步渲染回写的任何近期旧值都不回灌
@@ -113,7 +117,7 @@ const EditorPane = memo(function EditorPane({
           // 可重组部分：live 装饰（含主题/快捷键/补全）
           liveComp.current.of(nfExtensions({
             live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
-            theme: cbRef.current.theme,
+            theme: cbRef.current.theme, resolveLink,
           })),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) {
@@ -135,6 +139,7 @@ const EditorPane = memo(function EditorPane({
     viewRef.current = view;
     // 桥接：App 的保存按钮用最新文档，避免 React 缓存滞后
     editorBridge.requestSave = () => { doSave(); };
+    editorBridge.isDirty = () => dirtyRef.current;
     // 注册大纲跳转监听
     const jumpListener = (item: OutlineItem) => {
       const v = viewRef.current;
@@ -150,6 +155,7 @@ const EditorPane = memo(function EditorPane({
       view.destroy();
       viewRef.current = null;
       editorBridge.requestSave = null;
+      editorBridge.isDirty = null;
       editorBridge.jumpListeners = editorBridge.jumpListeners.filter(f => f !== jumpListener);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -163,7 +169,7 @@ const EditorPane = memo(function EditorPane({
     view.dispatch({
       effects: liveComp.current.reconfigure(nfExtensions({
         live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
-        theme: cbRef.current.theme,
+        theme: cbRef.current.theme, resolveLink,
       })),
     });
   }, [mode, theme]);
@@ -187,6 +193,9 @@ const EditorPane = memo(function EditorPane({
       emitOutline(content);
       dirtyRef.current = false;
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      // 打开文件后把焦点交给编辑器（否则 QuickSwitcher 关闭后焦点留在 body，
+      // 键盘快捷键与表格工具条等编辑器内交互都失效）
+      if (activeFile) view.focus();
       return;
     }
 
@@ -235,11 +244,18 @@ const EditorPane = memo(function EditorPane({
     return () => scroller.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ── preview/split 预览面板的代码高亮 ──
+  // ── preview/split 预览面板：wikilink 样式 + 未解析标记 ──
   useEffect(() => {
-    if (!previewRef.current) return;
-    previewRef.current.querySelectorAll('a[data-note]').forEach(a => a.classList.add('wikilink'));
-  }, [previewHtml, mode]);
+    const host = previewRef.current;
+    if (!host) return;
+    host.querySelectorAll('a[data-note]').forEach(a => {
+      a.classList.add('wikilink');
+      const target = a.getAttribute('data-note') || '';
+      const ok = resolveLink(target);
+      a.classList.toggle('wikilink-missing', !ok);
+      if (ok) a.removeAttribute('title'); else a.setAttribute('title', '未找到该文件');
+    });
+  }, [previewHtml, mode, files, resolveLink]);
 
   // 组件卸载前保存
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);

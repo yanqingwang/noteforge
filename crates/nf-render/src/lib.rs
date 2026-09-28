@@ -197,6 +197,36 @@ fn parse_inline(text: &str) -> Vec<StyledSegment> {
 
 
 
+/// HTML 属性值转义（wikilink 目标里可能出现 " & < >）
+fn escape_html_attr(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// 文本节点转义
+fn escape_html_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Render Markdown to HTML using comrak with GFM extensions.
 /// Pre-processes wikilinks [[target]] and callouts > [!type] before rendering.
 pub fn render_html(content: &str) -> String {
@@ -223,7 +253,11 @@ pub fn render_html(content: &str) -> String {
                 if is_image_ext(&target) {
                     processed.push_str(&format!("<img src=\"note://{}\" alt=\"{}\" style=\"max-width:100%\"/>", target, target));
                 } else {
-                    processed.push_str(&format!("<a href=\"#\" data-note=\"{}\">{}</a>", target, target));
+                    processed.push_str(&format!(
+                        "<a href=\"#\" data-note=\"{}\">{}</a>",
+                        escape_html_attr(target.trim()),
+                        escape_html_text(target.trim())
+                    ));
                 }
                 i = end + 2;
                 continue;
@@ -246,7 +280,11 @@ pub fn render_html(content: &str) -> String {
                 };
                 let clean_target = target.split('#').next().unwrap_or(target);
                 let label = display.unwrap_or(target);
-                processed.push_str(&format!("<a href=\"#\" data-note=\"{}\">{}</a>", clean_target, label));
+                processed.push_str(&format!(
+                    "<a href=\"#\" data-note=\"{}\">{}</a>",
+                    escape_html_attr(clean_target.trim()),
+                    escape_html_text(label.trim())
+                ));
                 i = end + 2;
                 continue;
             }
@@ -266,6 +304,11 @@ pub fn render_html(content: &str) -> String {
     options.render.github_pre_lang = true;
     options.render.width = 0;
     options.parse.smart = true;
+    // 必须允许 raw HTML：上面预处理的 <a data-note>  wikilink 会被 comrak
+    // 默认替换成 `<!-- raw HTML omitted -->`，导致预览/分栏模式下所有
+    // [[双链]] 都渲染不出来、点击委托也匹配不到。安全性由 tagfilter 限制
+    // 危险标签，且预览容器用 innerHTML 注入（script 不会执行）。
+    options.render.unsafe_ = true;
     let html = comrak::markdown_to_html(&processed, &options);
 
     html
@@ -274,6 +317,17 @@ pub fn render_html(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wikilink_escapes_and_strips_subpath() {
+        // 别名只影响显示，#锚点不进 data-note
+        let html = render_html("见 [[docs/overview#结论|结论]] 与 [[a&b\"c]]");
+        assert!(html.contains("data-note=\"docs/overview\""), "{}", html);
+        assert!(html.contains(">结论<"), "{}", html);
+        // 特殊字符被转义，不破坏属性
+        assert!(html.contains("&amp;") && html.contains("&quot;"), "{}", html);
+        assert!(!html.contains("data-note=\"a&b"), "{}", html);
+    }
 
     #[test]
     fn test_render_chinese() {

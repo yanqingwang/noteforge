@@ -257,6 +257,10 @@ const lpThemeStyles = (dark: boolean) => ({
     borderRadius: "3px", padding: "1px 4px", cursor: "pointer",
   },
   ".lp-wikilink:hover": { background: dark ? "#26507f" : "#b6e0ff", textDecoration: "underline" },
+  ".lp-wikilink-missing": {
+    color: dark ? "#f0883e" : "#bc4c00", background: dark ? "#3a2a12" : "#ffe8d6",
+    borderBottom: "1px dashed currentColor",
+  },
   ".lp-embed-image": { display: "block", margin: "6px 0" },
   ".lp-task-checkbox": { marginRight: "4px", cursor: "pointer" },
   ".cm-selectionBackground": { backgroundColor: dark ? "#264f78 !important" : "#b4d5fe !important" },
@@ -284,12 +288,14 @@ export interface EditorExtOptions {
   theme?: "light" | "dark";
   /** 追加 keymap（Ctrl+S 等，优先级更高） */
   extraKeys?: any[];
+  /** wikilink 目标是否存在于 vault（live 模式下标记未解析链接） */
+  resolveLink?: (target: string) => boolean;
 }
 
 export function nfExtensions(opts: EditorExtOptions): Extension[] {
   return [
     themeFor(opts.theme ?? "light"),
-    ...(opts.live ? [livePreview()] : []),
+    ...(opts.live ? [livePreview(opts.resolveLink)] : []),
     tableEditing(),
     autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
     closeBrackets(),

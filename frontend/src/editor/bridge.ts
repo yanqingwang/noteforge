@@ -17,11 +17,14 @@ export const editorBridge: {
   latestDoc: string | null;
   activeFile: string | null;
   requestSave: (() => void) | null;
+  /** 当前文档是否有未保存修改（外部磁盘刷新据此决定是否覆盖） */
+  isDirty: (() => boolean) | null;
   jumpListeners: ((item: OutlineItem) => void)[];
 } = {
   latestDoc: null,
   activeFile: null,
   requestSave: null,
+  isDirty: null,
   jumpListeners: [],
 };
 

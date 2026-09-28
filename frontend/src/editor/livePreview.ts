@@ -10,6 +10,7 @@ import type { DecorationSet, EditorView, ViewUpdate } from "@codemirror/view";
 import { RangeSet } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import { highlightCode } from "./highlight";
+import { splitWikilink } from "./wikilink";
 
 // ── Widgets ─────────────────────────────────────────────────────────
 
@@ -17,16 +18,23 @@ import { highlightCode } from "./highlight";
 class WikilinkWidget extends WidgetType {
   target: string;
   display: string;
-  constructor(target: string, display: string) {
+  resolved: boolean;
+  constructor(target: string, display: string, resolved = true) {
     super();
     this.target = target;
     this.display = display;
+    this.resolved = resolved;
   }
-  eq(other: WikilinkWidget) { return other.target === this.target && other.display === this.display; }
+  eq(other: WikilinkWidget) {
+    return other.target === this.target && other.display === this.display
+      && other.resolved === this.resolved;
+  }
   toDOM() {
     const span = document.createElement("span");
-    span.className = "lp-wikilink";
+    span.className = this.resolved ? "lp-wikilink" : "lp-wikilink lp-wikilink-missing";
+    // data-note 只放文件目标：#标题/^块 与别名不参与文件匹配
     span.setAttribute("data-note", this.target);
+    if (!this.resolved) span.title = "未找到该文件";
     span.textContent = this.display;
     return span;
   }
@@ -130,7 +138,7 @@ class CodeBlockWidget extends WidgetType {
 const wikilinkRe = /\[\[([^\]\n]+?)(?:\|([^\]\n]+))?\]\]/g;
 const embedImageRe = /!\[\[([^\]\n]+?)\]\]/g;
 
-function buildDecorations(view: EditorView): DecorationSet {
+function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): DecorationSet {
   const decos: Array<{ from: number; to: number; deco: Decoration }> = [];
   const add = (from: number, to: number, deco: Decoration) => decos.push({ from, to, deco });
   const state = view.state;
@@ -302,8 +310,12 @@ function buildDecorations(view: EditorView): DecorationSet {
       for (const m of line.text.matchAll(wikilinkRe)) {
         // 嵌入图片已处理，跳过 ![[ ]]（正则不带 !，不会重叠）
         const start = line.from + (m.index ?? 0);
+        const raw = m[1];
+        const parts = splitWikilink(raw);
+        const label = m[2] || parts.alias || parts.target;
+        const resolved = !resolve || resolve(parts.target);
         add(start, start + m[0].length,
-          Decoration.replace({ widget: new WikilinkWidget(m[1], m[2] || m[1]) }));
+          Decoration.replace({ widget: new WikilinkWidget(parts.target, label, resolved) }));
       }
     }
   }
@@ -312,14 +324,14 @@ function buildDecorations(view: EditorView): DecorationSet {
 }
 
 /** Live preview 扩展：live 模式下启用，source/split 模式卸载 */
-export function livePreview(): Extension {
+export function livePreview(resolveTarget?: (t: string) => boolean): Extension {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
-      constructor(view: EditorView) { this.decorations = buildDecorations(view); }
+      constructor(view: EditorView) { this.decorations = buildDecorations(view, resolveTarget); }
       update(u: ViewUpdate) {
         if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged) {
-          this.decorations = buildDecorations(u.view);
+          this.decorations = buildDecorations(u.view, resolveTarget);
         }
       }
     },

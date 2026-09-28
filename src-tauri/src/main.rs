@@ -257,12 +257,34 @@ fn vault_stats(state: tauri::State<'_, AppState>) -> Result<String, String> {
     Ok(format!("Vault统计: {}笔记 {}附件 {}目录 {}KB", notes, attachments, dirs, total_size / 1024))
 }
 
+#[derive(serde::Serialize)]
+pub struct FileStamp {
+    pub mtime_ms: u64,
+    pub size: u64,
+}
+
 #[tauri::command]
 fn read_file(path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
     state.with_vault(|vault| {
         vault.read_note(path).map_err(|e| e.to_string())
             .map(|content| String::from_utf8_lossy(&content).to_string())
     })
+}
+
+/// 返回文件的修改时间与大小（前端用于检测本地磁盘的外部变更）
+#[tauri::command]
+fn stat_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<FileStamp, String> {
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    let vault = vault.as_ref().ok_or_else(|| "No vault open".to_string())?;
+    let abs = vault.root().join(note_path);
+    let meta = std::fs::metadata(&abs).map_err(|e| e.to_string())?;
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    Ok(FileStamp { mtime_ms, size: meta.len() })
 }
 
 /// Read a file and return it as a data URL (base64-encoded).
@@ -348,6 +370,7 @@ fn main() {
             get_config,
             update_config,
             read_file,
+            stat_note,
             read_file_data,
             write_attachment,
             sync_cmd::sync_configure,
