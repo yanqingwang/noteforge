@@ -8,6 +8,7 @@ import type { Extension } from "@codemirror/state";
 import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { livePreview } from "./livePreview";
+import { tableEditing } from "./tableEdit";
 
 // ── 列表续行（ED-05）────────────────────────────────────────────────
 
@@ -289,6 +290,7 @@ export function nfExtensions(opts: EditorExtOptions): Extension[] {
   return [
     themeFor(opts.theme ?? "light"),
     ...(opts.live ? [livePreview()] : []),
+    tableEditing(),
     autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
     closeBrackets(),
     EditorView.domEventHandlers({
