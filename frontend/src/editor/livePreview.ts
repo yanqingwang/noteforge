@@ -9,6 +9,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { DecorationSet, EditorView, ViewUpdate } from "@codemirror/view";
 import { RangeSet } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
+import type { SyntaxNodeRef } from "@lezer/common";
 import { highlightCode } from "./highlight";
 import { splitWikilink } from "./wikilink";
 
@@ -137,6 +138,106 @@ class CodeBlockWidget extends WidgetType {
 
 const wikilinkRe = /\[\[([^\]\n]+?)(?:\|([^\]\n]+))?\]\]/g;
 const embedImageRe = /!\[\[([^\]\n]+?)\]\]/g;
+
+/**
+ * 表格渲染（对标 Obsidian 编辑视图）：
+ *  - 非光标行：渲染成表格外观（表头加粗浅底、竖线淡化成网格线、行间横线），
+ *    单元格文字即文档原文，所以可以直接在单元格里改数据；
+ *  - 光标所在行：回显源码管道符，方便改结构；
+ *  - 对齐行（| --- | --- |）：默认渲染成一条横线，光标落上去才显示三条短线。
+ *
+ * 全程不改文档结构，只用 line/mark/replace(同行内) 装饰，避免块级装饰
+ * 触发 CM6 的 "Block decorations may not be specified via plugins"。
+ */
+function decorateTable(
+  view: EditorView,
+  node: SyntaxNodeRef,
+  focusLines: Set<number>,
+  add: (from: number, to: number, deco: Decoration) => void,
+) {
+  const state = view.state;
+  const firstLine = state.doc.lineAt(node.from).number;
+  const lastLine = state.doc.lineAt(node.to).number;
+
+  for (let l = firstLine; l <= lastLine; l++) {
+    if (focusLines.has(l)) continue;              // 光标行回显源码
+    const line = state.doc.line(l);
+    const cells = tableCells(line.text);
+    if (!cells) continue;
+    const isDelim = isDelimRow(line.text);
+
+    // 行装饰：表头 / 中间行 / 末行，拼出表格边框
+    const cls = isDelim
+      ? "lp-trow lp-trow-delim"
+      : `lp-trow${l === firstLine ? " lp-trow-head" : ""}${l === lastLine ? " lp-trow-last" : ""}`;
+    add(line.from, line.from, Decoration.line({ class: cls }));
+
+    // 对齐行：把 --- 藏掉，交给 CSS 的 border 画横线
+    if (isDelim) {
+      for (const seg of cells) {
+        if (line.text.slice(seg.start, seg.end).includes("-")) {
+          add(line.from + seg.start, line.from + seg.end, Decoration.replace({}));
+        }
+      }
+      // 淡化的竖线（保留在文本里，不做替换，列宽不会塌）
+      for (const p of pipesOf(line.text)) {
+        add(line.from + p, line.from + p + 1, Decoration.mark({ class: "lp-tsep" }));
+      }
+      continue;
+    }
+
+    // 数据/表头行：单元格内容加内边距，竖线淡化成网格线
+    for (const seg of cells) {
+      add(line.from + seg.start, line.from + seg.end, Decoration.mark({ class: "lp-tcell" }));
+    }
+    for (const p of pipesOf(line.text)) {
+      add(line.from + p, line.from + p + 1, Decoration.mark({ class: "lp-tsep" }));
+    }
+  }
+}
+
+/** 一行是否是表格行（去掉缩进后以 | 开头或结尾、且含 |） */
+function isTableRowText(text: string): boolean {
+  const t = text.trim();
+  return t.includes("|") && (t.startsWith("|") || t.endsWith("|"));
+}
+
+/** 单元格内容的 [start,end) 区间（相对行首，不含两侧空白与竖线） */
+function tableCells(text: string): Array<{ start: number; end: number }> | null {
+  if (!isTableRowText(text)) return null;
+  const out: Array<{ start: number; end: number }> = [];
+  let segStart = 0;
+  const pipes = pipesOf(text);
+  for (const p of pipes) {
+    if (p === 0) { segStart = 1; continue; }         // 行首竖线
+    let s = segStart, e = p;
+    while (s < e && (text[s] === " " || text[s] === "\t")) s++;
+    while (e > s && (text[e - 1] === " " || text[e - 1] === "\t")) e--;
+    if (e > s) out.push({ start: s, end: e });
+    segStart = p + 1;
+  }
+  if (text.slice(segStart).trim() !== "") {
+    let s = segStart, e = text.length;
+    while (e > s && (text[e - 1] === " ")) e--;
+    out.push({ start: s, end: e });
+  }
+  return out;
+}
+
+/** 未转义竖线位置 */
+function pipesOf(text: string): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "|" && (i === 0 || text[i - 1] !== "\\")) out.push(i);
+  }
+  return out;
+}
+
+/** 是否是对齐行（| --- | :---: | ---: |） */
+function isDelimRow(text: string): boolean {
+  const t = text.trim();
+  return t.includes("-") && /^[\s|:-]*-[\s|:-]*$/.test(t);
+}
 
 function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): DecorationSet {
   const decos: Array<{ from: number; to: number; deco: Decoration }> = [];
@@ -286,11 +387,7 @@ function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): D
           return;
         }
         if (name === "Table") {
-          const start = lineOf(node.from).number, end = lineOf(node.to).number;
-          for (let l = start; l <= end; l++) {
-            const line = state.doc.line(l);
-            add(line.from, line.from, Decoration.line({ class: "lp-tableline" }));
-          }
+          decorateTable(view, node, focusLines, add);
           return;
         }
       },

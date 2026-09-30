@@ -493,11 +493,12 @@ function App() {
           }} />
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ padding: "4px 12px", background: "#f8f8f8", borderBottom: "1px solid #ddd", fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
-              <span>🖼</span>
-              <span style={{ flex: 1 }}>{htmlViewFile}</span>
+            <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+              <span style={{ fontSize: 12 }}>🖼</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{htmlViewFile}</span>
               <button onClick={() => setHtmlViewFile(null)}
-                style={{ padding: "2px 8px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#999", fontSize: 16 }}>✕</button>
+                title="关闭"
+                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
             </div>
             <ImageViewer filePath={htmlViewFile} />
           </div>

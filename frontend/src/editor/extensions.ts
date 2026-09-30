@@ -250,7 +250,34 @@ const lpThemeStyles = (dark: boolean) => ({
     background: dark ? "#252526" : "#f6f8fa", borderRadius: "6px",
     margin: "0", overflowX: "auto", display: "block",
   },
-  ".lp-tableline": { fontFamily: '"SF Mono", Consolas, monospace', fontSize: "0.95em" },
+  // ── 表格（live 模式渲染成表格外观，光标行回显源码）──
+  ".lp-trow": {
+    fontFamily: "inherit", fontSize: "1em",
+    padding: "3px 0", lineHeight: "1.6",
+  },
+  ".lp-trow-head": {
+    fontWeight: 600,
+    background: dark ? "#252526" : "#f6f8fa",
+    borderTop: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderLeft: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderRight: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+  },
+  ".lp-trow-last": {
+    borderLeft: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderRight: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderBottom: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+  },
+  ".lp-trow-delim": {
+    borderBottom: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderLeft: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    borderRight: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
+    background: "transparent",
+  },
+  ".lp-tcell": { padding: "0 2px" },
+  ".lp-tsep": {
+    color: dark ? "#454545" : "#c9d1d9",
+    fontWeight: 400,
+  },
   ".lp-link": { color: dark ? "#6cb2ff" : "#0969da", textDecoration: "underline" },
   ".lp-wikilink": {
     color: dark ? "#6cb2ff" : "#0969da", background: dark ? "#1c3a5e" : "#ddf4ff",
