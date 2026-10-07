@@ -340,6 +340,8 @@ async function testPlugin(shim, plugin, sharedApi = null) {
     editorExtensions: 0,
     postProcessors: 0,
     cmModulesUsed: [],
+    commandIds: [],
+    viewShells: {},
     unresolvedRequires: [],
     unsupportedApi: {},
     apiErrors: {},
@@ -499,6 +501,8 @@ async function testPlugin(shim, plugin, sharedApi = null) {
   }
   result.commands = registered.getCommands?.().length ?? 0;
   result.settingTabs = registered.getSettingTabs?.().length ?? 0;
+  // 命令 id 快照：功能级验证要靠它确认「该有的命令都在」，光有数量说明不了问题
+  result.commandIds = (registered.getCommands?.() ?? []).map((c) => c.id ?? c.name ?? "?");
   result.editorExtensions = api.registry.editorExtensions.length;
   result.postProcessors = api.registry.postProcessors.size;
   result.views = [...api.workspace.factories.keys()].length;
@@ -508,14 +512,26 @@ async function testPlugin(shim, plugin, sharedApi = null) {
   for (const type of [...api.workspace.factories.keys()]) {
     try {
       const leaf = api.workspace.getLeaf(true);
-      // 被插件接管的扩展名走它自己的视图，这里带上对应文件才能测到真实渲染
+      // 被插件接管的扩展名（如 quadrant-chart 的 .mdx）走它自己的视图，
+      // 必须带上真实文件才测得到渲染 —— 否则 FileView 子类会停在「打开了但没内容」，
+      // 而这一阶段恰恰看不出来（象限图画布会是空图）。
       const ownedExt = api.workspace.registeredExtensions().find(
         (e) => api.workspace.viewTypeForExtension(e) === type,
       );
-      const state = ownedExt
-        ? { type, active: true, state: { file: VAULT_FILES[`sample.${ownedExt}`] ? `sample.${ownedExt}` : "" } }
-        : { type, active: true, state: {} };
-      if (ownedExt && !VAULT_FILES[`sample.${ownedExt}`]) continue;
+      let state = { type, active: true, state: {} };
+      if (ownedExt) {
+        let samplePath = `sample.${ownedExt}`;
+        if (!VAULT_FILES[samplePath]) {
+          // 样本 vault 里没有这个扩展名的文件就现造一个（内容给通用 frontmatter）
+          samplePath = `sample.${ownedExt}`;
+          try {
+            await api.vault.create(samplePath, "---\ntitle: 样本\n---\n\n样本内容\n");
+          } catch {
+            continue;
+          }
+        }
+        state = { type, active: true, state: { file: samplePath } };
+      }
       const factory = api.workspace.getViewFactory(type);
       if (!factory) continue;
       const view = factory(leaf);
@@ -526,6 +542,20 @@ async function testPlugin(shim, plugin, sharedApi = null) {
       if (state && typeof view.setState === "function") await view.setState(state, null);
       await view.onOpen?.();
       if (view.file && typeof view.onLoadFile === "function") await view.onLoadFile(view.file);
+      // 等一拍再量：不少视图是异步渲染的（Svelte 面板、动态 import）
+      await new Promise((r) => setTimeout(r, 120));
+      // DOM 摘要：判断「视图真的画出了东西」而不只是「没抛错」
+      const root = view.contentEl ?? view.containerEl;
+      if (root) {
+        result.viewShells ??= {};
+        result.viewShells[type] = {
+          children: root.childElementCount,
+          textLen: (root.textContent ?? "").trim().length,
+          tags: [...new Set([...root.querySelectorAll("*")].map((e) => e.tagName.toLowerCase()))]
+            .filter((t) => ["canvas", "svg", "input", "table", "pre", "iframe", "img"].includes(t))
+            .slice(0, 8),
+        };
+      }
       view.onunload?.();
     } catch (e) {
       viewErrors.push(`${type}: ${String(e?.message ?? e).split("\n")[0]}`);
@@ -854,7 +884,8 @@ async function main() {
         id: p.id, name: p.name, category: p.category, downloads: p.downloads, repo: p.repo,
         status: "fail-harness", phase: "harness", error: String(e?.message ?? e).split("\n")[0],
         commands: 0, views: 0, settingTabs: 0, editorExtensions: 0, postProcessors: 0,
-        cmModulesUsed: [], unresolvedRequires: [], unsupportedApi: {}, apiErrors: {},
+        cmModulesUsed: [], commandIds: [], viewShells: {},
+        unresolvedRequires: [], unsupportedApi: {}, apiErrors: {},
       };
     }
     process.removeListener("unhandledRejection", collect);
