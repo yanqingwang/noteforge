@@ -1,3 +1,4 @@
+mod plugin_cmd;
 mod sync_cmd;
 
 use nf_core::vault::VaultConfig;
@@ -380,6 +381,14 @@ fn main() {
             sync_cmd::sync_start,
             sync_cmd::sync_first_sync_needed,
             sync_cmd::sync_get_report,
+            plugin_cmd::list_plugins,
+            plugin_cmd::list_dir,
+            plugin_cmd::make_dir,
+            plugin_cmd::set_plugin_enabled,
+            plugin_cmd::uninstall_plugin,
+            plugin_cmd::install_plugin,
+            plugin_cmd::marketplace_index,
+            plugin_cmd::marketplace_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

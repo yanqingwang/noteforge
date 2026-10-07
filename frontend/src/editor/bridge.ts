@@ -20,12 +20,18 @@ export const editorBridge: {
   /** 当前文档是否有未保存修改（外部磁盘刷新据此决定是否覆盖） */
   isDirty: (() => boolean) | null;
   jumpListeners: ((item: OutlineItem) => void)[];
+  /**
+   * 当前 CodeMirror 视图。Obsidian 插件的 Editor API（dataview/tasks 等重度依赖）
+   * 需要直接操作编辑器状态，因此把视图实例暴露出来。
+   */
+  view: unknown | null;
 } = {
   latestDoc: null,
   activeFile: null,
   requestSave: null,
   isDirty: null,
   jumpListeners: [],
+  view: null,
 };
 
 export function requestOutlineJump(item: OutlineItem) {

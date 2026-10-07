@@ -1,0 +1,294 @@
+/**
+ * 插件设置页（设置对话框内的「插件」标签）：已安装管理 + Obsidian 官方市场安装。
+ *
+ * 市场索引用 obsidian-releases 的 community-plugins.json（官方插件浏览器同一份数据），
+ * 走 jsDelivr 取，避免本机到 github.com 不通。索引有 2.5MB，缓存在 localStorage 24h。
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { obsidianRuntime, type PluginSummary } from "../plugins/obsidianRuntime";
+
+interface InstalledPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  enabled: boolean;
+  has_main: boolean;
+  bytes: number;
+}
+
+interface MarketEntry {
+  id: string;
+  name: string;
+  repo: string;
+  author: string;
+  description: string;
+}
+
+const INDEX_KEY = "nf-plugin-market-index";
+const INDEX_TS_KEY = "nf-plugin-market-index-at";
+const INDEX_TTL = 24 * 3600 * 1000;
+
+interface PluginSettingsProps {
+  vaultPath: string;
+  dark: boolean;
+  onChanged: () => void;
+  onClose: () => void;
+}
+
+export default function PluginSettings({ vaultPath, dark, onChanged, onClose }: PluginSettingsProps) {
+  const [tab, setTab] = useState<"installed" | "market">("installed");
+  const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
+  const [market, setMarket] = useState<MarketEntry[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string>("");
+  const [installing, setInstalling] = useState<string | null>(null);
+
+  const fg = dark ? "#ccc" : "#333";
+  const border = dark ? "#3a3a3a" : "#e8e8e8";
+
+  const refreshInstalled = async () => {
+    try {
+      const list = await invoke<InstalledPlugin[]>("list_plugins", { vaultRoot: vaultPath });
+      setInstalled(list);
+    } catch (e) {
+      setStatus(`读取已安装插件失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  useEffect(() => {
+    void refreshInstalled();
+  }, [vaultPath]);
+
+  // 索引缓存 24h
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const at = Number(localStorage.getItem(INDEX_TS_KEY) ?? 0);
+      let indexJson = at && Date.now() - at < INDEX_TTL ? localStorage.getItem(INDEX_KEY) : null;
+      if (!indexJson) {
+        try {
+          indexJson = await invoke<string>("marketplace_index");
+          localStorage.setItem(INDEX_KEY, indexJson);
+          localStorage.setItem(INDEX_TS_KEY, String(Date.now()));
+        } catch (e) {
+          if (!cancelled) setStatus(`取市场索引失败：${e instanceof Error ? e.message : String(e)}`);
+          setLoading(false);
+          return;
+        }
+      }
+      const top = await invoke<MarketEntry[]>("marketplace_search", {
+        indexJson: indexJson ?? "[]",
+        query: "",
+        limit: 60,
+      });
+      if (!cancelled) {
+        setMarket(top);
+        setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const search = async (q: string) => {
+    setQuery(q);
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const indexJson = localStorage.getItem(INDEX_KEY) ?? "[]";
+      const res = await invoke<MarketEntry[]>("marketplace_search", { indexJson, query: q, limit: 40 });
+      setMarket(res);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const install = async (e: MarketEntry) => {
+    setInstalling(e.id);
+    setStatus(`正在安装 ${e.name}…`);
+    try {
+      const rep = await invoke<{ id: string; source: string; version: string; files: string[] }>(
+        "install_plugin",
+        { vaultRoot: vaultPath, repo: e.repo, idHint: e.id },
+      );
+      setStatus(`✓ ${rep.id} ${rep.version} 安装完成（${rep.files.join(", ")}；来源 ${rep.source}）`);
+      await refreshInstalled();
+      await obsidianRuntime.reload();
+      onChanged();
+    } catch (err) {
+      setStatus(`✗ ${e.name} 安装失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  const toggleEnabled = async (p: InstalledPlugin) => {
+    await invoke("set_plugin_enabled", { vaultRoot: vaultPath, id: p.id, enabled: !p.enabled });
+    await refreshInstalled();
+    await obsidianRuntime.reload();
+    onChanged();
+  };
+
+  const uninstall = async (p: InstalledPlugin) => {
+    if (!confirm(`删除插件 ${p.name}？\n目录：.obsidian/plugins/${p.id}`)) return;
+    await invoke("uninstall_plugin", { vaultRoot: vaultPath, id: p.id });
+    setStatus(`已卸载 ${p.name}`);
+    await refreshInstalled();
+    await obsidianRuntime.reload();
+    onChanged();
+  };
+
+  const installedIds = useMemo(() => new Set(installed.map((p) => p.id)), [installed]);
+  const runtimeList = obsidianRuntime.list() as PluginSummary[];
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "8px 0",
+    border: "none",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    background: active ? (dark ? "#333" : "#fff") : "transparent",
+    color: fg,
+  });
+
+  const cardStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    borderBottom: `1px solid ${border}`,
+    display: "flex",
+    gap: 8,
+    alignItems: "flex-start",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 420, color: fg }}>
+      <div style={{ display: "flex", borderBottom: `1px solid ${border}` }}>
+        <button style={tabStyle(tab === "installed")} onClick={() => setTab("installed")}>
+          已安装 {installed.length ? `(${installed.length})` : ""}
+        </button>
+        <button style={tabStyle(tab === "market")} onClick={() => setTab("market")}>
+          插件市场 {loading ? "…" : ""}
+        </button>
+      </div>
+
+      {status && (
+        <div style={{ padding: "6px 10px", fontSize: 12, background: dark ? "#333" : "#f2f2f2", borderBottom: `1px solid ${border}`, wordBreak: "break-all" }}>
+          {status}
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflow: "auto", fontSize: 13 }}>
+        {tab === "installed" ? (
+          installed.length === 0 ? (
+            <div style={{ padding: 20, opacity: 0.65, lineHeight: 1.8 }}>
+              还没有安装插件。切到「插件市场」可直接安装 Obsidian 官方市场的插件。
+              <br />
+              也可以手动把插件放进 <code>.obsidian/plugins/&lt;id&gt;/</code>，然后点「刷新」。
+              <br />
+              <button style={{ ...btn, marginTop: 10 }} onClick={() => { void refreshInstalled(); void obsidianRuntime.reload(); onChanged(); }}>
+                刷新
+              </button>
+            </div>
+          ) : (
+            installed.map((p) => {
+              const rt = runtimeList.find((r) => r.id === p.id);
+              return (
+                <div key={p.id} style={cardStyle}>
+                  <input type="checkbox" checked={p.enabled} onChange={() => void toggleEnabled(p)} title="启用/禁用" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500 }}>
+                      {p.name} <span style={{ opacity: 0.6, fontWeight: 400 }}>{p.version}</span>
+                    </div>
+                    <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{p.description}</div>
+                    <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>
+                      {p.author} · {Math.round(p.bytes / 1024)} KB · {p.id}
+                      {!p.has_main && <span style={{ color: "#d33" }}> · 缺少 main.js</span>}
+                      {p.enabled && rt?.error && <span style={{ color: "#d33" }}> · 加载失败：{rt.error}</span>}
+                      {p.enabled && !rt?.error && rt?.loaded && (
+                        <span style={{ color: "#2a7" }}> · 已加载（命令 {rt.commands.length} / 视图 {rt.views.length}）</span>
+                      )}
+                    </div>
+                  </div>
+                  <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
+                    删除
+                  </button>
+                </div>
+              );
+            })
+          )
+        ) : (
+          <>
+            <div style={{ padding: 8, display: "flex", gap: 6 }}>
+              <input
+                value={query}
+                onChange={(e) => void search(e.target.value)}
+                placeholder="搜索官方市场（8451 个插件）…"
+                style={{ flex: 1, padding: "5px 8px", fontSize: 13, font: "inherit", background: dark ? "#333" : "#fff", color: fg, border: `1px solid ${border}`, borderRadius: 4 }}
+              />
+              {query && (
+                <button
+                  style={btn}
+                  onClick={() => {
+                    setQuery("");
+                    void invoke<string>("marketplace_index").then(async (indexJson) => {
+                      setMarket(await invoke<MarketEntry[]>("marketplace_search", { indexJson, query: "", limit: 60 }));
+                    });
+                  }}
+                >
+                  重置
+                </button>
+              )}
+            </div>
+            {market.map((e) => (
+              <div key={e.id} style={cardStyle}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500 }}>{e.name}</div>
+                  <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{e.description}</div>
+                  <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>{e.author} · {e.repo}</div>
+                </div>
+                {installedIds.has(e.id) ? (
+                  <span style={{ fontSize: 12, opacity: 0.6 }}>已安装</span>
+                ) : (
+                  <button style={btn} disabled={installing === e.id} onClick={() => void install(e)}>
+                    {installing === e.id ? "安装中…" : "安装"}
+                  </button>
+                )}
+              </div>
+            ))}
+            {!loading && market.length === 0 && (
+              <div style={{ padding: 20, opacity: 0.65 }}>没有匹配的插件</div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div style={{ padding: 8, borderTop: `1px solid ${border}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button style={btn} onClick={() => void (async () => { await refreshInstalled(); await obsidianRuntime.reload(); onChanged(); })}>
+          刷新并重新加载
+        </button>
+        <button style={btn} onClick={onClose}>
+          关闭
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const btn: React.CSSProperties = {
+  border: "1px solid #bbb",
+  background: "transparent",
+  color: "inherit",
+  borderRadius: 4,
+  cursor: "pointer",
+  padding: "3px 10px",
+  fontSize: 12,
+  fontFamily: "inherit",
+};

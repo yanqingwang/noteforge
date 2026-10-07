@@ -9,6 +9,9 @@ import type { ViewMode } from "./components/EditorPane";
 import { resolveWikilink, splitWikilink } from "./editor/wikilink";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
+import PluginPanel from "./components/PluginPanel";
+import PluginSettings from "./components/PluginSettings";
+import { obsidianRuntime } from "./plugins/obsidianRuntime";
 import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
@@ -38,6 +41,7 @@ function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pluginSettingsOpen, setPluginSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
@@ -47,10 +51,14 @@ function App() {
     () => (localStorage.getItem('nf-html-mode') === 'source' ? 'source' : 'html'));
   const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
-  const [sidebarMode, setSidebarMode] = useState<"files" | "outline">("files");
+  const [sidebarMode, setSidebarMode] = useState<"files" | "outline" | "plugins">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("nf-theme") === "dark" ? "dark" : "light");
+  // 插件的内置命令（editor:save-file / editor:toggle-source 等）要回调宿主动作。
+  // 用 ref 中转：既避开闭包过期，又能让声明留在组件顶部（顶层赋值要求先声明）。
+  const saveNoteRef = useRef<(() => void) | null>(null);
+  const handleSetViewModeRef = useRef<((m: "source" | "preview" | "live") => void) | null>(null);
   const autoSyncTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const renderTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -101,6 +109,16 @@ function App() {
       localStorage.setItem('nf-last-vault', path);
       // Load plugins
       pluginManager.loadPlugins(path);
+      // Obsidian 兼容插件：加载 .obsidian/plugins 下已启用的插件
+      void obsidianRuntime.init({
+        vaultPath: () => path,
+        activeFile: () => activeFileRef.current,
+        openFile: async (p: string) => { await readNoteRef.current?.(p); },
+        saveFile: () => saveNoteRef.current?.(),
+        toggleMode: (m) => handleSetViewModeRef.current?.(m),
+        openSettings: () => setSettingsOpen(true),
+        ensureViewContainer: async (type: string) => document.querySelector<HTMLElement>(`[data-nf-plugin-view="${type}"]`),
+      }).catch((e) => console.warn("[plugin] 加载失败", e));
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
   }, []);
@@ -153,6 +171,7 @@ function App() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({ directory: true, multiple: false });
+  readNoteRef.current = readNote;
       if (selected) openVault(selected as string);
     } catch (e) { /* manual fallback */ }
   };
@@ -171,6 +190,7 @@ function App() {
       localStorage.setItem('nf-view-mode', m);
     }
   };
+  handleSetViewModeRef.current = (m) => handleSetMode(m);
   const activeGroup = (() => {
     const find = (n: any): any => {
       if (n?.tabs?.length > 0) return n;
@@ -267,6 +287,10 @@ function App() {
   // ── 全局快捷键：Ctrl+O 快速切换 / Ctrl+P 命令面板 / Ctrl+S 保存 / Ctrl+N 新建 ──
   // （与菜单标注及 Obsidian 习惯一致；编辑器已处理的按键让其自行 preventDefault）
   const newNoteRef = useRef(newNote);
+  // 插件运行时需要在 openVault 时就拿到「打开文件」能力，而 readNote 定义在其后 —— 用 ref 中转
+  const readNoteRef = useRef<((p: string) => Promise<void>) | null>(null);
+  const activeFileRef = useRef<string | null>(null);
+  activeFileRef.current = activeFile;
   newNoteRef.current = newNote;
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -389,6 +413,10 @@ function App() {
     for (const pc of pluginManager.getCommands()) {
       cmds.push({ id: `plugin-${pc.id}`, name: pc.name, action: pc.callback });
     }
+    // Obsidian 兼容插件命令
+    for (const oc of obsidianRuntime.commands()) {
+      cmds.push({ id: `obsidian-plugin-${oc.id}`, name: oc.name, action: oc.run });
+    }
     return cmds;
   }, [handleBrowse, vaultStats, newNote, saveNote]);
 
@@ -463,10 +491,18 @@ function App() {
                   color: theme === "dark" ? "#ccc" : "#555" }}>
                 📑 大纲
               </button>
+              <button onClick={() => setSidebarMode("plugins")}
+                style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  background: sidebarMode === "plugins" ? (theme === "dark" ? "#333" : "#fff") : "transparent",
+                  color: theme === "dark" ? "#ccc" : "#555" }}>
+                🧩 插件
+              </button>
             </div>
             {sidebarMode === "files"
               ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} />
-              : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
+              : sidebarMode === "outline"
+                ? <OutlinePanel items={outlineItems} dark={theme === "dark"} />
+                : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} />}
           </div>
         )}
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
@@ -516,10 +552,23 @@ function App() {
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      {pluginSettingsOpen && vaultPath && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
+          <div style={{ background: theme === "dark" ? "#252526" : "#fff", borderRadius: 8, width: "min(860px, 94vw)", height: "min(660px, 88vh)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <PluginSettings
+              vaultPath={vaultPath}
+              dark={theme === "dark"}
+              onChanged={() => void obsidianRuntime.reload()}
+              onClose={() => setPluginSettingsOpen(false)}
+            />
+          </div>
+        </div>
+      )}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onVaultReopen={reopenVault}
         onSyncStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
     </div>
   );
+  saveNoteRef.current = () => { void saveNote(); };
 }
 
 function findActivePath(node: any): string | null {

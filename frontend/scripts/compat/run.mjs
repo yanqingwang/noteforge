@@ -1,0 +1,735 @@
+/**
+ * Obsidian 插件兼容性测试执行器。
+ *
+ * 做什么：对样本里的每个插件，下载官方产物 → 在 jsdom 里用 noteforge 真实的
+ * 兼容层执行 → 记录 require/加载/onload/视图创建四个阶段的成败与缺失 API。
+ *
+ * 关键点：跑的是 dist-harness/obsidian-shim.mjs（应用侧同一份代码的构建产物），
+ * 而不是另写一份模拟实现 —— 否则测出来的结论不能代表真机行为。
+ *
+ * 用法：
+ *   node scripts/compat/run.mjs              # 全量样本
+ *   node scripts/compat/run.mjs vault-agent  # 只测指定插件（可多个）
+ *   node scripts/compat/run.mjs --no-fetch   # 用缓存，不再下载
+ */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FRONTEND = resolve(HERE, "../..");
+const CACHE = resolve(HERE, ".cache");
+const REPORTS = "/home/wang/wk/wk/AIReports";
+const BUNDLE = resolve(FRONTEND, "dist-harness/obsidian-shim.mjs");
+
+const args = process.argv.slice(2);
+const NO_FETCH = args.includes("--no-fetch");
+/** 只用已有 compat-results.json 重新生成报告（改报告格式时不必重跑 41 个插件） */
+const REPORT_ONLY = args.includes("--report-only");
+const ONLY = args.filter((a) => !a.startsWith("--"));
+
+const CDN = "https://cdn.jsdelivr.net/gh";
+const CDNDATA = "https://data.jsdelivr.com/v1/packages/gh";
+
+/**
+ * GitHub 代理：本机到 github.com / raw.githubusercontent.com / Release 资产不可达，
+ * 实测 ghfast.top 与 gh-proxy.com 都能取到 Release 资产。Obsidian 官方插件浏览器
+ * 就是从 Release 资产下载的，所以这是必需的第二条路径。
+ */
+const GH_PROXIES = ["https://ghfast.top", "https://gh-proxy.com"];
+
+/* ---------------- jsdom 环境 ---------------- */
+
+function installDom() {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
+    url: "http://localhost/",
+    pretendToBeVisual: true,
+  });
+  const w = dom.window;
+  const keep = [
+    "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement",
+    "HTMLSelectElement", "HTMLButtonElement", "HTMLAnchorElement", "HTMLInputElement",
+    "Element", "Node", "NodeFilter", "Text", "DocumentFragment", "DOMParser", "Event",
+    "CustomEvent", "MouseEvent", "KeyboardEvent", "PointerEvent", "InputEvent", "FocusEvent",
+    "MutationObserver", "Range", "Selection", "getSelection", "CSSStyleSheet", "Document",
+    "HTMLDivElement", "HTMLSpanElement", "SVGSVGElement", "ShadowRoot", "AbortController",
+    "URL", "Blob", "FormData", "TextEncoder", "TextDecoder", "structuredClone",
+  ];
+  for (const k of keep) {
+    if (w[k] !== undefined && globalThis[k] === undefined) globalThis[k] = w[k];
+  }
+  globalThis.window = w;
+  globalThis.document = w.document;
+  globalThis.requestAnimationFrame = w.requestAnimationFrame?.bind(w) ?? ((cb) => setTimeout(() => cb(Date.now()), 16));
+  globalThis.cancelAnimationFrame = w.cancelAnimationFrame?.bind(w) ?? clearTimeout;
+  globalThis.getComputedStyle = w.getComputedStyle?.bind(w) ?? (() => ({ getPropertyValue: () => "" }));
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  globalThis.IntersectionObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  };
+  globalThis.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  globalThis.scrollTo ??= () => undefined;
+  // Node 里没有 self / XMLSerializer / Image，jsdom 的 window 上有
+  globalThis.self ??= globalThis;
+  globalThis.XMLSerializer ??= w.XMLSerializer ?? class {
+    serializeToString() {
+      return "";
+    }
+  };
+  globalThis.Image ??= w.Image ?? class {};
+  globalThis.XPathResult ??= w.XPathResult ?? { ANY_TYPE: 0 };
+  globalThis.DOMParser ??= w.DOMParser;
+  // jsdom 没有 Worker。真机 webview 有，这里给一个不做事但可构造的桩，
+  // 避免「环境缺 API」被误记成插件不兼容。
+  globalThis.Worker ??= class WorkerStub {
+    constructor() {
+      this.onmessage = null;
+      this.onerror = null;
+    }
+    postMessage() {}
+    terminate() {}
+    addEventListener() {}
+    removeEventListener() {}
+  };
+  globalThis.Blob ??= class BlobStub {
+    constructor(parts = []) {
+      this.parts = parts;
+      this.size = parts.join("").length;
+    }
+    text() {
+      return Promise.resolve(this.parts.join(""));
+    }
+  };
+  globalThis.URL.createObjectURL ??= () => "blob:noteforge-compat/0";
+  globalThis.URL.revokeObjectURL ??= () => undefined;
+  globalThis.alert ??= () => undefined;
+  globalThis.confirm ??= () => true;
+  // jsdom 没有 localStorage 之外的隔离，插件常用它存状态
+  if (!globalThis.localStorage) {
+    const m = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => m.set(k, String(v)),
+      removeItem: (k) => m.delete(k),
+      clear: () => m.clear(),
+      key: (i) => [...m.keys()][i] ?? null,
+      get length() {
+        return m.size;
+      },
+    };
+  }
+  return dom;
+}
+
+/* ---------------- 下载 ---------------- */
+
+async function fetchWithRetry(url, { binary = false } = {}) {
+  let last;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 45000);
+      const res = await fetch(url, { signal: ctrl.signal, headers: { "User-Agent": "noteforge-compat-check" } });
+      clearTimeout(timer);
+      if (!res.ok) return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+      const body = binary ? Buffer.from(await res.arrayBuffer()) : await res.text();
+      return { ok: true, status: res.status, body };
+    } catch (e) {
+      last = e;
+      await new Promise((r) => setTimeout(r, 700 * i));
+    }
+  }
+  return { ok: false, status: 0, error: String(last?.message ?? last) };
+}
+
+/** jsDelivr 版本列表（不走 GitHub API，无 60 次/小时限流）。 */
+async function listVersions(repo) {
+  const r = await fetchWithRetry(`${CDNDATA}/${repo}`);
+  if (!r.ok) return [];
+  try {
+    return (JSON.parse(r.body).versions ?? []).map((v) => v.version);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 取插件产物。Obsidian 官方浏览器从 GitHub Release 下载，但本机到
+ * github.com / raw.githubusercontent.com 不可达，所以优先走 jsDelivr：
+ *   1) 默认分支（多数插件把 main.js 提交进仓库）
+ *   2) 版本 tag（jsDelivr 版本列表里最新几个）
+ */
+async function fetchPluginFiles(plugin) {
+  const dir = resolve(CACHE, "plugins", plugin.id);
+  const mf = resolve(dir, "manifest.json");
+  const mj = resolve(dir, "main.js");
+  if (NO_FETCH && existsSync(mf) && existsSync(mj)) {
+    return { dir, manifest: JSON.parse(readFileSync(mf, "utf8")), source: "cache", ref: "cache" };
+  }
+  mkdirSync(dir, { recursive: true });
+
+  // jsDelivr 不带 ref 时用的是仓库的 "default branch"，但它探测的分支名不一定对
+  // （实测 yanqingwang/opensource-AI-vault-agent 是 master，探测成 main 就 404），
+  // 所以显式把 main/master/版本 tag 都试一遍。
+  const versions = await listVersions(plugin.repo);
+  const candidateRefs = [...new Set(["", "master", "main", ...versions.slice(0, 5)])];
+
+  const releaseUrl = (proxy, file) => `${proxy}/https://github.com/${plugin.repo}/releases/latest/download/${file}`;
+
+  // 路径一：jsDelivr（仓库里直接提交了 main.js 的插件）
+  let manifest = null;
+  let manifestRef = "";
+  for (const ref of candidateRefs) {
+    const r = await fetchWithRetry(`${CDN}/${plugin.repo}${ref ? `@${ref}` : ""}/manifest.json`);
+    if (r.ok) {
+      try {
+        manifest = JSON.parse(r.body);
+        manifestRef = ref;
+        writeFileSync(mf, r.body);
+        break;
+      } catch {
+        /* 不是合法 manifest，继续试下一个 ref */
+      }
+    }
+  }
+
+  // 路径二：GitHub Release 资产（经代理）—— 多数头部插件只在这里发 main.js
+  let release = false;
+  if (!manifest) {
+    for (const proxy of GH_PROXIES) {
+      const r = await fetchWithRetry(releaseUrl(proxy, "manifest.json"));
+      if (!r.ok) continue;
+      try {
+        manifest = JSON.parse(r.body);
+        writeFileSync(mf, r.body);
+        release = true;
+        break;
+      } catch {
+        continue;
+      }
+    }
+  }
+  if (!manifest) {
+    return { dir, error: "取不到 manifest.json（jsDelivr 与 Release 代理都不可达）" };
+  }
+
+  let mainRef = "";
+  if (!release) {
+    const mainRefs = [...new Set([manifestRef, manifest.version ? `${manifest.version}` : "", ...candidateRefs])];
+    for (const ref of mainRefs) {
+      const r = await fetchWithRetry(`${CDN}/${plugin.repo}${ref ? `@${ref}` : ""}/main.js`, { binary: true });
+      if (r.ok && r.body.length > 0) {
+        writeFileSync(mj, r.body);
+        mainRef = ref;
+        break;
+      }
+    }
+  }
+  if (!mainRef) {
+    for (const proxy of GH_PROXIES) {
+      const r = await fetchWithRetry(releaseUrl(proxy, "main.js"), { binary: true });
+      if (r.ok && r.body.length > 0) {
+        writeFileSync(mj, r.body);
+        mainRef = `${new URL(proxy).host}/releases/latest`;
+        break;
+      }
+    }
+  }
+  if (!mainRef) {
+    return { dir, manifest, error: "取不到 main.js（jsDelivr 无产物，Release 代理也不可达）" };
+  }
+
+  // styles.css 是可选的，取不到不影响结论
+  if (release) {
+    for (const proxy of GH_PROXIES) {
+      const r = await fetchWithRetry(releaseUrl(proxy, "styles.css"));
+      if (r.ok) {
+        writeFileSync(resolve(dir, "styles.css"), r.body);
+        break;
+      }
+    }
+  } else {
+    const r = await fetchWithRetry(`${CDN}/${plugin.repo}${mainRef ? `@${mainRef}` : ""}/styles.css`);
+    if (r.ok) writeFileSync(resolve(dir, "styles.css"), r.body);
+  }
+
+  return { dir, manifest, ref: mainRef || "(default branch)", bytes: readFileSync(mj).length };
+}
+
+/* ---------------- 单插件测试 ---------------- */
+
+const VAULT_FILES = {
+  "README.md": "# 测试 vault\n\n这是兼容性测试用的样本 vault。\n\n## 章节\n\n- 列表项一\n- 列表项二\n",
+  "笔记/想法.md": "# 想法\n\n#标签1 #标签2\n\n[[README]] 双链\n\n```js\nconst a = 1;\n```\n",
+  "笔记/子目录/深层.md": "# 深层笔记\n\nfrontmatter 测试\n",
+  "项目/计划.md": "---\ntitle: 计划\ntags: [计划, 项目]\n---\n\n# 计划\n\n| 项 | 状态 |\n| --- | --- |\n| A | 进行中 |\n",
+  "附件/图.png": "not-a-real-png",
+  ".obsidian/app.json": '{"attachmentFolderPath":"附件"}\n',
+  ".obsidian/community-plugins.json": "[]\n",
+};
+
+async function testPlugin(shim, plugin) {
+  const t0 = Date.now();
+  const result = {
+    id: plugin.id,
+    name: plugin.name,
+    category: plugin.category,
+    downloads: plugin.downloads,
+    repo: plugin.repo,
+    status: "unknown",
+    phase: null,
+    error: null,
+    commands: 0,
+    views: 0,
+    settingTabs: 0,
+    editorExtensions: 0,
+    postProcessors: 0,
+    cmModulesUsed: [],
+    unresolvedRequires: [],
+    unsupportedApi: {},
+    apiErrors: {},
+    bytes: 0,
+    manifestVersion: null,
+    ref: null,
+  };
+
+  const files = await fetchPluginFiles(plugin);
+  if (files.error) {
+    result.status = "artifact-unavailable";
+    result.phase = "download";
+    result.error = files.error;
+    result.ms = Date.now() - t0;
+    return result;
+  }
+  result.bytes = files.bytes ?? 0;
+  result.ref = files.ref;
+  result.manifestVersion = files.manifest.version ?? null;
+
+  // 每个插件一份干净的 app/vault 环境，避免相互污染
+  const host = shim.createMemoryHost({ ...VAULT_FILES });
+  const containers = new Map();
+  const api = shim.createObsidianApi(host, {
+    name: "compat-vault",
+    workspaceHooks: {
+      activeFile: () => "README.md",
+      openFile: async (p) => {
+        await host.openFile?.(p);
+      },
+      getLeafContainer: (type) => {
+        if (!containers.has(type)) {
+          const d = document.createElement("div");
+          d.className = `nf-leaf nf-leaf-${type}`;
+          document.body.appendChild(d);
+          containers.set(type, d);
+        }
+        return containers.get(type);
+      },
+    },
+  });
+
+  // 索引先就绪（与真机一致）
+  await api.vault.ensure();
+
+  const cm = shim.createCmModules();
+  const code = readFileSync(resolve(files.dir, "main.js"), "utf8");
+  const electron = shim.createElectronStub();
+  const requireMap = {
+    obsidian: api.module,
+    electron,
+    "node:electron": electron,
+    ...cm,
+    ...shim.withNodePrefixAliases(shim.createNodeBuiltins()),
+  };
+
+  const ev = shim.evaluatePlugin(code, { filename: `${files.dir}/main.js`, requireMap });
+  result.cmModulesUsed = ev.required.filter((r) => r.name.startsWith("@")).map((r) => r.name);
+  result.unresolvedRequires = [...new Set(ev.unresolved)];
+
+  if (ev.error) {
+    result.status = "fail-load";
+    result.phase = "evaluate";
+    result.error = ev.error.message.split("\n")[0];
+    result.errorStack = String(ev.error.stack ?? "").split("\n").slice(1, 5).join(" | ");
+    // 类定义阶段崩掉时，缺失的导出才是根因，必须记下来
+    result.unsupportedApi = api.recorder.snapshot().unsupported;
+    result.accessedApi = api.recorder.snapshot().accessed;
+    result.ms = Date.now() - t0;
+    return result;
+  }
+
+  const PluginClass = ev.defaultExport;
+  if (typeof PluginClass !== "function") {
+    result.status = "fail-load";
+    result.phase = "export";
+    result.error = `默认导出不是类（实际 ${typeof PluginClass}）`;
+    result.ms = Date.now() - t0;
+    return result;
+  }
+
+  let instance;
+  try {
+    instance = new PluginClass(api.app, files.manifest);
+  } catch (e) {
+    result.status = "fail-construct";
+    result.phase = "construct";
+    result.error = String(e?.message ?? e).split("\n")[0];
+    result.ms = Date.now() - t0;
+    return result;
+  }
+
+  try {
+    await instance.onload?.();
+  } catch (e) {
+    result.status = "fail-onload";
+    result.phase = "onload";
+    result.error = String(e?.message ?? e).split("\n")[0];
+    result.errorStack = String(e?.stack ?? "").split("\n").slice(0, 6).join(" | ");
+    const snap = api.recorder.snapshot();
+    result.unsupportedApi = snap.unsupported;
+    result.accessedApi = snap.accessed;
+    result.topApi = Object.entries(snap.calls).slice(-14).map(([k, v]) => `${k}×${v}`);
+    result.apiErrors = Object.fromEntries(
+      Object.entries(snap.errors).map(([k, v]) => [k, v.message.split("\n")[0]]),
+    );
+    result.ms = Date.now() - t0;
+    return result;
+  }
+
+  // 让 onload 里的异步任务（setTimeout 0 / Promise）落地
+  await new Promise((r) => setTimeout(r, 80));
+
+  result.commands = instance.getCommands?.().length ?? 0;
+  result.settingTabs = instance.getSettingTabs?.().length ?? 0;
+  result.editorExtensions = api.registry.editorExtensions.length;
+  result.postProcessors = api.registry.postProcessors.size;
+  result.views = [...api.workspace.factories.keys()].length;
+
+  // 视图工厂存在 ≠ 能创建成功：真正建一次，很多插件的问题在这里才暴露
+  const viewErrors = [];
+  for (const type of [...api.workspace.factories.keys()]) {
+    try {
+      const leaf = api.workspace.getLeaf(true);
+      const factory = api.workspace.getViewFactory(type);
+      if (!factory) continue;
+      const view = factory(leaf);
+      view.app = api.app;
+      await view.onOpen?.();
+      view.onunload?.();
+    } catch (e) {
+      viewErrors.push(`${type}: ${String(e?.message ?? e).split("\n")[0]}`);
+    }
+  }
+  if (viewErrors.length) result.viewErrors = viewErrors;
+
+  // 设置页是插件崩溃的常见位置：很多插件在 onload 里注册，设置页首次 display 才炸
+  const tabErrors = [];
+  for (const tab of instance.getSettingTabs?.() ?? []) {
+    try {
+      await tab.display?.();
+    } catch (e) {
+      tabErrors.push(String(e?.message ?? e).split("\n")[0]);
+    }
+  }
+  if (tabErrors.length) result.settingTabErrors = tabErrors;
+
+  const snap = api.recorder.snapshot();
+  result.unsupportedApi = snap.unsupported;
+  result.accessedApi = snap.accessed;
+  result.apiErrors = Object.fromEntries(
+    Object.entries(snap.errors).map(([k, v]) => [k, v.message.split("\n")[0]]),
+  );
+  result.topApi = Object.entries(snap.calls).slice(0, 12).map(([k, v]) => `${k}×${v}`);
+
+  const functional = result.commands + result.views + result.settingTabs + result.editorExtensions + result.postProcessors;
+  result.status = functional > 0 ? "pass" : "load-only";
+  if (viewErrors.length && result.status === "pass") result.status = "pass-view-error";
+
+  try {
+    await instance.onunload?.();
+  } catch {
+    /* 忽略卸载异常 */
+  }
+  result.ms = Date.now() - t0;
+  return result;
+}
+
+/** 生成 Markdown 报告（main 与 --report-only 共用）。 */
+function writeReport(results, sample, summary) {
+  mkdirSync(REPORTS, { recursive: true });
+
+  // 聚合量在这里自算：--report-only 也要能出同样的表
+  const agg = (pick) => {
+    const m = new Map();
+    for (const r of results) for (const [k, v] of Object.entries(pick(r) ?? {})) m.set(k, (m.get(k) ?? 0) + v);
+    return m;
+  };
+  const apiFreq = agg((r) => r.unsupportedApi);
+  const apiUsed = agg((r) => r.accessedApi);
+  const errorFreq = new Map();
+  for (const r of results) {
+    for (const [k, v] of Object.entries(r.apiErrors ?? {})) {
+      if (!errorFreq.has(v)) errorFreq.set(v, []);
+      errorFreq.get(v).push(r.id);
+    }
+  }
+  const countOf = (pick) => {
+    const m = new Map();
+    for (const r of results) for (const v of pick(r) ?? []) m.set(v, (m.get(v) ?? 0) + 1);
+    return m;
+  };
+  const cmUsed = countOf((r) => r.cmModulesUsed);
+  const unresolved = countOf((r) => r.unresolvedRequires);
+// 本地日期：ISO 是 UTC，凌晨跑批会把报告写成前一天
+const now = new Date();
+const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+const md = [
+  `# NoteForge × Obsidian 插件兼容性测试报告`,
+  ``,
+  `**报告日期：${today}**`,
+  ``,
+  `## 执行摘要`,
+  ``,
+  `对官方市场（${sample.totalInMarketplace} 个插件）按下载量分层抽取的 ${results.length} 个插件，在 Node+jsdom 里用 noteforge 真实的 Obsidian 兼容层（\`dist-harness/obsidian-shim.mjs\`，即应用侧同一份代码的构建产物）执行产物 main.js，记录 require / 求值 / 构造 / onload / 视图创建 五个阶段的结果。`,
+  ``,
+  `**判定口径**：\`pass\` = onload 成功且注册了命令/视图/后处理器；\`pass-view-error\` = 加载正常但视图实例化或设置页渲染出错；\`load-only\` = 加载成功但没有任何可用能力；\`fail-*\` = 求值/构造/onload 抛错；\`artifact-unavailable\` = 本机网络取不到产物。`,
+  ``,
+  `| 判定 | 数量 | 含义 |`,
+  `| --- | --- | --- |`,
+  `| ✅ 完全可用 | ${summary.passed} | onload 成功且注册了命令/视图/后处理器 |`,
+  `| ⚠️ 可用但视图创建出错 | ${summary.viewError} | 加载正常，视图实例化抛错 |`,
+  `| 🟡 仅加载 | ${summary.loadOnly} | onload 成功但没注册任何可用能力 |`,
+  `| ❌ 失败 | ${summary.failed} | 求值/构造/onload 抛错 |`,
+  `| 📦 产物不可达 | ${summary.artifactMissing} | 本机网络到 github.com 不可达（Release-only 发布） |`,
+  ``,
+  `## 逐插件结果`,
+  ``,
+  `| 插件 | 类别 | 下载量 | 结论 | 命令 | 视图 | 后处理 | 设置页 | CM 模块 | 首个错误 |`,
+  `| --- | --- | ---: | --- | ---: | ---: | ---: | --- | ---: | --- |`,
+  ...results.map(
+    (r) =>
+      `| \`${r.id}\` | ${r.category} | ${r.downloads.toLocaleString()} | ${r.status} | ${r.commands} | ${r.views} | ${r.postProcessors} | ${r.settingTabErrors ? "❌" : r.settingTabs ? "✅" : "-"} | ${r.cmModulesUsed.length} | ${fmtErr(r.error || (r.settingTabErrors?.[0] ?? "")).replace(/\|/g, "\\|")} |`,
+  ),
+  ``,
+  `## 未通过插件的根因分类`,
+  ``,
+  (() => {
+    const cat = (r) => {
+      const err = `${r.error ?? ""} ${r.errorStack ?? ""}`;
+      if (r.status === "pass-view-error") return "视图创建/交互期出错";
+      if (err.includes("combine")) return "插件自带 lezer 解析器（与宿主 @lezer/common 双实例）";
+      if (err.includes("Class extends value undefined") || err.includes("without 'new'")) return "基类语义不匹配";
+      if (/fs\.|child_process|sandbox/.test(err)) return "需要 Node 文件系统/子进程";
+      if (/Worker|worker/.test(err)) return "需要 Web Worker";
+      if (/moment/.test(err)) return "moment 语义差异";
+      if (r.asyncErrors?.length) return "异步期异常（onload 之后）";
+      return "其它";
+    };
+    const groups = new Map();
+    for (const r of results) {
+      if (r.status === "pass" || r.status === "artifact-unavailable") continue;
+      const k = cat(r);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    const lines = ["| 根因 | 数量 | 插件 |", "| --- | ---: | --- |"];
+    for (const [k, rs] of [...groups].sort((a, b) => b[1].length - a[1].length)) {
+      lines.push(`| ${k} | ${rs.length} | ${rs.map((r) => `\`${r.id}\``).join(", ")} |`);
+    }
+    return lines.join("\n");
+  })(),
+  ``,
+  `## shim 缺失的 API（按被访问次数）`,
+  ``,
+  apiFreq.size
+    ? ["| API | 访问次数 | 受影响插件 |", "| --- | ---: | ---: |", ...[...apiFreq].slice(0, 30).map(([k, v]) => `| \`${k}\` | ${v} | - |`)].join("\n")
+    : "（无：所有被访问的导出都已实现）",
+  ``,
+  `## 运行期错误（按出现插件数）`,
+  ``,
+  errorFreq.size
+    ? ["| 错误 | 插件数 | 插件 |", "| --- | ---: | --- |", ...[...errorFreq].slice(0, 25).map(([k, v]) => `| ${k.replace(/\|/g, "\\|").slice(0, 120)} | ${v.length} | ${v.slice(0, 6).join(", ")} |`)].join("\n")
+    : "（无）",
+  ``,
+  `## 插件用到的 obsidian API（被访问次数最多的前 30 个）`,
+  ``,
+  apiUsed.size
+    ? ["| API | 插件数 |", "| --- | ---: |", ...[...apiUsed].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, v]) => `| \`${k}\` | ${v} |`)].join("\n")
+    : "（无）",
+  ``,
+  `## 插件用到的 CodeMirror 模块`,
+  ``,
+  ["| 模块 | 插件数 |", "| --- | ---: |", ...[...cmUsed].sort((a, b) => b[1] - a[1]).map(([k, v]) => `| \`${k}\` | ${v} |`)].join("\n"),
+  ``,
+  `## 未能解析的 require`,
+  ``,
+  unresolved.size
+    ? ["| 模块 | 次数 |", "| --- | ---: |", ...[...unresolved].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([k, v]) => `| \`${k}\` | ${v} |`)].join("\n")
+    : "（无）",
+  ``,
+  `## 复现方式`,
+  ``,
+  "```bash",
+  "cd code/noteforge/frontend",
+  "npx vite build --config vite.harness.config.ts   # 打 harness 包",
+  "node scripts/compat/select-sample.mjs 40          # 生成分层样本",
+  "node scripts/compat/run.mjs                        # 跑全量",
+  "```",
+  ``,
+  `产物路径：\`code/noteforge/frontend/scripts/compat/compat-results.json\``,
+  ``,
+].join("\n");
+
+  const mdFile = resolve(REPORTS, `noteforge-obsidian-plugin-compat-${today}.md`);
+  writeFileSync(mdFile, md);
+  console.log(`报告已写入 ${mdFile}`);
+}
+
+/* ---------------- 主流程 ---------------- */
+
+function fmtErr(s) {
+  if (!s) return "";
+  return String(s).length > 150 ? `${String(s).slice(0, 150)}…` : String(s);
+}
+
+async function main() {
+  if (REPORT_ONLY) {
+    const outFile = resolve(HERE, "compat-results.json");
+    const saved = JSON.parse(readFileSync(outFile, "utf8"));
+    const sampleFile2 = resolve(HERE, "plugins.sample.json");
+    const sample2 = JSON.parse(readFileSync(sampleFile2, "utf8"));
+    writeReport(saved.results, sample2, saved.summary);
+    console.log(`已根据 ${outFile} 重新生成报告`);
+    return;
+  }
+  if (!existsSync(BUNDLE)) {
+    console.error(`缺少 harness 产物 ${BUNDLE}\n请先运行：npx vite build --config vite.harness.config.ts`);
+    process.exit(2);
+  }
+  installDom();
+  const shim = await import(BUNDLE);
+
+  const sampleFile = resolve(HERE, "plugins.sample.json");
+  const sample = JSON.parse(readFileSync(sampleFile, "utf8"));
+  let plugins = sample.plugins;
+  if (ONLY.length) plugins = plugins.filter((p) => ONLY.includes(p.id));
+  plugins = [...plugins].sort((a, b) => b.downloads - a.downloads);
+
+  console.log(`兼容性测试开始：${plugins.length} 个插件（样本生成于 ${sample.generatedAt}）\n`);
+  const results = [];
+  for (const p of plugins) {
+    // 单个插件的未捕获异常不能带崩整轮：插件常在定时器/微任务里抛
+    const prevHandlers = { unhandled: process.listeners("unhandledRejection"), exc: process.listeners("uncaughtException") };
+    const isolated = [];
+    const collect = (err) => isolated.push(String(err?.message ?? err));
+    process.on("unhandledRejection", collect);
+    process.on("uncaughtException", collect);
+    let r;
+    try {
+      r = await testPlugin(shim, p);
+    } catch (e) {
+      r = {
+        id: p.id, name: p.name, category: p.category, downloads: p.downloads, repo: p.repo,
+        status: "fail-harness", phase: "harness", error: String(e?.message ?? e).split("\n")[0],
+        commands: 0, views: 0, settingTabs: 0, editorExtensions: 0, postProcessors: 0,
+        cmModulesUsed: [], unresolvedRequires: [], unsupportedApi: {}, apiErrors: {},
+      };
+    }
+    process.removeListener("unhandledRejection", collect);
+    process.removeListener("uncaughtException", collect);
+    void prevHandlers;
+    if (isolated.length) r.asyncErrors = [...new Set(isolated)].slice(0, 5);
+    results.push(r);
+    const tag =
+      r.status === "pass" ? "✅" :
+      r.status === "pass-view-error" ? "⚠️ " :
+      r.status === "load-only" ? "🟡" :
+      r.status === "artifact-unavailable" ? "📦" : "❌";
+    console.log(
+      `${tag} ${r.id.padEnd(30)} ${String(r.downloads).padStart(9)}  ${r.status.padEnd(20)} ` +
+      `cmd=${String(r.commands).padStart(2)} view=${String(r.views).padStart(2)} pp=${r.postProcessors} ` +
+      `cm=${r.cmModulesUsed.length} ${fmtErr(r.error)}`,
+    );
+  }
+
+  /* 汇总 */
+  const by = (s) => results.filter((r) => r.status === s).length;
+  const passed = by("pass");
+  const viewErr = by("pass-view-error");
+  const loadOnly = by("load-only");
+  const artifactMissing = by("artifact-unavailable");
+  const failed = results.length - passed - viewErr - loadOnly - artifactMissing;
+  const summary = { passed, viewError: viewErr, loadOnly, artifactMissing, failed };
+
+  // 缺失 API 频次（决定下一步补 shim 的优先级）
+  const apiFreq = new Map();
+  for (const r of results) {
+    for (const [k, v] of Object.entries(r.unsupportedApi ?? {})) {
+      apiFreq.set(k, (apiFreq.get(k) ?? 0) + v);
+    }
+  }
+  const errorFreq = new Map();
+  for (const r of results) {
+    for (const [k, v] of Object.entries(r.apiErrors ?? {})) {
+      if (!errorFreq.has(v)) errorFreq.set(v, []);
+      errorFreq.get(v).push(r.id);
+    }
+  }
+  const apiUsed = new Map();
+  for (const r of results) {
+    for (const k of r.accessedApi ?? []) apiUsed.set(k, (apiUsed.get(k) ?? 0) + 1);
+  }
+  const cmUsed = new Map();
+  for (const r of results) {
+    for (const m of r.cmModulesUsed ?? []) cmUsed.set(m, (cmUsed.get(m) ?? 0) + 1);
+  }
+  const unresolved = new Map();
+  for (const r of results) {
+    for (const m of r.unresolvedRequires ?? []) unresolved.set(m, (unresolved.get(m) ?? 0) + 1);
+  }
+
+  const outFile = resolve(HERE, "compat-results.json");
+  writeFileSync(
+    outFile,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        sampleGeneratedAt: sample.generatedAt,
+        total: results.length,
+        summary: { passed, viewError: viewErr, loadOnly, artifactMissing, failed },
+        missingApi: Object.fromEntries([...apiFreq].sort((a, b) => b[1] - a[1])),
+        usedApi: Object.fromEntries([...apiUsed].sort((a, b) => b[1] - a[1])),
+        topErrors: Object.fromEntries([...errorFreq].sort((a, b) => b[1].length - a[1].length)),
+        cmModules: Object.fromEntries([...cmUsed].sort((a, b) => b[1] - a[1])),
+        unresolvedRequires: Object.fromEntries([...unresolved].sort((a, b) => b[1] - a[1])),
+        results,
+      },
+      null,
+      2,
+    ),
+  );
+
+  console.log(`\n===== 汇总（${results.length} 个） =====`);
+  console.log(`✅ 完全可用 ${summary.passed}   ⚠️ 可用但视图创建出错 ${viewErr}   🟡 仅加载 ${loadOnly}`);
+  console.log(`❌ 失败 ${failed}   📦 产物不可达 ${artifactMissing}`);
+  console.log(`\n插件用到的 CM 模块 top：`, [...cmUsed].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}(${v})`).join(" "));
+  console.log(`最常缺失的 obsidian API：`, [...apiFreq].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}(${v})`).join(" ") || "（无）");
+  console.log(`被访问最多的 obsidian API：`, [...apiUsed].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${k}(${v})`).join(" "));
+  console.log(`\n明细已写入 ${outFile}`);
+
+  writeReport(results, sample, summary);
+}
+
+main().catch((e) => {
+  console.error("测试执行失败：", e);
+  process.exit(1);
+});

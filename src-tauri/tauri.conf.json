@@ -16,7 +16,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' data: https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' data: https://cdnjs.cloudflare.com; img-src 'self' data: asset: https:; font-src 'self' data:; frame-src 'self' data: asset:"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' data: https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://cdnjs.cloudflare.com; img-src 'self' data: asset: https:; font-src 'self' data:; frame-src 'self' data: asset: connect-src 'self' ipc: http://ipc.localhost https: http://localhost:* http://127.0.0.1:* data:;"
     }
   },
   "bundle": {

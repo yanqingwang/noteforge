@@ -1,0 +1,311 @@
+{
+  "generatedAt": "2026-10-06T14:33:55.866Z",
+  "source": "https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugins.json + community-plugin-stats.json",
+  "totalInMarketplace": 8451,
+  "target": 40,
+  "sampled": 41,
+  "byCategory": {
+    "图谱白板": 4,
+    "模板自动化": 3,
+    "数据视图": 3,
+    "任务待办": 3,
+    "其他": 3,
+    "同步集成": 3,
+    "日历日记": 3,
+    "样式外观": 3,
+    "AI 智能体": 4,
+    "编辑写作": 3,
+    "导航大纲": 3,
+    "媒体附件": 3,
+    "整理归档": 3
+  },
+  "plugins": [
+    {
+      "id": "obsidian-excalidraw-plugin",
+      "name": "Excalidraw",
+      "repo": "zsviczian/obsidian-excalidraw-plugin",
+      "category": "图谱白板",
+      "downloads": 8353437
+    },
+    {
+      "id": "templater-obsidian",
+      "name": "Templater",
+      "repo": "silentvoid13/Templater",
+      "category": "模板自动化",
+      "downloads": 5813999
+    },
+    {
+      "id": "dataview",
+      "name": "Dataview",
+      "repo": "blacksmithgu/obsidian-dataview",
+      "category": "数据视图",
+      "downloads": 5087920
+    },
+    {
+      "id": "obsidian-tasks-plugin",
+      "name": "Tasks",
+      "repo": "obsidian-tasks-group/obsidian-tasks",
+      "category": "任务待办",
+      "downloads": 4356883
+    },
+    {
+      "id": "table-editor-obsidian",
+      "name": "Advanced Tables",
+      "repo": "tgrosinger/advanced-tables-obsidian",
+      "category": "其他",
+      "downloads": 3251080
+    },
+    {
+      "id": "obsidian-git",
+      "name": "Git",
+      "repo": "vinzent03/obsidian-git",
+      "category": "同步集成",
+      "downloads": 3246361
+    },
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "repo": "liamcain/obsidian-calendar-plugin",
+      "category": "日历日记",
+      "downloads": 3164616
+    },
+    {
+      "id": "obsidian-style-settings",
+      "name": "Style Settings",
+      "repo": "obsidian-community/obsidian-style-settings",
+      "category": "样式外观",
+      "downloads": 2742628
+    },
+    {
+      "id": "copilot",
+      "name": "Copilot",
+      "repo": "logancyang/obsidian-copilot",
+      "category": "AI 智能体",
+      "downloads": 2347881
+    },
+    {
+      "id": "editing-toolbar",
+      "name": "Editing Toolbar",
+      "repo": "pkm-er/obsidian-editing-toolbar",
+      "category": "编辑写作",
+      "downloads": 1979354
+    },
+    {
+      "id": "obsidian-outliner",
+      "name": "Outliner",
+      "repo": "vslinko/obsidian-outliner",
+      "category": "导航大纲",
+      "downloads": 1437330
+    },
+    {
+      "id": "pdf-plus",
+      "name": "PDF++",
+      "repo": "ryotaushio/obsidian-pdf-plus",
+      "category": "媒体附件",
+      "downloads": 822816
+    },
+    {
+      "id": "folder-notes",
+      "name": "Folder notes",
+      "repo": "lostpaul/obsidian-folder-notes",
+      "category": "整理归档",
+      "downloads": 461202
+    },
+    {
+      "id": "advanced-canvas",
+      "name": "Advanced Canvas",
+      "repo": "developer-mike/obsidian-advanced-canvas",
+      "category": "图谱白板",
+      "downloads": 887842
+    },
+    {
+      "id": "quickadd",
+      "name": "QuickAdd",
+      "repo": "chhoumann/quickadd",
+      "category": "模板自动化",
+      "downloads": 2194066
+    },
+    {
+      "id": "smart-connections",
+      "name": "Smart Connections",
+      "repo": "brianpetro/obsidian-smart-connections",
+      "category": "数据视图",
+      "downloads": 1227899
+    },
+    {
+      "id": "obsidian-kanban",
+      "name": "Kanban",
+      "repo": "obsidian-community/obsidian-kanban",
+      "category": "任务待办",
+      "downloads": 2722300
+    },
+    {
+      "id": "realclaudian",
+      "name": "Claudian",
+      "repo": "yishentu/claudian",
+      "category": "其他",
+      "downloads": 2319087
+    },
+    {
+      "id": "remotely-save",
+      "name": "Remotely Save",
+      "repo": "remotely-save/remotely-save",
+      "category": "同步集成",
+      "downloads": 2283921
+    },
+    {
+      "id": "periodic-notes",
+      "name": "Periodic Notes",
+      "repo": "liamcain/obsidian-periodic-notes",
+      "category": "日历日记",
+      "downloads": 773243
+    },
+    {
+      "id": "obsidian-minimal-settings",
+      "name": "Minimal Theme Settings",
+      "repo": "kepano/obsidian-minimal-settings",
+      "category": "样式外观",
+      "downloads": 1834799
+    },
+    {
+      "id": "excalibrain",
+      "name": "ExcaliBrain",
+      "repo": "zsviczian/excalibrain",
+      "category": "AI 智能体",
+      "downloads": 348954
+    },
+    {
+      "id": "obsidian-linter",
+      "name": "Linter",
+      "repo": "platers/obsidian-linter",
+      "category": "编辑写作",
+      "downloads": 1178216
+    },
+    {
+      "id": "obsidian-auto-link-title",
+      "name": "Auto Link Title",
+      "repo": "zolrath/obsidian-auto-link-title",
+      "category": "导航大纲",
+      "downloads": 386326
+    },
+    {
+      "id": "image-converter",
+      "name": "Image Converter",
+      "repo": "xryul/obsidian-image-converter",
+      "category": "媒体附件",
+      "downloads": 541774
+    },
+    {
+      "id": "folder-note-plugin",
+      "name": "Folder Note",
+      "repo": "xpgo/obsidian-folder-note-plugin",
+      "category": "整理归档",
+      "downloads": 140505
+    },
+    {
+      "id": "obsidian-charts",
+      "name": "Charts",
+      "repo": "phibr0/obsidian-charts",
+      "category": "图谱白板",
+      "downloads": 328776
+    },
+    {
+      "id": "auto-note-mover",
+      "name": "Auto Note Mover",
+      "repo": "farux/obsidian-auto-note-mover",
+      "category": "模板自动化",
+      "downloads": 123383
+    },
+    {
+      "id": "smart-connections-visualizer",
+      "name": "Smart Connections Visualizer",
+      "repo": "mossy1022/Smart-Connections-Visualizer",
+      "category": "数据视图",
+      "downloads": 38299
+    },
+    {
+      "id": "tasknotes",
+      "name": "TaskNotes",
+      "repo": "callumalpass/tasknotes",
+      "category": "任务待办",
+      "downloads": 1936475
+    },
+    {
+      "id": "obsidian-icon-folder",
+      "name": "Iconize",
+      "repo": "florianwoelki/obsidian-iconize",
+      "category": "其他",
+      "downloads": 2253572
+    },
+    {
+      "id": "obsidian-livesync",
+      "name": "Self-hosted LiveSync",
+      "repo": "vrtmrz/obsidian-livesync",
+      "category": "同步集成",
+      "downloads": 984841
+    },
+    {
+      "id": "obsidian-full-calendar",
+      "name": "Full Calendar",
+      "repo": "obsidian-community/obsidian-full-calendar",
+      "category": "日历日记",
+      "downloads": 467219
+    },
+    {
+      "id": "obsidian-hider",
+      "name": "Hider",
+      "repo": "kepano/obsidian-hider",
+      "category": "样式外观",
+      "downloads": 467771
+    },
+    {
+      "id": "mermaid-tools",
+      "name": "Mermaid Tools",
+      "repo": "dartungar/obsidian-mermaid",
+      "category": "AI 智能体",
+      "downloads": 348543
+    },
+    {
+      "id": "better-word-count",
+      "name": "Better Word Count",
+      "repo": "lukeleppan/better-word-count",
+      "category": "编辑写作",
+      "downloads": 619389
+    },
+    {
+      "id": "obsidian-quiet-outline",
+      "name": "Quiet Outline",
+      "repo": "guopenghui/obsidian-quiet-outline",
+      "category": "导航大纲",
+      "downloads": 346328
+    },
+    {
+      "id": "media-extended",
+      "name": "Media Extended",
+      "repo": "aidenlx/media-extended",
+      "category": "媒体附件",
+      "downloads": 388245
+    },
+    {
+      "id": "fileorganizer2000",
+      "name": "Note Companion",
+      "repo": "nexus-jpf/note-companion",
+      "category": "整理归档",
+      "downloads": 43020
+    },
+    {
+      "id": "obsidian-enhancing-mindmap",
+      "name": "Enhancing Mindmap",
+      "repo": "markmindckm/obsidian-enhancing-mindmap",
+      "category": "图谱白板",
+      "downloads": 239251
+    },
+    {
+      "id": "vault-agent",
+      "name": "Vault Agent",
+      "repo": "yanqingwang/opensource-AI-vault-agent",
+      "category": "AI 智能体",
+      "downloads": 225
+    }
+  ]
+}
