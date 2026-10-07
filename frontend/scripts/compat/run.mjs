@@ -65,7 +65,10 @@ const FROM_VAULT = args.includes("--from-vault") ? args[args.indexOf("--from-vau
  * 这类跨插件干扰（nextcloud-sync-yanc 的设置页在真机不出现，单测却通过，就是这类）。
  */
 const SHARED_API = args.includes("--shared-api");
-const ONLY = args.filter((a) => !a.startsWith("--"));
+/** 命令行里的插件 id（不含 --from-vault 后面那个路径值）。 */
+const ONLY = args.filter(
+  (a, i) => !a.startsWith("--") && args[i - 1] !== "--from-vault",
+);
 
 const CDN = "https://cdn.jsdelivr.net/gh";
 const CDNDATA = "https://data.jsdelivr.com/v1/packages/gh";
@@ -918,14 +921,15 @@ async function main() {
       console.error(`读不到启用列表: ${enabledPath}`);
       process.exit(2);
     }
-    plugins = ids.map((id) => fromCache(id) ?? {
+    const wanted = ONLY.length ? ids.filter((id) => ONLY.includes(id)) : ids;
+    plugins = wanted.map((id) => fromCache(id) ?? {
       id,
       name: id,
       repo: "(local)",
       category: "本地 vault",
       downloads: 0,
     });
-    console.log(`来自 vault ${FROM_VAULT}：${plugins.length} 个已启用插件`);
+    if (!ONLY.length) console.log(`来自 vault ${FROM_VAULT}：${plugins.length} 个已启用插件`);
   }
 
   plugins = [...plugins].sort((a, b) => b.downloads - a.downloads);
