@@ -12,6 +12,7 @@
  *   node scripts/compat/run.mjs vault-agent  # 只测指定插件（可多个）
  *   node scripts/compat/run.mjs --no-fetch   # 用缓存，不再下载
  */
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +28,15 @@ const args = process.argv.slice(2);
 const NO_FETCH = args.includes("--no-fetch");
 /** 只用已有 compat-results.json 重新生成报告（改报告格式时不必重跑 41 个插件） */
 const REPORT_ONLY = args.includes("--report-only");
+/** 子进程模式（由父进程 spawn 出来跑单个插件）。 */
+const CHILD = process.env.NF_COMPAT_CHILD === "1";
+/** 子进程只吐结果 JSON，不做报告。 */
+const JSON_ONLY = args.includes("--json-only") || CHILD;
+/** 是否每个插件独立进程跑（默认开）。 */
+const ISOLATE = !args.includes("--no-isolate") && !CHILD;
+/** 父进程给单个子进程的硬杀时限：要比插件内的 90s 墙钟略大，留出下载预算。 */
+const CHILD_TIMEOUT_MS = 180_000;
+const RESULT_MARKER = "NF_COMPAT_RESULT:";
 /** 默认复用已下载的产物（幂等缓存），加 --refresh 才重新走网络。 */
 const REFRESH = args.includes("--refresh");
 
@@ -781,7 +791,88 @@ function fmtErr(s) {
   return String(s).length > 150 ? `${String(s).slice(0, 150)}…` : String(s);
 }
 
+/**
+ * 独立进程跑一个插件（默认路径）。
+ *
+ * 为什么必须独立进程：有些插件会陷入**同步死循环或微任务饥饿** ——
+ * google-calendar 内置日历库的分页是 `while (有下一页) await request(...)`，
+ * 撞上永远返回"同样 items + 非空 nextPageToken"的桩之后，await 只让出微任务，
+ * 事件循环没机会跑，任何 setTimeout 型超时都不触发（实测烧掉 4 分钟 CPU、整轮停摆）。
+ * 进程隔离 + 硬杀是唯一能兜住这种情况的办法。
+ */
+async function runIsolated(plugin) {
+  // 只把「模式开关」传下去，不能把父进程命令行里的其它插件 id 带过去
+  //（带过去子进程会连着测好几个插件，然后撞上超时）。
+  const MODE_FLAGS = new Set([
+    "--no-fetch",
+    "--refresh",
+    "--from-vault",
+    "--shared-api",
+    "--report-only",
+    "--no-isolate",
+  ]);
+  const modeArgs = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (!a.startsWith("--")) continue;
+    if (a === "--from-vault") {
+      modeArgs.push(a, args[i + 1] ?? "");
+      i += 1;
+      continue;
+    }
+    if (MODE_FLAGS.has(a)) modeArgs.push(a);
+  }
+  const childArgs = [fileURLToPath(import.meta.url), ...modeArgs, "--only", plugin.id, "--json-only"];
+  const started = Date.now();
+  const proc = spawnSync(process.execPath, childArgs, {
+    timeout: CHILD_TIMEOUT_MS,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, NF_COMPAT_CHILD: "1" },
+  });
+  const out = `${proc.stdout ?? ""}`;
+  const at = out.lastIndexOf(RESULT_MARKER);
+  if (at >= 0) {
+    try {
+      const r = JSON.parse(out.slice(at + RESULT_MARKER.length).split("\n")[0]);
+      r.ms = Date.now() - started;
+      return r;
+    } catch {
+      /* 落到下面的失败合成 */
+    }
+  }
+  return {
+    id: plugin.id,
+    name: plugin.name,
+    category: plugin.category,
+    downloads: plugin.downloads,
+    repo: plugin.repo,
+    status: "fail-harness",
+    phase: "isolate",
+    error: proc.error
+      ? `子进程异常：${proc.error.message}`
+      : `子进程未产出结果（${proc.signal ? `被信号 ${proc.signal} 杀死` : `退出码 ${proc.status}`}），判定为挂死`,
+    commands: 0,
+    views: 0,
+    settingTabs: 0,
+    editorExtensions: 0,
+    postProcessors: 0,
+    cmModulesUsed: [],
+    commandIds: [],
+    viewShells: {},
+    unresolvedRequires: [],
+    unsupportedApi: {},
+    apiErrors: {},
+    ms: Date.now() - started,
+  };
+}
+
 async function main() {
+  if (JSON_ONLY && !CHILD) {
+    // 父进程不该走到这里（它只负责 spawn 子进程），真走到了就直接报错退出
+    console.error("内部错误：--json-only 只能在子进程里用");
+    process.exit(2);
+  }
   if (REPORT_ONLY) {
     const outFile = resolve(HERE, "compat-results.json");
     const saved = JSON.parse(readFileSync(outFile, "utf8"));
@@ -878,18 +969,20 @@ async function main() {
     process.on("uncaughtException", collect);
     let r;
     try {
-      // 单插件超时：插件的 onload / 视图 onOpen 里可能 await 一个永不返回的东西
-      //（网络、Worker、轮询）。没有超时的话一个插件就能把整轮跑挂住
-      // —— 实测 120 样本的轮次在第 57 个插件上停了两个小时。
-      r = await Promise.race([
-        testPlugin(shim, p, sharedApi),
-        new Promise((_, rej) =>
-          setTimeout(
-            () => rej(new Error(`插件超时（${PLUGIN_TIMEOUT_MS / 1000}s 未完成，可能卡在网络或死循环）`)),
-            PLUGIN_TIMEOUT_MS,
+      if (ISOLATE) {
+        r = await runIsolated(p);
+      } else {
+        // 进程内跑：单插件超时（仅对异步挂起有效，同步死循环/微任务饥饿仍然会卡住整轮）
+        r = await Promise.race([
+          testPlugin(shim, p, sharedApi),
+          new Promise((_, rej) =>
+            setTimeout(
+              () => rej(new Error(`插件超时（${PLUGIN_TIMEOUT_MS / 1000}s 未完成，可能卡在网络或死循环）`)),
+              PLUGIN_TIMEOUT_MS,
+            ),
           ),
-        ),
-      ]);
+        ]);
+      }
     } catch (e) {
       r = {
         id: p.id, name: p.name, category: p.category, downloads: p.downloads, repo: p.repo,
@@ -974,6 +1067,16 @@ async function main() {
       2,
     ),
   );
+
+  if (JSON_ONLY) {
+    // 子进程：结果单行 JSON 交给父进程（日志噪音在前面，用标记定位）
+    for (const r of results) {
+      process.stdout.write(`${RESULT_MARKER}${JSON.stringify(r)}\n`);
+    }
+    // 必须硬退出：插件留下的 setInterval / 未 resolve 的 promise 会吊住 Node，
+    // 结果明明已经出来了，进程却一直不结束（实测每个子进程白等 2 分钟）。
+    process.exit(0);
+  }
 
   console.log(`\n===== 汇总（${results.length} 个） =====`);
   console.log(
