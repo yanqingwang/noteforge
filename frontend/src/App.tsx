@@ -115,7 +115,8 @@ function App() {
       // Obsidian 兼容插件：加载 .obsidian/plugins 下已启用的插件
       void obsidianRuntime.init({
         vaultPath: () => path,
-        activeFile: () => activeFileRef.current,
+        // 插件视图打开的文件不在编辑器里，宿主活动文件会为空 —— 用运行时的兜底值
+        activeFile: () => activeFileRef.current ?? obsidianRuntime.activeFileFallback(),
         openFile: async (p: string) => { await readNoteRef.current?.(p); },
         saveFile: () => saveNoteRef.current?.(),
         toggleMode: (m) => handleSetViewModeRef.current?.(m),
@@ -152,16 +153,31 @@ function App() {
     } else {
       dispatch({ type: 'SET_STATUS', text: `跳转: ${resolved}` } as any);
     }
+    // 插件用 registerExtensions 声明接管的自定义扩展名（如 quadrant-chart 的 .mdx）
+    // 要走插件自己的视图，否则只会看到一坨 YAML/二进制。
+    const dot = resolved.lastIndexOf(".");
+    const ext = dot > 0 ? resolved.slice(dot + 1).toLowerCase() : "";
+    if (ext) {
+      const viewType = obsidianRuntime.viewTypeForExtension(ext);
+      if (viewType) {
+        dispatch({ type: 'SET_STATUS', text: `打开: ${resolved}（${viewType} 视图）` } as any);
+        await obsidianRuntime.openView(viewType, { file: resolved });
+        obsidianRuntime.notifyFileOpen(resolved);
+        return;
+      }
+    }
     // .html 作为普通文件走编辑器（源码/HTML 两种并列格式在 EditorPane 内切换）
     // 其他附件（图片、PDF）仍走独立查看面板
     if (!resolved.endsWith(".md") && !/\.html?$/i.test(resolved)) {
       setHtmlViewFile(resolved);
+      obsidianRuntime.notifyFileOpen(resolved);
       return;
     }
     // Skip if already loaded
     if (contentCache[resolved]) {
       const c = contentCache[resolved];
       dispatch({ type: 'OPEN_FILE', path: resolved, content: c.content, html: c.html } as any);
+      obsidianRuntime.notifyFileOpen(resolved);
       return;
     }
     try {
@@ -169,6 +185,7 @@ function App() {
       const note = await invoke("read_note", { notePath: resolved }) as any;
       setContentCache(c => ({ ...c, [resolved]: { content: note.content, html: note.html } }));
       dispatch({ type: 'OPEN_FILE', path: resolved, content: note.content, html: note.html } as any);
+      obsidianRuntime.notifyFileOpen(resolved);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `读取失败: ${e}` } as any); }
   }, [vaultPath, contentCache, files]);
 
@@ -408,6 +425,13 @@ function App() {
   // 插件是异步加载的：订阅运行时，否则命令面板的 useMemo 拿不到后注册的插件命令
   const [pluginTick, setPluginTick] = useState(0);
   useEffect(() => obsidianRuntime.subscribe(() => setPluginTick((n) => n + 1)), []);
+  // 插件接管的扩展名（如 quadrant-chart 的 .mdx）—— 文件树与快速切换器要放它们进来，
+  // 否则这些文件在 UI 里根本不存在。依赖 pluginTick：插件启停/安装后自动重算。
+  const pluginExts = useMemo(
+    () => obsidianRuntime.registeredExtensions(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pluginTick],
+  );
 
   const commands = useMemo(() => {
     const cmds = [
@@ -508,7 +532,7 @@ function App() {
               </button>
             </div>
             {sidebarMode === "files"
-              ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} />
+              ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} extraExts={pluginExts} />
               : sidebarMode === "outline"
                 ? <OutlinePanel items={outlineItems} dark={theme === "dark"} />
                 : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} onOpenPluginSettings={(id) => setPluginSettingFor(id)} />}
@@ -554,7 +578,7 @@ function App() {
       <StatusBar text={(state as any).statusText || "就绪"} />
 
       {showQuickSwitcher && files.length > 0 && (
-        <QuickSwitcher files={files} onSelect={(p) => { readNote(p); setShowQuickSwitcher(false); }}
+        <QuickSwitcher extraExts={pluginExts} files={files} onSelect={(p) => { readNote(p); setShowQuickSwitcher(false); }}
           onClose={() => setShowQuickSwitcher(false)} />
       )}
       {showCommandPalette && (

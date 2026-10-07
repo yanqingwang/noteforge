@@ -334,7 +334,7 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
     },
     setConfig: (k, v) => vault.setConfig(k, v),
     embedRegistry: createEmbedRegistry(),
-    viewRegistry: createViewRegistry(),
+    viewRegistry: createViewRegistry(workspace),
     // 1.13 密钥存储：插件用它存应用密码这类敏感值（data.json 里只留 id）
     secretStorage: createSecretStorage(),
     // 平台判定：不少插件直接读 app.isMobile（calendar 就是 window.app.isMobile）
@@ -593,13 +593,18 @@ function createSecretStorage() {
  * 语义与 Obsidian 一致：扩展名 → 视图类型（如 "drawio" → "drawio"），
  * 未注册时返回该扩展名本身（插件据此判断"有没有对应视图"）。
  */
-function createViewRegistry() {
+function createViewRegistry(workspace?: { viewTypeForExtension(ext: string): string | null }) {
   const byType = new Map<string, { name?: string; view: unknown }>();
   const extToType = new Map<string, string>();
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
   return {
-    typeByExtension: (ext: string): string => extToType.get(ext.toLowerCase().replace(/^\./, "")) ?? ext.toLowerCase().replace(/^\./, ""),
+    // 优先用插件通过 registerExtensions 声明的归属 —— 那是「点开 .mdx 该用哪个视图」
+    // 的真正答案；其次才是视图自己用 opts.ext 登记的映射。
+    typeByExtension: (ext: string): string => {
+      const key = ext.toLowerCase().replace(/^\./, "");
+      return workspace?.viewTypeForExtension(key) ?? extToType.get(key) ?? key;
+    },
     getViewByType: (type: string) => byType.get(type) ?? null,
     registerView: (
       type: string,

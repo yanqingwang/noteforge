@@ -9,11 +9,24 @@ interface FileTreeProps {
   onSelect: (path: string) => void;
   /** 当前 vault 路径，用于按 vault 持久化文件夹展开状态（缺省不持久化） */
   vaultPath?: string;
+  /** 插件通过 registerExtensions 声明接管的扩展名（额外纳入文件树） */
+  extraExts?: readonly string[];
 }
 
-/** 树中展示的文件类型：Markdown 笔记 + HTML 报告 */
-export function isRenderableFile(path: string): boolean {
-  return /\.(?:md|html?)$/i.test(path);
+/**
+ * 树中展示的文件类型：Markdown 笔记 + HTML 报告 + **插件接管的扩展名**。
+ *
+ * extraExts 来自插件的 `registerExtensions(['mdx'], viewType)`（如 quadrant-chart）。
+ * 不把它们算进来，.mdx 这类文件在文件树和快速切换器里直接消失 ——
+ * 用户根本没法打开它们，功能等于没做。
+ */
+export function isRenderableFile(path: string, extraExts: readonly string[] = []): boolean {
+  if (/\.(?:md|html?)$/i.test(path)) return true;
+  if (!extraExts.length) return false;
+  const dot = path.lastIndexOf(".");
+  if (dot < 0) return false;
+  const ext = path.slice(dot + 1).toLowerCase();
+  return extraExts.some((e) => String(e).replace(/^\./, "").toLowerCase() === ext);
 }
 
 /** 收集一个文件路径的全部祖先目录（vault 相对路径） */
@@ -31,7 +44,7 @@ export function ancestorDirs(path: string): string[] {
 
 const storageKey = (vaultPath?: string) => (vaultPath ? `nf-expanded:${vaultPath}` : "");
 
-const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath }: FileTreeProps) {
+const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath, extraExts }: FileTreeProps) {
   const [sortMode, setSortMode] = useState<SortMode>("modified-desc");
   const [dirsFirst, setDirsFirst] = useState(true);
   // 展开状态取反义（默认空集 = 全部折叠，类 Obsidian）；按 vault 持久化
@@ -43,8 +56,8 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
     return new Set();
   });
 
-  const tree = buildTree(files, sortMode, dirsFirst);
-  const noteCount = files.filter(f => !f.is_dir && isRenderableFile(f.path)).length;
+  const tree = buildTree(files, sortMode, dirsFirst, extraExts);
+  const noteCount = files.filter(f => !f.is_dir && isRenderableFile(f.path, extraExts)).length;
 
   // 持久化展开状态（仅针对当前 vault）
   useEffect(() => {
@@ -170,8 +183,13 @@ function fmtTime(ts: number): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-function buildTree(files: FileEntry[], sortMode: SortMode, dirsFirst: boolean): TreeNode[] {
-  const visible = files.filter(f => !f.is_dir && isRenderableFile(f.path));
+function buildTree(
+  files: FileEntry[],
+  sortMode: SortMode,
+  dirsFirst: boolean,
+  extraExts: readonly string[] = [],
+): TreeNode[] {
+  const visible = files.filter(f => !f.is_dir && isRenderableFile(f.path, extraExts));
   const root: TreeNode[] = [];
   const dirMap = new Map<string, TreeNode>();
 

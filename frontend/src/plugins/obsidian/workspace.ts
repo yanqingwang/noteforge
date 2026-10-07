@@ -170,7 +170,21 @@ export class WorkspaceLeaf {
     }
     const view = factory(this);
     this.view = view;
+    // Obsidian 的顺序是先 setState 再 onOpen。少了 setState 调用，
+    // FileView 子类（如 quadrant-chart 的图表视图）拿不到 state.file，
+    // 视图.file 永远是 null —— 表现是「视图打开了但没有内容」。
+    if (state.state !== undefined && typeof view.setState === "function") {
+      await view.setState(state.state, this);
+    }
     await view.onOpen();
+    // Obsidian 在 onOpen 之后才把文件交给 FileView 并回调 onLoadFile —— 内容加载
+    // 都挂在这个钩子上（quadrant-chart 的注释明确写了：onOpen 时 this.file 还是 null，
+    // 「在 onOpen 里加载图表会静默无效，画布停在默认空图」）。不调它 = 视图打开了但没内容。
+    const viewFile = (view as { file?: unknown; onLoadFile?: (f: unknown) => unknown }).file;
+    const onLoadFile = (view as { onLoadFile?: (f: unknown) => unknown }).onLoadFile;
+    if (viewFile && typeof onLoadFile === "function") {
+      await onLoadFile.call(view, viewFile);
+    }
     if (this.containerEl && !view.containerEl.isConnected) {
       this.containerEl.appendChild(view.containerEl);
     }
@@ -202,6 +216,12 @@ export class Workspace extends Events {
   leftSplit: unknown;
   rightSplit: unknown;
   rootSplit: unknown;
+  /**
+   * 插件通过 `registerExtensions(['mdx'], viewType)` 声明「这个扩展名由我的视图接管」。
+   * Obsidian 用它决定点开这类文件时走哪个视图；不实现的话宿主会把 .mdx 之类的文件
+   * 当普通附件/源码打开，用户看到的是一坨 YAML 而不是图表。
+   */
+  private extViews = new Map<string, string>();
   activeEditor: EditorLike | null = null;
 
   private factories = new Map<string, (leaf: WorkspaceLeaf) => View>();
@@ -322,6 +342,22 @@ export class Workspace extends Events {
 
   iterateRootLeaves(cb: (leaf: WorkspaceLeaf) => unknown): void {
     this.iterateAllLeaves(cb);
+  }
+
+  /** 登记「扩展名 → 视图类型」（Plugin.registerExtensions 的落点）。 */
+  registerExtension(extension: string, viewType: string): void {
+    const ext = String(extension).replace(/^\./, "").toLowerCase();
+    if (ext) this.extViews.set(ext, viewType);
+  }
+
+  /** 某个扩展名有没有被插件接管；没有则返回 null。 */
+  viewTypeForExtension(extension: string): string | null {
+    return this.extViews.get(String(extension).replace(/^\./, "").toLowerCase()) ?? null;
+  }
+
+  /** 已被插件接管的扩展名列表（宿主打开文件时先问它）。 */
+  registeredExtensions(): string[] {
+    return [...this.extViews.keys()];
   }
 
   revealLeaf(leaf: WorkspaceLeaf): void {
@@ -485,6 +521,15 @@ export abstract class FileView extends ItemView {
   }
 
   requestSave(): void {}
+
+  /**
+   * Obsidian 在视图打开后把文件交给这里（内容加载都挂这个钩子）。
+   * 默认空实现；插件覆写它来读文件、渲染内容。
+   */
+  async onLoadFile(_file: TFile): Promise<void> {}
+
+  /** 文件被换掉/重新加载时的回调（Obsidian 语义）。 */
+  async onUnloadFile(_file: TFile): Promise<void> {}
 
   override getDisplayText(): string {
     return this.file?.basename ?? this.getViewType();

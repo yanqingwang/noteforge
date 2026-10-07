@@ -6,9 +6,11 @@ interface QuickSwitcherProps {
   files: { path: string; is_dir?: boolean }[];
   onSelect: (path: string) => void;
   onClose: () => void;
+  /** 插件接管的扩展名（.mdx 之类），否则切换器里搜不到 */
+  extraExts?: readonly string[];
 }
 
-export default function QuickSwitcher({ files, onSelect, onClose }: QuickSwitcherProps) {
+export default function QuickSwitcher({ files, onSelect, onClose, extraExts = [] }: QuickSwitcherProps) {
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,7 +26,9 @@ export default function QuickSwitcher({ files, onSelect, onClose }: QuickSwitche
 
   // 只列可打开文件（排除目录与附件），类 Obsidian 快速切换
   const results = files.filter(f =>
-    !f.is_dir && isRenderableFile(f.path) && f.path.toLowerCase().includes(query.toLowerCase())
+    !f.is_dir &&
+    isRenderableFile(f.path, extraExts) &&
+    f.path.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 20);
 
   const open = (p: string) => { onSelect(p); };

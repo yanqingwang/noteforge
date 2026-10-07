@@ -254,9 +254,21 @@ export abstract class Plugin extends Component {
     });
   }
 
+  /**
+   * 声明「这些扩展名由我的视图接管」（Obsidian 1.x 起的老 API）。
+   *
+   * 插件靠它让自定义格式的文件点开时走自己的视图，例如 quadrant-chart 用
+   * `registerExtensions(['mdx'], VIEW_TYPE_QUADRANT)` 把 .mdx 渲染成图表。
+   * 原来这里是空实现（`void viewType`），宿主既不知道扩展名归属、也不会路由，
+   * 结果 .mdx 被当成附件打开，只看到一坨 YAML。
+   */
   registerExtensions(exts: unknown[], viewType: string): void {
-    for (const e of exts) this.registerEditorExtension(e);
-    void viewType;
+    for (const e of exts) {
+      const ext = String(e);
+      this.registerEditorExtension(ext);
+      const ws = this.ws();
+      (ws?.registerExtension as ((e: string, v: string) => void) | undefined)?.(ext, viewType);
+    }
   }
 
   registerMarkdownPostProcessor(

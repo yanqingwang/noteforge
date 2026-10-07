@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-10-06T14:33:55.866Z",
+  "generatedAt": "2026-10-07T08:51:27.194Z",
   "source": "https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugins.json + community-plugin-stats.json",
   "totalInMarketplace": 8451,
-  "target": 40,
-  "sampled": 41,
+  "target": 120,
+  "sampled": 121,
   "byCategory": {
-    "图谱白板": 4,
-    "模板自动化": 3,
-    "数据视图": 3,
-    "任务待办": 3,
-    "其他": 3,
-    "同步集成": 3,
-    "日历日记": 3,
-    "样式外观": 3,
-    "AI 智能体": 4,
-    "编辑写作": 3,
-    "导航大纲": 3,
-    "媒体附件": 3,
-    "整理归档": 3
+    "图谱白板": 10,
+    "模板自动化": 10,
+    "数据视图": 10,
+    "任务待办": 9,
+    "其他": 9,
+    "同步集成": 9,
+    "日历日记": 9,
+    "样式外观": 9,
+    "AI 智能体": 10,
+    "编辑写作": 9,
+    "导航大纲": 9,
+    "媒体附件": 9,
+    "整理归档": 9
   },
   "plugins": [
     {
@@ -299,6 +299,566 @@
       "repo": "markmindckm/obsidian-enhancing-mindmap",
       "category": "图谱白板",
       "downloads": 239251
+    },
+    {
+      "id": "auto-template-trigger",
+      "name": "Auto Template Trigger",
+      "repo": "numeroflip/obsidian-auto-template-trigger",
+      "category": "模板自动化",
+      "downloads": 41956
+    },
+    {
+      "id": "dataview-serializer",
+      "name": "Dataview Serializer",
+      "repo": "dsebastien/obsidian-dataview-serializer",
+      "category": "数据视图",
+      "downloads": 19762
+    },
+    {
+      "id": "todoist-sync-plugin",
+      "name": "Todoist Sync",
+      "repo": "jamiebrynes7/obsidian-todoist-plugin",
+      "category": "任务待办",
+      "downloads": 182002
+    },
+    {
+      "id": "omnisearch",
+      "name": "Omnisearch",
+      "repo": "scambier/obsidian-omnisearch",
+      "category": "其他",
+      "downloads": 1966306
+    },
+    {
+      "id": "obsidian-advanced-uri",
+      "name": "Advanced URI",
+      "repo": "vinzent03/obsidian-advanced-uri",
+      "category": "同步集成",
+      "downloads": 667213
+    },
+    {
+      "id": "obsidian-reminder-plugin",
+      "name": "Reminder",
+      "repo": "uphy/obsidian-reminder",
+      "category": "日历日记",
+      "downloads": 339655
+    },
+    {
+      "id": "colored-text",
+      "name": "Colored Text",
+      "repo": "erincayaz/obsidian-colored-text",
+      "category": "样式外观",
+      "downloads": 290242
+    },
+    {
+      "id": "chatgpt-md",
+      "name": "ChatGPT MD",
+      "repo": "bramses/chatgpt-md",
+      "category": "AI 智能体",
+      "downloads": 146372
+    },
+    {
+      "id": "various-complements",
+      "name": "Various Complements",
+      "repo": "tadashi-aikawa/obsidian-various-complements-plugin",
+      "category": "编辑写作",
+      "downloads": 616671
+    },
+    {
+      "id": "file-explorer-note-count",
+      "name": "File Explorer Note Count",
+      "repo": "ozntel/file-explorer-note-count",
+      "category": "导航大纲",
+      "downloads": 300767
+    },
+    {
+      "id": "oz-image-plugin",
+      "name": "Image in Editor",
+      "repo": "ozntel/oz-image-in-editor-obsidian",
+      "category": "媒体附件",
+      "downloads": 364111
+    },
+    {
+      "id": "social-archiver",
+      "name": "Social Archiver",
+      "repo": "hyungyunlim/obsidian-social-archiver-releases",
+      "category": "整理归档",
+      "downloads": 34704
+    },
+    {
+      "id": "drawio-obsidian",
+      "name": "Diagrams",
+      "repo": "zapthedingbat/drawio-obsidian",
+      "category": "图谱白板",
+      "downloads": 217603
+    },
+    {
+      "id": "obsidian-hotkeys-for-templates",
+      "name": "Hotkeys for templates",
+      "repo": "vinzent03/obsidian-hotkeys-for-templates",
+      "category": "模板自动化",
+      "downloads": 32909
+    },
+    {
+      "id": "dataview-publisher",
+      "name": "Dataview Publisher",
+      "repo": "udus122/dataview-publisher",
+      "category": "数据视图",
+      "downloads": 13363
+    },
+    {
+      "id": "obsidian-task-progress-bar",
+      "name": "Task Genius",
+      "repo": "taskgenius/taskgenius-plugin",
+      "category": "任务待办",
+      "downloads": 171167
+    },
+    {
+      "id": "obsidian-importer",
+      "name": "Importer",
+      "repo": "obsidianmd/obsidian-importer",
+      "category": "其他",
+      "downloads": 1763043
+    },
+    {
+      "id": "nutstore-sync",
+      "name": "Nutstore Sync",
+      "repo": "nutstore/obsidian-nutstore-sync",
+      "category": "同步集成",
+      "downloads": 214297
+    },
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "repo": "yukigasai/obsidian-google-calendar",
+      "category": "日历日记",
+      "downloads": 200237
+    },
+    {
+      "id": "code-styler",
+      "name": "Code Styler",
+      "repo": "mayurankv/Obsidian-Code-Styler",
+      "category": "样式外观",
+      "downloads": 240818
+    },
+    {
+      "id": "local-gpt",
+      "name": "Local GPT",
+      "repo": "pfrankov/obsidian-local-gpt",
+      "category": "AI 智能体",
+      "downloads": 100035
+    },
+    {
+      "id": "obsidian-text-format",
+      "name": "Text Format",
+      "repo": "benature/obsidian-text-format",
+      "category": "编辑写作",
+      "downloads": 230933
+    },
+    {
+      "id": "find-unlinked-files",
+      "name": "Find orphaned files and broken links",
+      "repo": "vinzent03/find-unlinked-files",
+      "category": "导航大纲",
+      "downloads": 229684
+    },
+    {
+      "id": "better-export-pdf",
+      "name": "Better Export PDF",
+      "repo": "l1xnan/obsidian-better-export-pdf",
+      "category": "媒体附件",
+      "downloads": 348561
+    },
+    {
+      "id": "statusbar-organizer",
+      "name": "Status Bar Organizer",
+      "repo": "opisek/obsidian-statusbar-organizer",
+      "category": "整理归档",
+      "downloads": 15935
+    },
+    {
+      "id": "canvas-mindmap",
+      "name": "Canvas Mindmap",
+      "repo": "quorafind/Obsidian-Canvas-MindMap",
+      "category": "图谱白板",
+      "downloads": 158806
+    },
+    {
+      "id": "smart-templates",
+      "name": "Smart Templates",
+      "repo": "brianpetro/obsidian-smart-templates",
+      "category": "模板自动化",
+      "downloads": 23775
+    },
+    {
+      "id": "dataview-properties",
+      "name": "Dataview to Properties",
+      "repo": "mara-li/obsidian-dataview-properties",
+      "category": "数据视图",
+      "downloads": 11911
+    },
+    {
+      "id": "obsidian-rollover-daily-todos",
+      "name": "Rollover Daily Todos",
+      "repo": "lumoe/obsidian-rollover-daily-todos",
+      "category": "任务待办",
+      "downloads": 150565
+    },
+    {
+      "id": "homepage",
+      "name": "Homepage",
+      "repo": "mirnovov/obsidian-homepage",
+      "category": "其他",
+      "downloads": 1369684
+    },
+    {
+      "id": "google-drive-sync",
+      "name": "Google Drive Sync",
+      "repo": "richardx366/Obsidian-Google-Drive",
+      "category": "同步集成",
+      "downloads": 185618
+    },
+    {
+      "id": "calendarium",
+      "name": "Calendarium",
+      "repo": "javalent/calendarium",
+      "category": "日历日记",
+      "downloads": 195733
+    },
+    {
+      "id": "colored-tags",
+      "name": "Colored Tags",
+      "repo": "pfrankov/obsidian-colored-tags",
+      "category": "样式外观",
+      "downloads": 238369
+    },
+    {
+      "id": "smart-second-brain",
+      "name": "Smart Second Brain",
+      "repo": "s2b-dev/smart-second-brain",
+      "category": "AI 智能体",
+      "downloads": 70174
+    },
+    {
+      "id": "novel-word-count",
+      "name": "Novel word count",
+      "repo": "isaaclyman/novel-word-count-obsidian",
+      "category": "编辑写作",
+      "downloads": 199714
+    },
+    {
+      "id": "supercharged-links-obsidian",
+      "name": "Supercharged Links",
+      "repo": "mdelobelle/obsidian_supercharged_links",
+      "category": "导航大纲",
+      "downloads": 219864
+    },
+    {
+      "id": "mousewheel-image-zoom",
+      "name": "Mousewheel Image zoom",
+      "repo": "nicojeske/mousewheel-image-zoom",
+      "category": "媒体附件",
+      "downloads": 168900
+    },
+    {
+      "id": "settings-sidebar-organizer",
+      "name": "Settings Sidebar Organizer",
+      "repo": "cyrylsz/obsidian-settings-sidebar-organizer",
+      "category": "整理归档",
+      "downloads": 6706
+    },
+    {
+      "id": "obsidian-mindmap-nextgen",
+      "name": "Mindmap NextGen",
+      "repo": "james-tindal/obsidian-mindmap-nextgen",
+      "category": "图谱白板",
+      "downloads": 126958
+    },
+    {
+      "id": "obsidian-notes-from-template",
+      "name": "From Template",
+      "repo": "mo-seph/obsidian-note-from-template",
+      "category": "模板自动化",
+      "downloads": 14870
+    },
+    {
+      "id": "obs-projects-plus",
+      "name": "Projects Plus",
+      "repo": "parkpavel/obs-projects-plus",
+      "category": "数据视图",
+      "downloads": 8726
+    },
+    {
+      "id": "tasks-calendar-wrapper",
+      "name": "Tasks Calendar Wrapper",
+      "repo": "leonezz/obsidian-tasks-calendar-wrapper",
+      "category": "任务待办",
+      "downloads": 76252
+    },
+    {
+      "id": "recent-files-obsidian",
+      "name": "Recent Files",
+      "repo": "tgrosinger/recent-files-obsidian",
+      "category": "其他",
+      "downloads": 1205222
+    },
+    {
+      "id": "fast-note-sync",
+      "name": "Fast Note Sync",
+      "repo": "haierkeys/obsidian-fast-note-sync",
+      "category": "同步集成",
+      "downloads": 159685
+    },
+    {
+      "id": "heatmap-calendar",
+      "name": "Heatmap Calendar",
+      "repo": "richardsl/heatmap-calendar-obsidian",
+      "category": "日历日记",
+      "downloads": 177739
+    },
+    {
+      "id": "obsidian-file-color",
+      "name": "File Color",
+      "repo": "ecustic/obsidian-file-color",
+      "category": "样式外观",
+      "downloads": 227851
+    },
+    {
+      "id": "ai-providers",
+      "name": "AI Providers",
+      "repo": "pfrankov/obsidian-ai-providers",
+      "category": "AI 智能体",
+      "downloads": 61460
+    },
+    {
+      "id": "obsidian-markdown-formatting-assistant-plugin",
+      "name": "Markdown Formatting Assistant",
+      "repo": "reocin/obsidian-markdown-formatting-assistant-plugin",
+      "category": "编辑写作",
+      "downloads": 125447
+    },
+    {
+      "id": "custom-sort",
+      "name": "Custom File Explorer sorting",
+      "repo": "sebastianmc/obsidian-custom-sort",
+      "category": "导航大纲",
+      "downloads": 215973
+    },
+    {
+      "id": "obsidian-paste-image-rename",
+      "name": "Paste image rename",
+      "repo": "reorx/obsidian-paste-image-rename",
+      "category": "媒体附件",
+      "downloads": 163678
+    },
+    {
+      "id": "note-archiver",
+      "name": "Note archiver",
+      "repo": "thenomadlad/obsidian-note-archiver",
+      "category": "整理归档",
+      "downloads": 6493
+    },
+    {
+      "id": "simple-canvasearch",
+      "name": "Simple CanvaSearch",
+      "repo": "ddalexb/obsidian-simple-canvasearch",
+      "category": "图谱白板",
+      "downloads": 114385
+    },
+    {
+      "id": "youtube-template",
+      "name": "YouTube Template",
+      "repo": "sundevista/youtube-template",
+      "category": "模板自动化",
+      "downloads": 8744
+    },
+    {
+      "id": "dataview-autocompletion",
+      "name": "Dataview Autocompletion",
+      "repo": "dnlbauer/obsidian-dataview-autocompletion",
+      "category": "数据视图",
+      "downloads": 2839
+    },
+    {
+      "id": "task-board",
+      "name": "Task Board",
+      "repo": "tu2-atmanand/Task-Board",
+      "category": "任务待办",
+      "downloads": 75906
+    },
+    {
+      "id": "tag-wrangler",
+      "name": "Tag Wrangler",
+      "repo": "pjeby/tag-wrangler",
+      "category": "其他",
+      "downloads": 1117370
+    },
+    {
+      "id": "actions-uri",
+      "name": "Actions URI",
+      "repo": "czottmann/obsidian-actions-uri",
+      "category": "同步集成",
+      "downloads": 103976
+    },
+    {
+      "id": "journals",
+      "name": "Journals",
+      "repo": "srg-kostyrko/obsidian-journal",
+      "category": "日历日记",
+      "downloads": 142353
+    },
+    {
+      "id": "colored-tags-wrangler",
+      "name": "Colored Tags Wrangler",
+      "repo": "code-of-chaos/ColoredTagsWrangler.obmd",
+      "category": "样式外观",
+      "downloads": 55327
+    },
+    {
+      "id": "karpathywiki",
+      "name": "Karpathy LLM Wiki",
+      "repo": "gd4ai/obsidian-llm-wiki",
+      "category": "AI 智能体",
+      "downloads": 58173
+    },
+    {
+      "id": "slash-commander",
+      "name": "Slash Commander",
+      "repo": "alephpiece/obsidian-slash-commander",
+      "category": "编辑写作",
+      "downloads": 73791
+    },
+    {
+      "id": "quick-explorer",
+      "name": "Quick Explorer",
+      "repo": "pjeby/quick-explorer",
+      "category": "导航大纲",
+      "downloads": 167329
+    },
+    {
+      "id": "obsidian-local-images-plus",
+      "name": "Local Images Plus",
+      "repo": "sergei-korneev/obsidian-local-images-plus",
+      "category": "媒体附件",
+      "downloads": 163258
+    },
+    {
+      "id": "auto-file-organizer",
+      "name": "Auto File Organizer",
+      "repo": "mofukuru/auto-file-organizer",
+      "category": "整理归档",
+      "downloads": 5622
+    },
+    {
+      "id": "obsidian-chartsview-plugin",
+      "name": "Charts View",
+      "repo": "caronchen/obsidian-chartsview-plugin",
+      "category": "图谱白板",
+      "downloads": 96862
+    },
+    {
+      "id": "default-template",
+      "name": "Default Template",
+      "repo": "raeperd/obsidian-default-template",
+      "category": "模板自动化",
+      "downloads": 8030
+    },
+    {
+      "id": "projects-manager",
+      "name": "Projects Planner",
+      "repo": "wesswart77/obsidian-project-manager",
+      "category": "数据视图",
+      "downloads": 1544
+    },
+    {
+      "id": "taskchute-plus",
+      "name": "TaskChute Plus",
+      "repo": "hiroyaiizuka/taskchute-for-obsidian",
+      "category": "任务待办",
+      "downloads": 59894
+    },
+    {
+      "id": "obsidian42-brat",
+      "name": "BRAT",
+      "repo": "tfthacker/obsidian42-brat",
+      "category": "其他",
+      "downloads": 1088242
+    },
+    {
+      "id": "obsidian-shellcommands",
+      "name": "Shell commands",
+      "repo": "taitava/obsidian-shellcommands",
+      "category": "同步集成",
+      "downloads": 96919
+    },
+    {
+      "id": "calendar-bases",
+      "name": "Calendar Bases",
+      "repo": "edrickleong/obsidian-calendar-bases",
+      "category": "日历日记",
+      "downloads": 120805
+    },
+    {
+      "id": "OA-file-hider",
+      "name": "File Hider",
+      "repo": "eldritch-oliver/file-hider",
+      "category": "样式外观",
+      "downloads": 50795
+    },
+    {
+      "id": "typing-assistant",
+      "name": "Typing Assistant",
+      "repo": "jambo2018/notion-assistant-plugin",
+      "category": "AI 智能体",
+      "downloads": 50805
+    },
+    {
+      "id": "obsidian-plugin-prettier",
+      "name": "Prettier Format",
+      "repo": "hipstersmoothie/obsidian-plugin-prettier",
+      "category": "编辑写作",
+      "downloads": 22000
+    },
+    {
+      "id": "consistent-attachments-and-links",
+      "name": "Consistent Attachments and Links",
+      "repo": "dy-sh/obsidian-consistent-attachments-and-links",
+      "category": "导航大纲",
+      "downloads": 150923
+    },
+    {
+      "id": "oz-clear-unused-images",
+      "name": "Clear Unused Images",
+      "repo": "ozntel/oz-clear-unused-images-obsidian",
+      "category": "媒体附件",
+      "downloads": 155087
+    },
+    {
+      "id": "auto-archive",
+      "name": "Auto Archive",
+      "repo": "shanedonburke/obsidian-auto-archive",
+      "category": "整理归档",
+      "downloads": 4427
+    },
+    {
+      "id": "tldraw",
+      "name": "tldraw",
+      "repo": "tldraw/obsidian-plugin",
+      "category": "图谱白板",
+      "downloads": 96322
+    },
+    {
+      "id": "macros",
+      "name": "Macros",
+      "repo": "jamescliffordspratt/macros",
+      "category": "模板自动化",
+      "downloads": 6742
+    },
+    {
+      "id": "dataview-toggle",
+      "name": "Dataview Toggle",
+      "repo": "p1tt1/obsidian-dataview-toggle",
+      "category": "数据视图",
+      "downloads": 558
     },
     {
       "id": "vault-agent",

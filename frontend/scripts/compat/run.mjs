@@ -317,6 +317,8 @@ const VAULT_FILES = {
   "笔记/子目录/深层.md": "# 深层笔记\n\nfrontmatter 测试\n",
   "项目/计划.md": "---\ntitle: 计划\ntags: [计划, 项目]\n---\n\n# 计划\n\n| 项 | 状态 |\n| --- | --- |\n| A | 进行中 |\n",
   "附件/图.png": "not-a-real-png",
+  // 给「插件接管自定义扩展名」的视图用：quadrant-chart 这类插件靠它渲染图表
+  "sample.canvas": "---\nchart: 1\ntitle: 样本图\ncells:\n  - label: A\n  - label: B\n---\n",
   ".obsidian/app.json": '{"attachmentFolderPath":"附件"}\n',
   ".obsidian/community-plugins.json": "[]\n",
 };
@@ -506,11 +508,24 @@ async function testPlugin(shim, plugin, sharedApi = null) {
   for (const type of [...api.workspace.factories.keys()]) {
     try {
       const leaf = api.workspace.getLeaf(true);
+      // 被插件接管的扩展名走它自己的视图，这里带上对应文件才能测到真实渲染
+      const ownedExt = api.workspace.registeredExtensions().find(
+        (e) => api.workspace.viewTypeForExtension(e) === type,
+      );
+      const state = ownedExt
+        ? { type, active: true, state: { file: VAULT_FILES[`sample.${ownedExt}`] ? `sample.${ownedExt}` : "" } }
+        : { type, active: true, state: {} };
+      if (ownedExt && !VAULT_FILES[`sample.${ownedExt}`]) continue;
       const factory = api.workspace.getViewFactory(type);
       if (!factory) continue;
       const view = factory(leaf);
       view.app = api.app;
+      // 走 Obsidian 的完整顺序：setState → onOpen → onLoadFile。
+      // 少调 onLoadFile 的话 FileView 子类会停在"打开了但没内容"的状态
+      //（quadrant-chart 的画布会是空图），而这一阶段恰恰看不出来。
+      if (state && typeof view.setState === "function") await view.setState(state, null);
       await view.onOpen?.();
+      if (view.file && typeof view.onLoadFile === "function") await view.onLoadFile(view.file);
       view.onunload?.();
     } catch (e) {
       viewErrors.push(`${type}: ${String(e?.message ?? e).split("\n")[0]}`);

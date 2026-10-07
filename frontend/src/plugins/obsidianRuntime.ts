@@ -154,6 +154,16 @@ class ObsidianRuntime {
     return this.containers.get(type) ?? null;
   }
 
+  /** 最近一次「打开文件」通知到的路径（插件视图打开的文件也要算当前文件）。 */
+  private activePath: string | null = null;
+
+  /** 视图自己的标题（getDisplayText），停靠面板优先用它。 */
+  private viewTitles = new Map<string, string>();
+
+  /** app.getActiveFile() 的兜底：宿主活动文件为空时用这个（插件视图打开的场景）。 */
+  activeFileFallback(): string | null {
+    return this.activePath;
+  }
   private dock: HTMLElement | null = null;
   private dockBody: HTMLElement | null = null;
   private dockTitle: HTMLElement | null = null;
@@ -256,8 +266,40 @@ class ObsidianRuntime {
     return el;
   }
 
-  /** 打开插件视图（把视图 DOM 挂进停靠面板）。 */
-  async openView(type: string): Promise<void> {
+  /**
+   * 某个扩展名是否被插件接管（Plugin.registerExtensions）。
+   * 宿主打开文件前要先问它，否则 .mdx 这类自定义格式会被当附件/源码打开。
+   */
+  /** 已被插件接管的扩展名（宿主用它决定文件树/切换器里显示哪些文件）。 */
+  registeredExtensions(): string[] {
+    return this.api?.workspace.registeredExtensions() ?? [];
+  }
+
+  viewTypeForExtension(ext: string): string | null {
+    return this.api?.workspace.viewTypeForExtension(ext) ?? null;
+  }
+
+  /**
+   * 打开一个文件并让插件知道（Obsidian 的 file-open 事件）。
+   *
+   * 不少插件靠这个事件接管文件打开流程 —— quadrant-chart 就在里面把 .mdx
+   * 转成图表视图。宿主不触发，插件的自动打开逻辑就完全不生效。
+   */
+  notifyFileOpen(path: string): void {
+    const api = this.api;
+    if (!api) return;
+    const file = api.vault.getAbstractFileByPath?.(path);
+    if (!file) return;
+    this.activePath = path;
+    try {
+      api.workspace.trigger("file-open", file);
+    } catch (e) {
+      console.error("[plugin] file-open 监听器抛错", e);
+    }
+  }
+
+  /** 打开插件视图（把视图 DOM 挂进停靠面板）。state 会传给视图的 setState。 */
+  async openView(type: string, state?: Record<string, unknown>): Promise<void> {
     const api = this.api;
     if (!api) return;
     // 宿主若提供了容器（未来做真正的侧栏视图时）优先用它，否则用停靠面板
@@ -273,13 +315,32 @@ class ObsidianRuntime {
       return;
     }
     try {
+      if (state) {
+        // 带 state 时走 Obsidian 的正规路径：setViewState 会 setState → onOpen，
+        // FileView 子类靠这一步把 state.file 解析成 this.file。
+        await leaf.setViewState({ type, active: true, state });
+        const v = leaf.view as { app?: unknown; contentElHost?: HTMLElement } | null;
+        if (v) {
+          v.app = api.app;
+          if (v.contentElHost) el.replaceChildren(v.contentElHost);
+        }
+      } else {
       const view = factory(leaf);
       view.app = api.app;
       leaf.view = view;
       await view.onOpen();
       el.replaceChildren(view.contentElHost);
+      }
       api.workspace.revealLeaf(leaf);
       this.currentView = type;
+      // 标题用视图自己的 displayText（如「象限图示例」），比"插件视图 · chart"有信息量
+      try {
+        const label = leaf.getDisplayText?.();
+        if (label && label !== type) this.viewTitles.set(type, label);
+      } catch {
+        /* 视图没实现 getDisplayText 就用兜底标题 */
+      }
+      if (this.dockTitle) this.dockTitle.textContent = this.viewTitles.get(type) ?? viewTitle(type);
       this.viewChange?.(type);
     } catch (e) {
       el.replaceChildren();
