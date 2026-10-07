@@ -12,6 +12,7 @@
  * 每行都重新 parse 会明显拖慢大 vault。
  */
 
+import type { FileApi } from "./file-api";
 import { ExprError } from "./lexer";
 import { binaryArith, GLOBAL_FUNCTIONS, methodsFor, relational, type EvalScope, type FnCtx } from "./functions";
 import { parseExpr, type Node } from "./parser";
@@ -160,7 +161,7 @@ function evalMember(node: { object: Node; name: string }, scope: EvalScope, src:
     return v ?? NULL;
   }
   if (obj instanceof FileValue) {
-    return fileProperty(obj.filePath, prop, scope);
+    return filePropertyValue(obj.filePath, prop, scope.fileApi);
   }
   // date.year / list.length / string.length 这类"字段"也在方法表里
   const methods = methodsFor(obj);
@@ -180,13 +181,17 @@ function evalIndex(node: { object: Node; index: Node }, scope: EvalScope, src: s
     return obj.items[i] ?? NULL;
   }
   if (obj instanceof ObjectValue) return obj.get(idx.toString()) ?? NULL;
-  if (obj instanceof FileValue) return fileProperty(obj.filePath, idx.toString(), scope);
+  if (obj instanceof FileValue) return filePropertyValue(obj.filePath, idx.toString(), scope.fileApi);
   return NULL;
 }
 
-/** `file.*` 的字段属性（方法在 methodsFor 的 file 表里） */
-function fileProperty(path: string, prop: string, scope: EvalScope): Value {
-  const api = scope.fileApi;
+/**
+ * `file.*` 的字段属性（方法在 methodsFor 的 file 表里）。
+ *
+ * 导出给查询引擎复用 —— BasesEntry.getValue / 排序 / 汇总都要按属性 ID 取值，
+ * 走同一个实现才不会和公式求值里的行为分叉。
+ */
+export function filePropertyValue(path: string, prop: string, api: FileApi): Value {
   switch (prop) {
     case "name":
       return new StringValue(path.split("/").pop() ?? path);

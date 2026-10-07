@@ -10,6 +10,7 @@ import { Component, Events, Platform, addIcon, debounce, setIcon } from "./event
 import type { TAbstractFile, TFile } from "./items";
 import type { PluginManifest } from "./types";
 import type { View, WorkspaceLeaf } from "./workspace";
+import { currentBasesHost } from "./bases/registry";
 
 export interface Command {
   id: string;
@@ -127,6 +128,24 @@ export abstract class Plugin extends Component {
 
   registerEphemeralView(type: string, factory: (leaf: never) => unknown): void {
     this.registerView(type, factory);
+  }
+
+  /**
+   * 注册一个 Bases 自定义视图（Obsidian 1.9+ 的 Bases 体系）。
+   *
+   * 这不是"多注册一个视图类型"那么简单：注册之后，这个 viewType 就成了
+   * `.base` 文件里 `views[].type` 的一个可选值，用户能在布局菜单里选它。
+   * 返回 false 表示该 viewId 已被占用（官方也是这个语义）。
+   *
+   * calendar-bases / social-archiver / media-extended 三个插件在 onload 里
+   * 第一件事就是调它 —— 缺了这个方法，它们在求值阶段就抛
+   * "Class extends value undefined"（BasesView 未定义）。
+   */
+  registerBasesView(viewId: string, registration: unknown): boolean {
+    const host = currentBasesHost();
+    if (!host) return false;
+    const pluginId = (this.manifest as { id?: string } | undefined)?.id ?? "host";
+    return host.register(viewId, registration as never, pluginId);
   }
 
   getLeavesOfType(type: string): unknown[] {

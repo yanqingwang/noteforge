@@ -187,6 +187,34 @@ export interface CreateApiOptions {
   coreHooks?: CoreCommandHooks;
 }
 
+// ── Bases（Obsidian 1.9+ 的数据库视图体系）──
+import {
+  BasesEntry,
+  BasesEntryGroup,
+  BasesQueryResult,
+  BasesView,
+  BasesViewConfig,
+  QueryController,
+} from "./bases/api";
+import { parsePropertyId } from "./bases/config";
+import {
+  BooleanValue,
+  DateValue,
+  DurationValue,
+  FileValue,
+  HtmlValue,
+  IconValue,
+  ImageValue,
+  LinkValue,
+  ListValue,
+  NullValue,
+  NumberValue,
+  ObjectValue,
+  RegexpValue,
+  StringValue,
+  Value,
+} from "./bases/expr/values";
+
 export interface ObsidianApi {
   module: Record<string, unknown>;
   app: ObsidianApp;
@@ -477,6 +505,7 @@ function installObsidianGlobals(
     "SearchComponent", "ExtraButtonComponent", "Scope", "ValueComponent", "ConfirmationModal",
     "TextFileView", "EditorSuggest", "MarkdownRenderChild", "WorkspaceSplit", "Keymap",
     "SettingGroup", "SettingPage", "CodeMirror", "ColorComponent", "SecretComponent", "getIconIds", "getFrontMatterInfo", "parseFrontMatterEntry", "parseFrontMatterTags", "prepareSimpleSearch",
+    "BasesView", "BasesViewConfig", "BasesQueryResult", "BasesEntry", "BasesEntryGroup", "QueryController", "parsePropertyId", "Value",
     "prepareFuzzySearch", "requireApiVersion", "base64ToArrayBuffer", "arrayBufferToBase64",
   ];
   // window 与 globalThis 在 webview 里是同一个对象，但 harness（jsdom）里不是：
@@ -847,6 +876,31 @@ function buildModule(app: ObsidianApp, host: Host, recorder: ApiRecorder): Recor
     EditorRange,
     Component,
     Events,
+
+    // Bases：插件的自定义视图 + 数据模型
+    // （calendar-bases / social-archiver / media-extended 靠这批符号加载）
+    BasesView,
+    BasesViewConfig,
+    BasesQueryResult,
+    BasesEntry,
+    BasesEntryGroup,
+    QueryController,
+    parsePropertyId,
+    Value,
+    NullValue,
+    BooleanValue,
+    NumberValue,
+    StringValue,
+    DateValue,
+    ListValue,
+    ObjectValue,
+    LinkValue,
+    FileValue,
+    ImageValue,
+    HtmlValue,
+    IconValue,
+    DurationValue,
+    RegexpValue,
 
     // 视图/工作区
     ItemView,
