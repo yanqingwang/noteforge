@@ -121,6 +121,14 @@ export class Vault extends Events {
     return this.root;
   }
 
+  /**
+   * 已缓存文件内容的 TFile 列表（Obsidian 语义）。
+   * tag-wrangler 这类插件遍历它来批量读 frontmatter。
+   */
+  getCachedFiles(): TFile[] {
+    return this.getFiles();
+  }
+
   getConfig(key: string): unknown {
     return (this.config as Record<string, unknown>)[key];
   }
@@ -383,6 +391,13 @@ export class Vault extends Events {
 
 export class MetadataCache extends Events {
   resolvedLinks: Record<string, Record<string, number>> = {};
+  /**
+   * 元数据已缓存的文件列表（Obsidian 的 MetadataCache.getCachedFiles）。
+   * tag-wrangler 在 onLayoutReady 里遍历它来建标签页，缺了这个直接抛错。
+   */
+  getCachedFiles(): TFile[] {
+    return this.vault.getFiles();
+  }
   unresolvedLinks: Record<string, Record<string, number>> = {};
   private caches = new Map<string, CachedMetadataLike>();
   private vault: Vault;

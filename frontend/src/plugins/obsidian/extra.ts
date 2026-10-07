@@ -317,6 +317,14 @@ export const CodeMirror = {
     return typeof m?.startState === "function" ? m.startState() : {};
   },
   defineMIME(): void {},
+  /**
+   * CM5 的 mode 元数据表：插件会往里 push 自己注册的 mode
+   * （code-styler 直接 `window.CodeMirror.modeInfo.push({name, mime, mode, ext})`）。
+   * 缺了在 onload 里就抛 "Cannot read properties of undefined (reading 'push')"。
+   */
+  modeInfo: [] as Array<{ name: string; mime?: string; mode?: unknown; ext?: string[] }>,
+  modes: [] as string[],
+  mimeModes: {} as Record<string, string>,
   registerHelper(): void {},
   registerGlobalHelper(): void {},
   defineOption(): void {},

@@ -141,6 +141,13 @@ export interface ObsidianApp {
     removeCommand(id: string): void;
   };
   plugins: { plugins: Record<string, Plugin>; enabledPlugins: Set<string>; getPlugin(id: string): Plugin | null };
+  getTheme(): { name: string; basename: string; mode: "dark" | "light"; cssTheme: string };
+  themeManager: {
+    themes: Record<string, boolean>;
+    getTheme(): unknown;
+    setTheme(t: string): void;
+    onThemeChange(cb: () => unknown): { unload(): void };
+  };
   /** 1.13 密钥存储 */
   secretStorage: {
     getSecret(id: string): string | null;
@@ -194,6 +201,14 @@ export interface ObsidianApi {
 }
 
 /** 宿主侧插件注册表：跨插件互查（app.plugins.getPlugin）。 */
+/** 主题信息：Obsidian 的 app.getTheme() 返回这个形状。 */
+const CURRENT_THEME = {
+  name: "Moonstone",
+  basename: "moonstone",
+  mode: "dark" as "dark" | "light",
+  cssTheme: "",
+};
+
 export class PluginRegistry {
   plugins = new Map<string, Plugin>();
   settingsTabs = new Map<string, unknown[]>();
@@ -337,6 +352,14 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
     viewRegistry: createViewRegistry(workspace),
     // 1.13 密钥存储：插件用它存应用密码这类敏感值（data.json 里只留 id）
     secretStorage: createSecretStorage(),
+    // 当前主题（colored-text 等插件读它决定深浅色下的配色）
+    getTheme: () => CURRENT_THEME,
+    themeManager: {
+      themes: { dark: true, light: true, system: false },
+      getTheme: () => CURRENT_THEME,
+      setTheme: () => undefined,
+      onThemeChange: () => ({ unload: () => undefined }),
+    },
     // 平台判定：不少插件直接读 app.isMobile（calendar 就是 window.app.isMobile）
     isDesktop: true,
     isMobile: false,
@@ -735,6 +758,13 @@ function buildCommandRegistry() {
         if (c.checkCallback(false) === false) return;
       }
       c.callback?.();
+    },
+    // Obsidian 的 app.commands 自身可迭代（插件会 [...app.commands] 或 for...of）。
+    // 只给 commands 这个字典的话，一迭代就抛 "this.commands is not iterable"
+    // （obsidian42-brat 就是这么挂的）。
+    [Symbol.iterator]: () => Object.values(commands)[Symbol.iterator](),
+    get length(): number {
+      return Object.keys(commands).length;
     },
   };
 }

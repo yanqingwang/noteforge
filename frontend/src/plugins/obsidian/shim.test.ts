@@ -5,6 +5,7 @@
  * CJS 产物求值、设置组件 DOM。这些一旦出错，表现是整片插件白屏或 onload 崩溃。
  */
 
+import { installDomExtensions } from "./dom";
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryHost } from "./types";
 import { createObsidianApi, OBSIDIAN_EXPORT_NAMES } from "./index";
@@ -368,6 +369,59 @@ describe("导出清单", () => {
     expect(seen.length - before).toBe(1);
     expect(seen).not.toContain("leak");
     parent.remove();
+  });
+
+  it("120 样本暴露的缺口：主题/缓存文件/CLI/CSS 属性/命令迭代", () => {
+    const { a } = api();
+    // colored-text: app.getTheme()
+    const theme = a.app.getTheme();
+    expect(typeof theme.name).toBe("string");
+    expect(["dark", "light"]).toContain(theme.mode);
+    // tag-wrangler: vault/metadataCache 的 getCachedFiles
+    expect(Array.isArray((a.vault as unknown as { getCachedFiles(): unknown[] }).getCachedFiles())).toBe(true);
+    const mc = (a.app as unknown as { metadataCache: { getCachedFiles(): unknown[] } }).metadataCache;
+    expect(Array.isArray(mc.getCachedFiles())).toBe(true);
+    // homepage: Plugin.registerCliHandler
+    const P = a.module.Plugin as unknown as new (app: unknown, m: unknown) => {
+      registerCliHandler(id: string, handler: unknown): void;
+      getCliHandlers(): Array<{ id: string }>;
+    };
+    const p = new P(a.app, { id: "homepage", name: "Homepage" });
+    expect(() => p.registerCliHandler("x", () => undefined)).not.toThrow();
+    expect(p.getCliHandlers().map((h) => h.id)).toEqual(["x"]);
+    // code-styler: document.body.getCssPropertyValue / setCssPropertyValue
+    expect(typeof document.body.getCssPropertyValue).toBe("function");
+    document.body.setCssPropertyValue?.("--nf-test", "red");
+    expect(document.body.getCssPropertyValue?.("--nf-test")).toBe("red");
+    // obsidian42-brat: app.commands 可迭代
+    const cmds = a.app.commands as unknown as Record<PropertyKey, unknown>;
+    expect(typeof cmds[Symbol.iterator]).toBe("function");
+    expect([...(cmds as unknown as Iterable<unknown>)].length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("classList 类方法接受数组（colored-text 这么调）", () => {
+    installDomExtensions();
+    const el = document.createElement("div");
+    el.addClasses(["a", "b", "c d"]);
+    expect(el.className).toContain("a");
+    expect(el.className).toContain("d");
+    el.removeClasses(["a", "b"]);
+    expect(el.className).not.toContain("a");
+    expect(el.className).toContain("c");
+  });
+
+  it("CodeMirror.modeInfo/modes/mimeModes 存在（插件往里 push 注册的 mode）", () => {
+    const { a } = api();
+    const cm = a.module.CodeMirror as unknown as {
+      modeInfo: Array<{ name: string }>;
+      modes: string[];
+      mimeModes: Record<string, string>;
+    };
+    expect(Array.isArray(cm.modeInfo)).toBe(true);
+    expect(Array.isArray(cm.modes)).toBe(true);
+    expect(typeof cm.mimeModes).toBe("object");
+    // 插件的典型用法：直接 push，不该抛
+    expect(() => cm.modeInfo.push({ name: "custom" })).not.toThrow();
   });
 
   it("app 上有平台判定字段（插件直接读 app.isMobile）", () => {

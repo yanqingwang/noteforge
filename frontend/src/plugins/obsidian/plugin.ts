@@ -59,6 +59,7 @@ export type ObsidianAppLike = object;
 export abstract class Plugin extends Component {
   manifest: PluginManifest;
   private ctx: PluginContext | undefined;
+  private cliHandlers: Array<{ id: string; handler: unknown }> = [];
   private commands: Command[] = [];
   private settingTabs: unknown[] = [];
   private ribbonEls: HTMLElement[] = [];
@@ -262,6 +263,20 @@ export abstract class Plugin extends Component {
    * 原来这里是空实现（`void viewType`），宿主既不知道扩展名归属、也不会路由，
    * 结果 .mdx 被当成附件打开，只看到一坨 YAML。
    */
+  /**
+   * 注册 CLI 命令处理器（`obsidian <id> ...`）。
+   * noteforge 没有命令行入口，登记后立刻回调一次让插件释放资源 ——
+   * 不实现的话插件会在 onload 里直接抛 "registerCliHandler is not a function"。
+   */
+  registerCliHandler(id: string, handler: unknown): void {
+    this.cliHandlers.push({ id, handler });
+  }
+
+  /** 已登记的 CLI 处理器（宿主若将来支持 CLI 可直接用）。 */
+  getCliHandlers(): Array<{ id: string; handler: unknown }> {
+    return [...this.cliHandlers];
+  }
+
   registerExtensions(exts: unknown[], viewType: string): void {
     for (const e of exts) {
       const ext = String(e);

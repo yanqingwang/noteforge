@@ -54,6 +54,12 @@ export interface CreateElOptions {
 }
 
 /** 把 createEl 系列挂到原型上。重复调用安全。 */
+/** classList 参数归一化：字符串按空白拆，数组逐项拆（插件两种都传）。 */
+function splitClassArg(classes: string | string[]): string[] {
+  const list = Array.isArray(classes) ? classes : [classes];
+  return list.flatMap((c) => String(c).split(/\s+/)).filter(Boolean);
+}
+
 export function installDomExtensions(): void {
   const proto = globalThis.HTMLElement?.prototype;
   // 不依赖全局 Document 是否存在：从已知的 HTMLElement 反查 ownerDocument
@@ -68,6 +74,29 @@ export function installDomExtensions(): void {
   // DocumentFragment、Text 同样有效）。只挂 HTMLElement 会让插件在
   // fragment.createDiv() 这类调用上炸。
   const nodeProto = globalThis.Node?.prototype;
+
+  // Obsidian 往 document.body 上加了两个 CSS 变量读写方法（code-styler 等插件直接用）：
+  //   getCssPropertyValue(name) / setCssPropertyValue(name, value)
+  // 少它们插件在 onload 里就抛 "document.body.getCssPropertyValue is not a function"。
+  try {
+    const body = globalThis.document?.body as
+      | (HTMLElement & {
+          getCssPropertyValue?: (name: string) => string;
+          setCssPropertyValue?: (name: string, value: string) => void;
+        })
+      | undefined;
+    if (body && !body.getCssPropertyValue) {
+      body.getCssPropertyValue = function (name: string): string {
+        return getComputedStyle(this).getPropertyValue(name.startsWith("--") ? name : `--${name}`).trim();
+      };
+      body.setCssPropertyValue = function (name: string, value: string): void {
+        this.style.setProperty(name.startsWith("--") ? name : `--${name}`, value);
+      };
+    }
+  } catch {
+    /* 没有 document.body（纯 Node 环境）就跳过 */
+  }
+
   for (const target of [proto, nodeProto, docProto] as unknown as Array<Record<string, unknown>>) {
     if (!target) continue;
     const P = target as unknown as HTMLElement;
@@ -114,14 +143,16 @@ export function installDomExtensions(): void {
     P.addClass = function (this: HTMLElement, ...classes: string[]) {
       this.classList.add(...classes.flatMap((c) => c.split(/\s+/)).filter(Boolean));
     };
-    P.addClasses = function (this: HTMLElement, classes: string) {
-      this.classList.add(...classes.split(/\s+/).filter(Boolean));
+    // 接受 string | string[]：老插件常直接传数组（colored-text 就这么调），
+    // 只按字符串处理会抛 "classes.split is not a function"
+    P.addClasses = function (this: HTMLElement, classes: string | string[]) {
+      this.classList.add(...splitClassArg(classes));
     };
     P.removeClass = function (this: HTMLElement, ...classes: string[]) {
-      this.classList.remove(...classes.flatMap((c) => c.split(/\s+/)).filter(Boolean));
+      this.classList.remove(...classes.flatMap((c) => splitClassArg(c)));
     };
-    P.removeClasses = function (this: HTMLElement, classes: string) {
-      this.classList.remove(...classes.split(/\s+/).filter(Boolean));
+    P.removeClasses = function (this: HTMLElement, classes: string | string[]) {
+      this.classList.remove(...splitClassArg(classes));
     };
     P.toggleClass = function (this: HTMLElement, classes: string | string[], value: boolean) {
       for (const c of (Array.isArray(classes) ? classes : [classes]).flatMap((x) => x.split(/\s+/)).filter(Boolean)) {
@@ -291,9 +322,9 @@ declare global {
     getText(): string;
     appendText(t: string): void;
     addClass(...classes: string[]): void;
-    addClasses(classes: string): void;
+    addClasses(classes: string | string[]): void;
     removeClass(...classes: string[]): void;
-    removeClasses(classes: string): void;
+    removeClasses(classes: string | string[]): void;
     toggleClass(classes: string | string[], value: boolean): void;
     hasClass(cls: string): boolean;
     setCssStyles(styles: Partial<CSSStyleDeclaration>): void;
@@ -315,6 +346,11 @@ declare global {
   }
   interface Document {
     createFragment(cb?: (frag: DocumentFragment) => void): DocumentFragment;
+  }
+  /** Obsidian 往 document.body 上加的 CSS 变量读写（code-styler 等插件直接用）。 */
+  interface HTMLElement {
+    getCssPropertyValue?(name: string): string;
+    setCssPropertyValue?(name: string, value: string): void;
   }
   interface String {
     contains(needle: string): boolean;

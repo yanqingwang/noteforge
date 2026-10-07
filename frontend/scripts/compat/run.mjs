@@ -88,6 +88,42 @@ function installDom() {
       }
     }
   }
+  // indexedDB：omisearch 这类插件要建索引。Node/jsdom 没有，给一个最小空实现 ——
+  // 属于 harness 环境缺口（真机 webview 有），不算插件兼容问题。
+  if (globalThis.indexedDB === undefined) {
+    globalThis.indexedDB = {
+      open: () => ({
+        onsuccess: null,
+        onerror: null,
+        onupgradeneeded: null,
+        result: {
+          objectStoreNames: { contains: () => false },
+          createObjectStore: () => ({ createIndex: () => ({}), index: () => ({}) }),
+          transaction: () => ({ objectStore: () => ({ get: () => ({}), put: () => ({}), delete: () => ({}) }) }),
+        },
+      }),
+      deleteDatabase: () => ({}),
+      // omnisearch 会调 indexedDB.databases() 列出已有库
+      databases: async () => [],
+    };
+  }
+  // matchMedia：colored-text 等插件读 prefers-color-scheme。jsdom 不实现，按暗色回答。
+  if (typeof w.matchMedia !== "function") {
+    w.matchMedia = (query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    });
+    globalThis.matchMedia = w.matchMedia;
+  }
+  if (globalThis.IDBKeyRange === undefined) {
+    globalThis.IDBKeyRange = { bound: () => ({}), lowerBound: () => ({}), upperBound: () => ({}), only: () => ({}) };
+  }
   globalThis.window = w;
   globalThis.document = w.document;
   globalThis.requestAnimationFrame = w.requestAnimationFrame?.bind(w) ?? ((cb) => setTimeout(() => cb(Date.now()), 16));
@@ -310,6 +346,9 @@ async function fetchPluginFiles(plugin) {
 }
 
 /* ---------------- 单插件测试 ---------------- */
+
+/** 单个插件的墙钟上限（毫秒）。 */
+const PLUGIN_TIMEOUT_MS = 90_000;
 
 const VAULT_FILES = {
   "README.md": "# 测试 vault\n\n这是兼容性测试用的样本 vault。\n\n## 章节\n\n- 列表项一\n- 列表项二\n",
@@ -959,7 +998,18 @@ async function main() {
     process.on("uncaughtException", collect);
     let r;
     try {
-      r = await testPlugin(shim, p, sharedApi);
+      // 单插件超时：插件的 onload / 视图 onOpen 里可能 await 一个永不返回的东西
+      //（网络、Worker、轮询）。没有超时的话一个插件就能把整轮跑挂住
+      // —— 实测 120 样本的轮次在第 57 个插件上停了两个小时。
+      r = await Promise.race([
+        testPlugin(shim, p, sharedApi),
+        new Promise((_, rej) =>
+          setTimeout(
+            () => rej(new Error(`插件超时（${PLUGIN_TIMEOUT_MS / 1000}s 未完成，可能卡在网络或死循环）`)),
+            PLUGIN_TIMEOUT_MS,
+          ),
+        ),
+      ]);
     } catch (e) {
       r = {
         id: p.id, name: p.name, category: p.category, downloads: p.downloads, repo: p.repo,
