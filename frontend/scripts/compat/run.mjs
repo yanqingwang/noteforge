@@ -29,6 +29,32 @@ const NO_FETCH = args.includes("--no-fetch");
 const REPORT_ONLY = args.includes("--report-only");
 /** 默认复用已下载的产物（幂等缓存），加 --refresh 才重新走网络。 */
 const REFRESH = args.includes("--refresh");
+
+/** 取产物 main.js 某一行的源码片段（诊断「哪个对象缺方法」用）。 */
+const _excerptCache = new Map();
+function excerptAt(dir, lineNo, colNo = 1, span = 200) {
+  try {
+    let lines = _excerptCache.get(dir);
+    if (!lines) {
+      lines = readFileSync(resolve(dir, "main.js"), "utf8").split("\n");
+      _excerptCache.set(dir, lines);
+    }
+    const line = lines[lineNo - 1] ?? "";
+    // 从调用点列号往前带一点上下文，读者一眼能看到触发表达式
+    const from = Math.max(0, colNo - 2 - 60);
+    return line.slice(from, from + span).trim();
+  } catch {
+    return "";
+  }
+}
+/** --from-vault <路径>：测某个 vault 里已启用的插件（排查「我这台机器上装的东西能不能用」） */
+const FROM_VAULT = args.includes("--from-vault") ? args[args.indexOf("--from-vault") + 1] : null;
+/**
+ * --shared-api：所有插件共用同一个 app 实例（真机就是这样）。
+ * 默认每个插件一份干净环境，避免相互污染；但那样会漏掉「A 插件改原型 → B 插件坏」
+ * 这类跨插件干扰（nextcloud-sync-yanc 的设置页在真机不出现，单测却通过，就是这类）。
+ */
+const SHARED_API = args.includes("--shared-api");
 const ONLY = args.filter((a) => !a.startsWith("--"));
 
 const CDN = "https://cdn.jsdelivr.net/gh";
@@ -49,17 +75,18 @@ function installDom() {
     pretendToBeVisual: true,
   });
   const w = dom.window;
-  const keep = [
-    "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement",
-    "HTMLSelectElement", "HTMLButtonElement", "HTMLAnchorElement", "HTMLInputElement",
-    "Element", "Node", "NodeFilter", "Text", "DocumentFragment", "DOMParser", "Event",
-    "CustomEvent", "MouseEvent", "KeyboardEvent", "PointerEvent", "InputEvent", "FocusEvent",
-    "MutationObserver", "Range", "Selection", "getSelection", "CSSStyleSheet", "Document",
-    "HTMLDivElement", "HTMLSpanElement", "SVGSVGElement", "ShadowRoot", "AbortController",
-    "URL", "Blob", "FormData", "TextEncoder", "TextDecoder", "structuredClone",
-  ];
-  for (const k of keep) {
-    if (w[k] !== undefined && globalThis[k] === undefined) globalThis[k] = w[k];
+  // 全量拷贝 jsdom 的全局：白名单方式会漏掉 HTMLCollection / DOMRect 这类
+  // 浏览器里天然存在的构造器，导致插件在 harness 里莫名报错（假阳性）。
+  // 已有 undefined 守卫，所以不会覆盖 Node 自己的 setTimeout/process 等。
+  for (const k of Object.getOwnPropertyNames(w)) {
+    if (k === "window" || k === "self" || k === "globalThis" || k === "top" || k === "parent") continue;
+    if (globalThis[k] === undefined) {
+      try {
+        globalThis[k] = w[k];
+      } catch {
+        /* 只读全局，忽略 */
+      }
+    }
   }
   globalThis.window = w;
   globalThis.document = w.document;
@@ -294,7 +321,7 @@ const VAULT_FILES = {
   ".obsidian/community-plugins.json": "[]\n",
 };
 
-async function testPlugin(shim, plugin) {
+async function testPlugin(shim, plugin, sharedApi = null) {
   const t0 = Date.now();
   const result = {
     id: plugin.id,
@@ -319,7 +346,34 @@ async function testPlugin(shim, plugin) {
     ref: null,
   };
 
-  const files = await fetchPluginFiles(plugin);
+  let files = await fetchPluginFiles(plugin);
+  // 本地 vault 的插件：直接从 vault 目录取产物
+  if (files.error && FROM_VAULT) {
+    const src = resolve(FROM_VAULT, ".obsidian/plugins", plugin.id);
+    const cached = resolve(CACHE, "plugins", plugin.id);
+    try {
+      mkdirSync(cached, { recursive: true });
+      let mfText = null;
+      for (const f of ["manifest.json", "main.js", "styles.css"]) {
+        const from = resolve(src, f);
+        if (existsSync(from)) readFileSync(from, "utf8");
+      }
+      mfText = readFileSync(resolve(src, "manifest.json"), "utf8");
+      writeFileSync(resolve(cached, "manifest.json"), mfText);
+      writeFileSync(resolve(cached, "main.js"), readFileSync(resolve(src, "main.js"), "utf8"));
+      if (existsSync(resolve(src, "styles.css"))) {
+        writeFileSync(resolve(cached, "styles.css"), readFileSync(resolve(src, "styles.css"), "utf8"));
+      }
+      files = {
+        dir: cached,
+        manifest: JSON.parse(mfText),
+        ref: "local vault",
+        bytes: readFileSync(resolve(cached, "main.js")).length,
+      };
+    } catch (e) {
+      files.error = `${files.error}（vault 目录也没有产物：${e.message}）`;
+    }
+  }
   if (files.error) {
     result.status = "artifact-unavailable";
     result.phase = "download";
@@ -331,11 +385,13 @@ async function testPlugin(shim, plugin) {
   result.ref = files.ref;
   result.manifestVersion = files.manifest.version ?? null;
 
-  // 每个插件一份干净的 app/vault 环境，避免相互污染
+  // 每个插件一份干净的 app/vault 环境，避免相互污染（--shared-api 时复用同一个）
   const host = shim.createMemoryHost({ ...VAULT_FILES });
-  const containers = new Map();
-  const api = shim.createObsidianApi(host, {
-    name: "compat-vault",
+  const containers = sharedApi?.containers ?? new Map();
+  const api =
+    sharedApi?.api ??
+    shim.createObsidianApi(host, {
+      name: "compat-vault",
     workspaceHooks: {
       activeFile: () => "README.md",
       openFile: async (p) => {
@@ -403,6 +459,12 @@ async function testPlugin(shim, plugin) {
     return result;
   }
 
+  // 和真机一样：构造完就按「插件目录名」登记进 registry。
+  // 目录名与 manifest.id 不一致的插件（obsidian-nextcloud-sync-yanc 就是），
+  // 如果登记键用错，宿主按目录 id 取插件就会取不到 —— 表现为
+  // 「插件能加载、命令也在，但设置入口整个消失」。harness 必须走同一条路才测得出来。
+  api.registry.add(instance, plugin.id);
+
   try {
     await instance.onload?.();
   } catch (e) {
@@ -424,8 +486,17 @@ async function testPlugin(shim, plugin) {
   // 让 onload 里的异步任务（setTimeout 0 / Promise）落地
   await new Promise((r) => setTimeout(r, 80));
 
-  result.commands = instance.getCommands?.().length ?? 0;
-  result.settingTabs = instance.getSettingTabs?.().length ?? 0;
+  // 关键校验：宿主视角的取法（按目录 id），不是插件实例直连
+  const registered = api.registry.get(plugin.id);
+  if (!registered) {
+    result.status = "fail-registry";
+    result.phase = "registry";
+    result.error = `注册表按目录 id "${plugin.id}" 取不到插件（manifest.id = ${instance.manifest?.id}），宿主将看不到它的命令与设置页`;
+    result.ms = Date.now() - t0;
+    return result;
+  }
+  result.commands = registered.getCommands?.().length ?? 0;
+  result.settingTabs = registered.getSettingTabs?.().length ?? 0;
   result.editorExtensions = api.registry.editorExtensions.length;
   result.postProcessors = api.registry.postProcessors.size;
   result.views = [...api.workspace.factories.keys()].length;
@@ -449,11 +520,44 @@ async function testPlugin(shim, plugin) {
 
   // 设置页是插件崩溃的常见位置：很多插件在 onload 里注册，设置页首次 display 才炸
   const tabErrors = [];
-  for (const tab of instance.getSettingTabs?.() ?? []) {
+  for (const tab of registered.getSettingTabs?.() ?? []) {
     try {
-      await tab.display?.();
+      // 与应用侧同一个渲染器：声明式（1.13 getSettingDefinitions）与命令式 display 都走它，
+      // 否则「只实现声明式」的插件在这里会被误判成空设置页。
+      const body = tab.contentEl ?? tab.containerEl;
+      if (body && !tab.containerEl.contains(body)) tab.containerEl.appendChild(body);
+      body.replaceChildren();
+      // 渲染器内部已按 Obsidian 语义分流：有定义走声明式，没定义才调 display()
+      // 行数由渲染器自己报（它知道画到哪儿去了：contentEl 还是 containerEl）
+      shim.renderSettingTab(tab, body);
+      // 等内容长出来：不少插件是异步渲染的（Svelte 面板、await 之后再画）
+      const rows = await shim.waitForSettingRows(tab, body);
+      // 不抛错但一行都没画出来，同样是坏的（写错容器、只在某平台渲染、定义全被谓词过滤掉）
+      if (rows === 0) {
+        const root = tab.containerEl;
+        tabErrors.push(
+          `渲染后设置页为空（containerEl 子元素=${root?.childElementCount ?? -1}, ` +
+            `行=${root?.querySelectorAll(".nf-setting-item,.nf-setting-group").length ?? -1}, ` +
+            `containerEl 文本长度=${root?.textContent?.length ?? -1}, ` +
+            `contentEl 文本长度=${tab.contentEl?.textContent?.length ?? -1}）`,
+        );
+      } else {
+        result.settingRows = (result.settingRows ?? 0) + rows;
+      }
     } catch (e) {
       tabErrors.push(String(e?.message ?? e).split("\n")[0]);
+      // 保留调用点堆栈：设置页报错只给 message 无法定位（同一个 message 可能是别的类缺方法）
+      const frames = String(e?.stack ?? "")
+        .split("\n")
+        .slice(1)
+        .filter((l) => l.includes(".cache/plugins"))
+        .slice(0, 3)
+        .map((l) => {
+          const at = l.match(/main\.js:(\d+):(\d+)/);
+          const around = at ? excerptAt(files.dir, Number(at[1]), Number(at[2])) : "";
+          return `${l.trim()}${around ? ` → ${around}` : ""}`;
+        });
+      if (frames.length) result.settingTabStacks = [...(result.settingTabStacks ?? []), ...frames];
     }
   }
   if (tabErrors.length) result.settingTabErrors = tabErrors;
@@ -469,6 +573,11 @@ async function testPlugin(shim, plugin) {
   const functional = result.commands + result.views + result.settingTabs + result.editorExtensions + result.postProcessors;
   result.status = functional > 0 ? "pass" : "load-only";
   if (viewErrors.length && result.status === "pass") result.status = "pass-view-error";
+  // 设置页崩也算「不可用」：插件能加载但用户一开设置就报错，等于没装成。
+  // 早先只记 settingTabErrors 字段、状态仍报 pass，导致 iconic 被误判为完全可用。
+  if (tabErrors.length && (result.status === "pass" || result.status === "pass-view-error")) {
+    result.status = "pass-settings-error";
+  }
 
   try {
     await instance.onunload?.();
@@ -517,12 +626,13 @@ const md = [
   ``,
   `对官方市场（${sample.totalInMarketplace} 个插件）按下载量分层抽取的 ${results.length} 个插件，在 Node+jsdom 里用 noteforge 真实的 Obsidian 兼容层（\`dist-harness/obsidian-shim.mjs\`，即应用侧同一份代码的构建产物）执行产物 main.js，记录 require / 求值 / 构造 / onload / 视图创建 五个阶段的结果。`,
   ``,
-  `**判定口径**：\`pass\` = onload 成功且注册了命令/视图/后处理器；\`pass-view-error\` = 加载正常但视图实例化或设置页渲染出错；\`load-only\` = 加载成功但没有任何可用能力；\`fail-*\` = 求值/构造/onload 抛错；\`artifact-unavailable\` = 本机网络取不到产物。`,
+  `**判定口径**：\`pass\` = onload 成功且注册了命令/视图/后处理器；\`pass-view-error\` = 加载正常但视图实例化或设置页渲染出错；\`pass-settings-error\` = 加载正常但插件设置页渲染抛错；\`load-only\` = 加载成功但没有任何可用能力；\`fail-*\` = 求值/构造/onload 抛错；\`artifact-unavailable\` = 本机网络取不到产物。`,
   ``,
   `| 判定 | 数量 | 含义 |`,
   `| --- | --- | --- |`,
   `| ✅ 完全可用 | ${summary.passed} | onload 成功且注册了命令/视图/后处理器 |`,
   `| ⚠️ 可用但视图创建出错 | ${summary.viewError} | 加载正常，视图实例化抛错 |`,
+  `| ⚠️ 可用但设置页出错 | ${summary.settingsError} | 加载正常，打开插件设置页时抛错 |`,
   `| 🟡 仅加载 | ${summary.loadOnly} | onload 成功但没注册任何可用能力 |`,
   `| ❌ 失败 | ${summary.failed} | 求值/构造/onload 抛错 |`,
   `| 📦 产物不可达 | ${summary.artifactMissing} | 本机网络到 github.com 不可达（Release-only 发布） |`,
@@ -542,6 +652,7 @@ const md = [
     const cat = (r) => {
       const err = `${r.error ?? ""} ${r.errorStack ?? ""}`;
       if (r.status === "pass-view-error") return "视图创建/交互期出错";
+      if (r.status === "pass-settings-error") return "插件设置页渲染出错";
       if (err.includes("combine")) return "插件自带 lezer 解析器（与宿主 @lezer/common 双实例）";
       if (err.includes("Class extends value undefined") || err.includes("without 'new'")) {
         return "基类语义不匹配（把 Plugin 当普通类调用 / 缺某基类）";
@@ -647,10 +758,72 @@ async function main() {
   const sample = JSON.parse(readFileSync(sampleFile, "utf8"));
   let plugins = sample.plugins;
   if (ONLY.length) plugins = plugins.filter((p) => ONLY.includes(p.id));
+
+  // 指定 id 不在样本里时，从缓存目录合成条目（测用户自己装的插件）
+  const fromCache = (id) => {
+    const dir = resolve(CACHE, "plugins", id);
+    let mf = {};
+    try {
+      mf = JSON.parse(readFileSync(resolve(dir, "manifest.json"), "utf8"));
+    } catch {
+      return null;
+    }
+    return { id, name: mf.name ?? id, repo: "(local)", category: "本地/自装", downloads: 0 };
+  };
+  const extra = ONLY.filter((id) => !plugins.some((p) => p.id === id)).map(fromCache).filter(Boolean);
+  plugins = [...plugins, ...extra];
+
+  // --from-vault：直接取该 vault 里已启用的插件（按缓存里有产物的优先）
+  if (FROM_VAULT) {
+    const enabledPath = resolve(FROM_VAULT, ".obsidian/community-plugins.json");
+    let ids = [];
+    try {
+      ids = JSON.parse(readFileSync(enabledPath, "utf8"));
+    } catch {
+      console.error(`读不到启用列表: ${enabledPath}`);
+      process.exit(2);
+    }
+    plugins = ids.map((id) => fromCache(id) ?? {
+      id,
+      name: id,
+      repo: "(local)",
+      category: "本地 vault",
+      downloads: 0,
+    });
+    console.log(`来自 vault ${FROM_VAULT}：${plugins.length} 个已启用插件`);
+  }
+
   plugins = [...plugins].sort((a, b) => b.downloads - a.downloads);
 
   console.log(`兼容性测试开始：${plugins.length} 个插件（样本生成于 ${sample.generatedAt}）\n`);
   const results = [];
+  // 共享模式：先建一个 app，所有插件都塞进去（真机行为）
+  let sharedApi = null;
+  if (SHARED_API) {
+    const host = shim.createMemoryHost({ ...VAULT_FILES });
+    const api = shim.createObsidianApi(host, {
+      name: "compat-vault",
+      workspaceHooks: {
+        activeFile: () => "README.md",
+        openFile: async (p) => {
+          await host.openFile?.(p);
+        },
+        getLeafContainer: (type) => {
+          const key = `shared-${type}`;
+          let d = sharedApi?.containers.get(key);
+          if (!d) {
+            d = document.createElement("div");
+            d.className = `nf-leaf nf-leaf-${type}`;
+            document.body.appendChild(d);
+            sharedApi.containers.set(key, d);
+          }
+          return d;
+        },
+      },
+    });
+    await api.vault.ensure();
+    sharedApi = { api, containers: new Map() };
+  }
   for (const p of plugins) {
     // 单个插件的未捕获异常不能带崩整轮：插件常在定时器/微任务里抛
     const prevHandlers = { unhandled: process.listeners("unhandledRejection"), exc: process.listeners("uncaughtException") };
@@ -660,7 +833,7 @@ async function main() {
     process.on("uncaughtException", collect);
     let r;
     try {
-      r = await testPlugin(shim, p);
+      r = await testPlugin(shim, p, sharedApi);
     } catch (e) {
       r = {
         id: p.id, name: p.name, category: p.category, downloads: p.downloads, repo: p.repo,
@@ -677,6 +850,7 @@ async function main() {
     const tag =
       r.status === "pass" ? "✅" :
       r.status === "pass-view-error" ? "⚠️ " :
+      r.status === "pass-settings-error" ? "⚠️ " :
       r.status === "load-only" ? "🟡" :
       r.status === "artifact-unavailable" ? "📦" : "❌";
     console.log(
@@ -690,10 +864,11 @@ async function main() {
   const by = (s) => results.filter((r) => r.status === s).length;
   const passed = by("pass");
   const viewErr = by("pass-view-error");
+  const settingsErr = by("pass-settings-error");
   const loadOnly = by("load-only");
   const artifactMissing = by("artifact-unavailable");
-  const failed = results.length - passed - viewErr - loadOnly - artifactMissing;
-  const summary = { passed, viewError: viewErr, loadOnly, artifactMissing, failed };
+  const failed = results.length - passed - viewErr - settingsErr - loadOnly - artifactMissing;
+  const summary = { passed, viewError: viewErr, settingsError: settingsErr, loadOnly, artifactMissing, failed };
 
   // 缺失 API 频次（决定下一步补 shim 的优先级）
   const apiFreq = new Map();
@@ -744,7 +919,9 @@ async function main() {
   );
 
   console.log(`\n===== 汇总（${results.length} 个） =====`);
-  console.log(`✅ 完全可用 ${summary.passed}   ⚠️ 可用但视图创建出错 ${viewErr}   🟡 仅加载 ${loadOnly}`);
+  console.log(
+    `✅ 完全可用 ${summary.passed}   ⚠️ 视图出错 ${viewErr}   ⚠️ 设置页出错 ${settingsErr}   🟡 仅加载 ${loadOnly}`,
+  );
   console.log(`❌ 失败 ${failed}   📦 产物不可达 ${artifactMissing}`);
   console.log(`\n插件用到的 CM 模块 top：`, [...cmUsed].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}(${v})`).join(" "));
   console.log(`最常缺失的 obsidian API：`, [...apiFreq].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}(${v})`).join(" ") || "（无）");

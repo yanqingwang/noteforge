@@ -507,6 +507,43 @@ export class Menu {
   }
 }
 
+/* ---------- 悬浮提示 ---------- */
+
+/**
+ * displayTooltip(el, content, opts?)：在元素旁显示一段提示。
+ * 插件的 ExtraButtonComponent.displayTooltip() 会转调它，所以必须是模块级导出。
+ */
+export function displayTooltip(el: HTMLElement, content: string | HTMLElement, opts?: { placement?: string }): void {
+  if (!el) return;
+  const host = el.parentElement ?? el;
+  let tip = host.querySelector<HTMLElement>(":scope > .nf-tooltip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.className = "nf-tooltip";
+    Object.assign(tip.style, {
+      position: "absolute",
+      zIndex: "10003",
+      padding: "4px 8px",
+      borderRadius: "4px",
+      background: "var(--background-modifier-message, #333)",
+      color: "var(--text-on-accent, #fff)",
+      font: "12px sans-serif",
+      whiteSpace: "nowrap",
+      pointerEvents: "none",
+    } as Partial<CSSStyleDeclaration>);
+    host.appendChild(tip);
+  }
+  if (typeof content === "string") tip.textContent = content;
+  else tip.replaceChildren(content);
+  const r = el.getBoundingClientRect();
+  tip.style.left = `${r.left}px`;
+  tip.style.top = `${opts?.placement === "bottom" ? r.bottom + 4 : r.top - 26}px`;
+}
+
+export function hideTooltip(el: HTMLElement): void {
+  (el.parentElement ?? el).querySelector(":scope > .nf-tooltip")?.remove();
+}
+
 /* ---------- Setting 组件族 ---------- */
 
 export abstract class BaseComponent {
@@ -524,6 +561,13 @@ export abstract class BaseComponent {
 
   setDisabled(disabled: boolean): this {
     this.disabled = disabled;
+    // 必须真正禁用底层控件：只置一个 flag 的话输入框照样能打字，
+    // 用户和插件都会以为这一行是锁定的（声明式设置里的 disabled 行就是这么来的）。
+    const self = this as unknown as { inputEl?: HTMLInputElement; buttonEl?: HTMLButtonElement };
+    const el = self.inputEl ?? self.buttonEl;
+    if (el) el.disabled = disabled;
+    if (disabled) this.containerEl?.setAttribute("aria-disabled", "true");
+    else this.containerEl?.removeAttribute("aria-disabled");
     return this;
   }
 
@@ -793,6 +837,140 @@ export class SearchComponent extends ValueComponent<string> {
   }
 }
 
+/**
+ * 取色器组件（Setting.addColorPicker 的实现类型）。
+ * 插件会 `class X extends obsidian.ColorComponent`，所以必须导出真实的类。
+ * 交互上给一个原生 <input type=color> + 十六进制文本框，够用且不引第三方依赖。
+ */
+export class ColorComponent extends ValueComponent<string> {
+  swatchEl: HTMLInputElement;
+  textEl: HTMLInputElement;
+  private rgbValue: { r: number; g: number; b: number } | null = null;
+
+  constructor(containerEl: HTMLElement) {
+    super(containerEl);
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "6px";
+    row.style.alignItems = "center";
+
+    this.swatchEl = document.createElement("input");
+    this.swatchEl.type = "color";
+    this.swatchEl.style.width = "34px";
+    this.swatchEl.style.height = "26px";
+    this.swatchEl.style.padding = "0";
+    this.swatchEl.addEventListener("input", () => {
+      this.textEl.value = this.swatchEl.value;
+      this.commit(this.swatchEl.value);
+    });
+
+    this.textEl = document.createElement("input");
+    this.textEl.type = "text";
+    this.textEl.style.width = "110px";
+    this.textEl.style.font = "inherit";
+    this.textEl.placeholder = "#RRGGBB";
+    this.textEl.addEventListener("input", () => {
+      const v = this.textEl.value.trim();
+      if (/^#[0-9a-f]{6}$/i.test(v)) this.swatchEl.value = v;
+      this.commit(v);
+    });
+
+    row.append(this.swatchEl, this.textEl);
+    containerEl.appendChild(row);
+  }
+
+  getInitialValue(): string {
+    return "#000000";
+  }
+
+  getValue(): string {
+    return this.textEl.value.trim();
+  }
+
+  override setValue(v: string): this {
+    this.value = v;
+    this.textEl.value = v;
+    if (/^#[0-9a-f]{6}$/i.test(v)) this.swatchEl.value = v;
+    return this;
+  }
+
+  /** RGB 接口（Obsidian 的 ColorComponent 有这组方法） */
+  getValueRgb(): { r: number; g: number; b: number } | null {
+    return this.rgbValue;
+  }
+
+  setValueRgb(rgb: { r: number; g: number; b: number } | null): this {
+    this.rgbValue = rgb;
+    if (rgb) this.setValue(rgbToHex(rgb.r, rgb.g, rgb.b));
+    return this;
+  }
+
+  getValueHsl(): { h: number; s: number; l: number } | null {
+    return this.rgbValue ? rgbToHsl(this.rgbValue.r, this.rgbValue.g, this.rgbValue.b) : null;
+  }
+
+  setValueHsl(hsl: { h: number; s: number; l: number } | null): this {
+    if (!hsl) return this;
+    const rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
+    return this.setValueRgb(rgb);
+  }
+
+  /** 与 ColorComponent 交互的方法（如显示/隐藏自定义面板） */
+  showColorPicker(): void {
+    this.swatchEl.click();
+  }
+
+  hideColorPicker(): void {}
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const h = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const rr = r / 255;
+  const gg = g / 255;
+  const bb = b / 255;
+  const max = Math.max(rr, gg, bb);
+  const min = Math.min(rr, gg, bb);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === rr) h = ((gg - bb) / d + (gg < bb ? 6 : 0)) / 6;
+  else if (max === gg) h = ((bb - rr) / d + 2) / 6;
+  else h = ((rr - gg) / d + 4) / 6;
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+  const hh = ((h % 360) + 360) % 360 / 360;
+  const ss = Math.max(0, Math.min(100, s)) / 100;
+  const ll = Math.max(0, Math.min(100, l)) / 100;
+  if (ss === 0) {
+    const v = Math.round(ll * 255);
+    return { r: v, g: v, b: v };
+  }
+  const q = ll < 0.5 ? ll * (1 + ss) : ll + ss - ll * ss;
+  const p = 2 * ll - q;
+  const hue = (t: number): number => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  return {
+    r: Math.round(hue(hh + 1 / 3) * 255),
+    g: Math.round(hue(hh) * 255),
+    b: Math.round(hue(hh - 1 / 3) * 255),
+  };
+}
+
 export class ButtonComponent extends BaseComponent {
   buttonEl: HTMLButtonElement;
   isDisabled = false;
@@ -901,12 +1079,72 @@ function ensureSettingCss(): void {
  * SettingBuilder：一行设置 = 名称/描述 + 控件。
  * 插件设置页几乎全部由它构成，因此语义要准（顺序、类名、controlEl 结构）。
  */
+/** 1.13.1：显示当前值的只读组件（导航行用）。 */
+export class DisplayValueComponent extends BaseComponent {
+  valueEl: HTMLElement;
+
+  constructor(containerEl: HTMLElement) {
+    super(containerEl);
+    this.valueEl = document.createElement("span");
+    this.valueEl.className = "nf-display-value";
+    containerEl.appendChild(this.valueEl);
+  }
+
+  setValue(value: string): this {
+    this.valueEl.textContent = value;
+    return this;
+  }
+
+  getValue(): string {
+    return this.valueEl.textContent ?? "";
+  }
+
+  /** 1.13.1 允许调用方高亮该值（例如标红需要关注的配置）。 */
+  setWarning(warning: boolean): this {
+    this.valueEl.classList.toggle("is-warning", warning);
+    return this;
+  }
+}
+
+/** 1.13：进度条组件（设置页里表示任务进度）。 */
+export class ProgressBarComponent extends ValueComponent<number> {
+  barEl: HTMLElement;
+
+  constructor(containerEl: HTMLElement) {
+    super(containerEl);
+    this.barEl = document.createElement("div");
+    this.barEl.className = "nf-progress-bar";
+    containerEl.appendChild(this.barEl);
+  }
+
+  getInitialValue(): number {
+    return 0;
+  }
+
+  getValue(): number {
+    return Number(this.barEl.dataset.value ?? 0);
+  }
+
+  override setValue(v: number): this {
+    this.value = v;
+    this.barEl.dataset.value = String(v);
+    this.barEl.style.width = `${Math.max(0, Math.min(100, v))}%`;
+    return this;
+  }
+
+  setLimits(_min: number, _max: number): this {
+    return this;
+  }
+}
+
 export class Setting {
   settingEl: HTMLElement;
   infoEl: HTMLElement;
   nameEl: HTMLElement;
   descEl: HTMLElement;
   controlEl: HTMLElement;
+  /** 校验错误信息元素（1.13 新增，setErrorMessage 时才创建）。 */
+  errorEl: HTMLElement | null = null;
   components: BaseComponent[] = [];
 
   constructor(containerEl: HTMLElement) {
@@ -1037,8 +1275,67 @@ export class Setting {
     return this;
   }
 
-  addColorPicker(cb: (c: unknown) => unknown): this {
-    const c = new TextComponent(this.controlEl);
+  /**
+   * 1.13 新增：把任意组件塞进行里。
+   * 插件用它挂自定义控件（SecretComponent、自己的 Widget 等），
+   * 没有这个方法时插件会在渲染设置页时直接抛错。
+   */
+  addComponent<T>(cb: (el: HTMLElement) => T): this {
+    const holder = document.createElement("div");
+    holder.className = "nf-setting-item-component";
+    this.controlEl.appendChild(holder);
+    const c = cb(holder);
+    if (c && typeof c === "object") {
+      this.components.push(c as unknown as BaseComponent);
+      // 组件实现了 load() 就让它自己初始化（Obsidian 的 Component 语义）
+      const loadable = c as { load?: () => void };
+      loadable.load?.();
+    }
+    return this;
+  }
+
+  /** 1.13 新增：行下方的校验错误信息（空串/null 清除，并去掉 is-invalid）。 */
+  setErrorMessage(message: string | null): this {
+    if (message) {
+      if (!this.errorEl) {
+        this.errorEl = document.createElement("div");
+        this.errorEl.className = "nf-setting-item-error";
+        this.settingEl.appendChild(this.errorEl);
+      }
+      this.errorEl.textContent = message;
+      this.errorEl.style.display = "";
+      this.settingEl.classList.add("is-invalid");
+    } else {
+      // 清除时要把文本也清掉：只藏起来的话，textContent 里还留着旧错误，
+      // 插件与测试都会以为错误没消（Obsidian 传 null 是真的清空）。
+      if (this.errorEl) {
+        this.errorEl.textContent = "";
+        this.errorEl.style.display = "none";
+      }
+      this.settingEl.classList.remove("is-invalid");
+    }
+    return this;
+  }
+
+  /** 1.13.1 新增：在行上显示当前值（可打开子页的导航行用）。 */
+  addDisplayValue(cb: (component: DisplayValueComponent) => unknown): this {
+    const holder = document.createElement("div");
+    holder.className = "nf-setting-item-display-value";
+    this.controlEl.appendChild(holder);
+    cb(new DisplayValueComponent(holder));
+    return this;
+  }
+
+  /** 1.13 新增：进度条。 */
+  addProgressBar(cb?: (c: ProgressBarComponent) => unknown): this {
+    const c = new ProgressBarComponent(this.controlEl);
+    this.components.push(c);
+    cb?.(c);
+    return this;
+  }
+
+  addColorPicker(cb: (c: ColorComponent) => unknown): this {
+    const c = new ColorComponent(this.controlEl);
     this.components.push(c);
     cb(c);
     return this;
@@ -1050,8 +1347,124 @@ export class Setting {
   }
 }
 
+/**
+ * 1.13 的密钥组件：值不进 data.json，只在 SecretStorage 里存一个 id。
+ *
+ * noteforge 没有系统钥匙串，用 localStorage 存明文（与插件自己的旧版迁移路径一致，
+ * 插件读 app.secretStorage.getSecret 就能取回）。插件只依赖「存进去再读出来」这一层语义。
+ */
+export class SecretComponent extends BaseComponent {
+  inputEl: HTMLInputElement;
+  private secretId: string | null = null;
+  private changeCb: ((id: string | null) => unknown) | null = null;
+
+  constructor(app: unknown, containerEl: HTMLElement) {
+    super(containerEl);
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "6px";
+    this.inputEl = document.createElement("input");
+    this.inputEl.type = "password";
+    this.inputEl.style.flex = "1";
+    this.inputEl.style.font = "inherit";
+    this.inputEl.placeholder = "应用密码";
+    const save = document.createElement("button");
+    save.textContent = "保存";
+    save.addEventListener("click", () => this.commit());
+    this.inputEl.addEventListener("change", () => this.commit());
+    row.append(this.inputEl, save);
+    containerEl.appendChild(row);
+    this.storage = (app as { secretStorage?: SecretStorage }).secretStorage ?? null;
+  }
+
+  private storage: SecretStorage | null = null;
+
+  /** 绑到已有的密钥 id 上（插件传的是 data.json 里存的 id）。 */
+  setValue(secretId: string | null): this {
+    this.secretId = secretId ?? null;
+    const stored = secretId ? this.storage?.getSecret(secretId) : null;
+    this.inputEl.value = stored ?? "";
+    return this;
+  }
+
+  getValue(): string {
+    return this.inputEl.value;
+  }
+
+  onChange(cb: (id: string | null) => unknown): this {
+    this.changeCb = cb;
+    return this;
+  }
+
+  private commit(): void {
+    if (!this.storage) return;
+    const value = this.inputEl.value;
+    const id = this.secretId ?? `nf-secret-${Date.now().toString(36)}`;
+    if (value) this.storage.setSecret(id, value);
+    else this.storage.deleteSecret(id);
+    this.secretId = id;
+    this.changeCb?.(id);
+  }
+}
+
+/** 1.13 的密钥存储（app.secretStorage）。 */
+export interface SecretStorage {
+  getSecret(id: string): string | null;
+  setSecret(id: string, value: string): void;
+  deleteSecret(id: string): void;
+  hasSecret(id: string): boolean;
+  listSecrets(): string[];
+}
+
+/**
+ * 让标签页容器的 `empty()` / `replaceChildren()` 不摘掉内容区。
+ *
+ * Obsidian 的语义是「清空后 contentEl 仍然可用」——它是宿主准备好的内容区，
+ * 插件清完容器继续往 contentEl 里画是常规写法（calendar、quickadd 都这么干）。
+ * 照搬 DOM 语义会把 contentEl 整个从文档里摘掉，插件随后往游离节点里画界面，
+ * 结果就是设置页空白且不报错。
+ */
+function protectContentEl(containerEl: HTMLElement, contentEl: HTMLElement): void {
+  const proto = Object.getPrototypeOf(containerEl) as HTMLElement & {
+    empty?: () => void;
+    replaceChildren?: (...nodes: Node[]) => void;
+  };
+  const origEmpty = proto.empty;
+  const origReplace = proto.replaceChildren;
+  const restore = (): void => {
+    if (!containerEl.contains(contentEl)) containerEl.appendChild(contentEl);
+  };
+  Object.defineProperty(containerEl, "empty", {
+    configurable: true,
+    value: () => {
+      origEmpty?.call(containerEl);
+      restore();
+      contentEl.replaceChildren();
+      return containerEl;
+    },
+  });
+  Object.defineProperty(containerEl, "replaceChildren", {
+    configurable: true,
+    value: (...nodes: Node[]) => {
+      origReplace?.apply(containerEl, nodes);
+      restore();
+      return containerEl;
+    },
+  });
+}
+
 export abstract class PluginSettingTab {
+  /** 整个标签页容器（宿主用它做切页动画/滚动定位）。 */
   containerEl: HTMLElement;
+  /**
+   * 插件真正往里写内容的元素（Obsidian 语义：containerEl 的子元素）。
+   *
+   * 这一条不能少：绝大多数插件的 display() 第一句就是
+   * `this.contentEl.empty()` 然后 `new Setting(this.contentEl)`。
+   * 只给 containerEl 时，插件要么抛 "Cannot read properties of undefined"，
+   * 要么（在没做保护的插件里）渲染到别处 —— 结果就是设置页一片空白。
+   */
+  contentEl: HTMLElement;
   app: unknown;
   plugin: { manifest: { id: string; name: string } };
 
@@ -1061,12 +1474,38 @@ export abstract class PluginSettingTab {
     ensureSettingCss();
     this.containerEl = document.createElement("div");
     this.containerEl.className = "nf-setting-tab";
+    this.contentEl = document.createElement("div");
+    this.contentEl.className = "nf-setting-tab-content";
+    this.containerEl.appendChild(this.contentEl);
+    protectContentEl(this.containerEl, this.contentEl);
   }
 
   abstract display(): void;
 
+  /**
+   * 1.13 的声明式设置定义。插件可以不写 display()，改用它把配置项交给宿主渲染。
+   * 返回空数组时宿主才退回 display()（与 Obsidian 的判定顺序一致）。
+   */
+  getSettingDefinitions?(): unknown[];
+
+  /** 1.13：按 key 读/写设置值（宿主渲染控件时调用）。 */
+  getControlValue?(key: string): unknown;
+  setControlValue?(key: string, value: unknown): void | Promise<void>;
+
+  /**
+   * 1.13：重新评估 visible/disabled 等谓词并重画。
+   * 插件在改完自己的状态后调它，设置页才会刷新。
+   *
+   * 默认实现走宿主注入的重绘函数（settingDefs.renderSettingTab 延迟注入，
+   * 避免 ui.ts → settingDefs.ts → ui.ts 的循环依赖）。
+   */
+  update(): void {
+    const redraw = (this as unknown as { __redraw?: () => void }).__redraw;
+    redraw?.();
+  }
+
   hide(): void {
-    this.containerEl.replaceChildren();
+    this.contentEl.replaceChildren();
   }
 }
 

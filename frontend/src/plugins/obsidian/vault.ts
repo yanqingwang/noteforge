@@ -110,6 +110,13 @@ export class Vault extends Events {
     return this.name;
   }
 
+  /**
+   * 配置目录名（Obsidian 是 ".obsidian"）。
+   * 插件用它拼插件设置文件路径（`<configDir>/plugins/<id>/data.json`），
+   * 缺失时这类插件会直接算错路径或抛 undefined。
+   */
+  configDir = ".obsidian";
+
   getRoot(): TFolder {
     return this.root;
   }

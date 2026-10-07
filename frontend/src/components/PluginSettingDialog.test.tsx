@@ -29,6 +29,28 @@ class Demo extends obsidian.Plugin {
 module.exports = Demo;
 `;
 
+/**
+ * 真实插件几乎都往 this.contentEl 里画（Obsidian 的 PluginSettingTab.contentEl
+ * 是 containerEl 的子元素）。曾经对话框先清空 containerEl，把 contentEl 一起摘成游离节点，
+ * 插件再往里面画 —— 结果对话框一片空白（Nextcloud sync YANC 真机就是这样）。
+ */
+const PLUGIN_MAIN_CONTENT_EL = `
+var obsidian = require("obsidian");
+class Demo extends obsidian.Plugin {
+  onload() {
+    this.addSettingTab(new (class extends obsidian.PluginSettingTab {
+      display() {
+        this.contentEl.empty();
+        new obsidian.Setting(this.contentEl)
+          .setName("服务器地址")
+          .addText((t) => t.setValue("https://cloud.example.com"));
+      }
+    })(this.app, this));
+  }
+}
+module.exports = Demo;
+`;
+
 const FILES: Record<string, string> = {
   ".obsidian/plugins/demo/manifest.json": JSON.stringify({
     id: "demo", name: "Demo 插件", version: "1.2.3", description: "设置页测试用", author: "t",
@@ -142,6 +164,46 @@ describe("插件设置入口", () => {
       root.unmount();
     });
     expect(closed).toBe(0);
+    obsidianRuntime.dispose();
+  });
+
+  it("插件往 contentEl 里画设置项时也能显示（不被清空逻辑摘掉）", async () => {
+    mocks.files = {
+      ...FILES,
+      ".obsidian/plugins/demo/main.js": PLUGIN_MAIN_CONTENT_EL,
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const { obsidianRuntime } = await import("../plugins/obsidianRuntime");
+    await act(async () => {
+      await obsidianRuntime.init({
+        vaultPath: () => VAULT,
+        activeFile: () => null,
+        openFile: async () => undefined,
+        ensureViewContainer: async () => null,
+        openPluginSettings: () => undefined,
+      });
+    });
+
+    const { default: PluginSettingDialog } = await import("./PluginSettingDialog");
+    await act(async () => {
+      root.render(
+        <PluginSettingDialog pluginId="demo" dark={false} onClose={() => undefined} /> as ReactElement,
+      );
+    });
+
+    expect(container.textContent).toContain("服务器地址");
+    const input = container.querySelector<HTMLInputElement>("input[type=text]");
+    expect(input?.value).toBe("https://cloud.example.com");
+    // 不该出现「没有渲染出任何配置项」的提示
+    expect(container.textContent).not.toContain("没有渲染出任何配置项");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
     obsidianRuntime.dispose();
   });
 

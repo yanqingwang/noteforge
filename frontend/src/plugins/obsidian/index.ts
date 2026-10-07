@@ -44,6 +44,12 @@ import {
 import {
   AbstractInputSuggest,
   BaseComponent,
+  ColorComponent,
+  DisplayValueComponent,
+  ProgressBarComponent,
+  SecretComponent,
+  displayTooltip as displayTooltipModule,
+  hideTooltip as hideTooltipModule,
   ButtonComponent,
   DropdownComponent,
   ExtraButtonComponent,
@@ -92,6 +98,14 @@ import {
 } from "./extra";
 import { FileManager, MetadataCache, Vault } from "./vault";
 import {
+  EditableFileView,
+  FileView,
+  AudioView,
+  ImageView,
+  PDFView,
+  VideoView,
+  WorkspaceFloating,
+  WorkspaceRoot,
   ItemView,
   MarkdownRenderer,
   MarkdownView,
@@ -103,7 +117,7 @@ import {
   type ViewState,
   type WorkspaceHooks,
 } from "./workspace";
-import { createRecorder, type ApiRecorder, type Host, type PluginManifest } from "./types";
+import { createRecorder, type ApiRecorder, type EventRef, type Host, type PluginManifest } from "./types";
 
 /** Obsidian 的 App：插件唯一接触宿主的入口。 */
 export interface ObsidianApp {
@@ -127,7 +141,23 @@ export interface ObsidianApp {
     removeCommand(id: string): void;
   };
   plugins: { plugins: Record<string, Plugin>; enabledPlugins: Set<string>; getPlugin(id: string): Plugin | null };
-  internalPlugins: { plugins: Record<string, Plugin>; enabledPlugins: Set<string>; getPluginById(id: string): Plugin | null };
+  /** 1.13 密钥存储 */
+  secretStorage: {
+    getSecret(id: string): string | null;
+    setSecret(id: string, value: string): void;
+    deleteSecret(id: string): void;
+    hasSecret(id: string): boolean;
+    listSecrets(): string[];
+  };
+  internalPlugins: {
+    plugins: Record<string, Plugin>;
+    enabledPlugins: Set<string>;
+    getPluginById(id: string): Plugin | null;
+    on(name: string, cb: (...args: unknown[]) => void): EventRef;
+    off(name: string, cb: (...args: unknown[]) => void): void;
+    offref(ref: EventRef): void;
+    trigger(name: string, ...args: unknown[]): void;
+  };
   setConfig(key: string, value: unknown): void;
   getConfig?(key: string): unknown;
   [k: string]: unknown;
@@ -173,9 +203,20 @@ export class PluginRegistry {
   codeBlockProcessors = new Map<string, (source: string, el: HTMLElement, ctx: unknown) => unknown>();
   editors: PluginContext[] = [];
 
-  add(p: Plugin): void {
-    this.plugins.set(p.manifest.id, p);
-    this.settingsTabs.set(p.manifest.id, p.getSettingTabs());
+  /**
+   * 登记插件。`id` 是宿主视角的插件 id（Obsidian 里就是插件目录名）。
+   *
+   * 必须支持与 manifest.id 不同：社区里大量插件的目录名和 manifest.id 不一致
+   * （例：目录 obsidian-nextcloud-sync-yanc，manifest.id = nextcloud-sync-yanc）。
+   * 若一律按 manifest.id 建索引，宿主按目录 id 就取不到插件 —— 表现为
+   * 插件能加载、命令也在，但「插件设置」入口整个消失。
+   */
+  add(p: Plugin, id?: string): void {
+    const key = id ?? p.manifest.id;
+    const ctx = (p as unknown as { ctx?: PluginContext }).ctx;
+    if (ctx) ctx.registryKey = key;
+    this.plugins.set(key, p);
+    this.settingsTabs.set(key, p.getSettingTabs());
   }
 
   get(id: string): Plugin | null {
@@ -227,6 +268,7 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
 
   const localStore = new Map<string, unknown>();
   const appScopes: unknown[] = [];
+  const internalEvents = new Events();
 
   const app: ObsidianApp = {
     vault,
@@ -273,11 +315,38 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
     },
     internalPlugins: {
       plugins: proxyPlugins(registry),
-      enabledPlugins: new Set<string>(),
-      getPluginById: (id) => registry.get(id),
+      enabledPlugins: new Set(Object.entries(CORE_PLUGIN_STATES).filter(([, on]) => on).map(([id]) => id)),
+      getPluginById: (id) => (registry.get(id) ?? corePluginStub(id)) as unknown as Plugin | null,
+      // Obsidian 里 internalPlugins 本身就是事件源（插件监听它做启停联动），
+      // 少了 on() 插件会在 onload 里直接抛 "app.internalPlugins.on is not a function"
+      on(name: string, cb: (...args: unknown[]) => void): EventRef {
+        return internalEvents.on(name, cb);
+      },
+      off(name: string, cb: (...args: unknown[]) => void): void {
+        internalEvents.off(name, cb);
+      },
+      offref(ref: EventRef): void {
+        internalEvents.offref(ref);
+      },
+      trigger(name: string, ...args: unknown[]): void {
+        internalEvents.trigger(name, ...args);
+      },
     },
     setConfig: (k, v) => vault.setConfig(k, v),
     embedRegistry: createEmbedRegistry(),
+    viewRegistry: createViewRegistry(),
+    // 1.13 密钥存储：插件用它存应用密码这类敏感值（data.json 里只留 id）
+    secretStorage: createSecretStorage(),
+    // 平台判定：不少插件直接读 app.isMobile（calendar 就是 window.app.isMobile）
+    isDesktop: true,
+    isMobile: false,
+    isMobileApp: false,
+    isTablet: false,
+    isAndroidApp: false,
+    isIosApp: false,
+    isMacOS: false,
+    isWin: false,
+    isLinux: true,
   };
 
   // app.dom / app.containerEl：不少插件直接往这些容器里塞 UI（状态栏、右键菜单层）。
@@ -384,7 +453,7 @@ function installObsidianGlobals(
     "TextAreaComponent", "ToggleComponent", "DropdownComponent", "SliderComponent",
     "SearchComponent", "ExtraButtonComponent", "Scope", "ValueComponent", "ConfirmationModal",
     "TextFileView", "EditorSuggest", "MarkdownRenderChild", "WorkspaceSplit", "Keymap",
-    "SettingGroup", "SettingPage", "CodeMirror", "getIconIds", "getFrontMatterInfo", "parseFrontMatterEntry", "parseFrontMatterTags", "prepareSimpleSearch",
+    "SettingGroup", "SettingPage", "CodeMirror", "ColorComponent", "SecretComponent", "getIconIds", "getFrontMatterInfo", "parseFrontMatterEntry", "parseFrontMatterTags", "prepareSimpleSearch",
     "prepareFuzzySearch", "requireApiVersion", "base64ToArrayBuffer", "arrayBufferToBase64",
   ];
   // window 与 globalThis 在 webview 里是同一个对象，但 harness（jsdom）里不是：
@@ -480,6 +549,79 @@ function installObsidianGlobals(
  * shim 实际导出的符号名（测试与文档用，避免「文档写了但没实现」）。
  */
 export let OBSIDIAN_EXPORT_NAMES: string[] = [];
+
+/**
+ * app.secretStorage：键值对式的密钥存储。
+ *
+ * Obsidian 存进系统钥匙串，noteforge 存 localStorage（明文）。
+ * 语义对齐：getSecret 未命中返回 null（插件据此走旧版迁移路径），listSecrets 只列 id。
+ */
+function createSecretStorage() {
+  const KEY = "noteforge.secretStorage";
+  const readAll = (): Record<string, string> => {
+    try {
+      const raw = globalThis.localStorage?.getItem(KEY);
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  };
+  const writeAll = (all: Record<string, string>): void => {
+    try {
+      globalThis.localStorage?.setItem(KEY, JSON.stringify(all));
+    } catch {
+      /* 无 localStorage 时静默失效，插件侧会读到 null */
+    }
+  };
+  return {
+    getSecret: (id: string): string | null => readAll()[id] ?? null,
+    setSecret: (id: string, value: string): void => {
+      writeAll({ ...readAll(), [id]: value });
+    },
+    deleteSecret: (id: string): void => {
+      const all = readAll();
+      delete all[id];
+      writeAll(all);
+    },
+    hasSecret: (id: string): boolean => id in readAll(),
+    listSecrets: (): string[] => Object.keys(readAll()),
+  };
+}
+
+/**
+ * app.viewRegistry：按扩展名找能渲染它的视图。
+ * 语义与 Obsidian 一致：扩展名 → 视图类型（如 "drawio" → "drawio"），
+ * 未注册时返回该扩展名本身（插件据此判断"有没有对应视图"）。
+ */
+function createViewRegistry() {
+  const byType = new Map<string, { name?: string; view: unknown }>();
+  const extToType = new Map<string, string>();
+  const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+
+  return {
+    typeByExtension: (ext: string): string => extToType.get(ext.toLowerCase().replace(/^\./, "")) ?? ext.toLowerCase().replace(/^\./, ""),
+    getViewByType: (type: string) => byType.get(type) ?? null,
+    registerView: (
+      type: string,
+      factory: (leaf: unknown) => unknown,
+      opts?: { name?: string; icon?: string; ext?: string },
+    ): void => {
+      byType.set(type, { name: opts?.name ?? type, view: factory });
+      if (opts?.ext) extToType.set(opts.ext.toLowerCase().replace(/^\./, ""), type);
+      for (const fn of listeners.get(type) ?? []) fn(type);
+    },
+    trigger: (name: string, ...args: unknown[]): void => {
+      for (const fn of listeners.get(name) ?? []) {
+        try {
+          fn(...args);
+        } catch (e) {
+          console.error(`[obsidian-shim] viewRegistry "${name}" 的监听器抛错`, e);
+        }
+      }
+    },
+    getTypes: () => [...byType.keys()],
+  };
+}
 
 /**
  * app.embedRegistry：把「按扩展名渲染嵌入块」交给宿主。
@@ -592,13 +734,56 @@ function buildCommandRegistry() {
   };
 }
 
+/**
+ * Obsidian 的内置（核心）插件。插件会读 `app.internalPlugins.plugins["file-explorer"].enabled`
+ * 来决定要不要往文件树上加按钮 —— 查询不到就是 undefined，插件会在 onload 里直接崩
+ * （drawio-obsidian 就是这么挂的）。
+ *
+ * enabled 反映 noteforge 是否真的提供该能力：提供就 true，让插件去集成；
+ * 不提供就 false，插件会安静地跳过那条集成路径。
+ */
+const CORE_PLUGIN_STATES: Record<string, boolean> = {
+  "file-explorer": true, // 侧栏文件树
+  switcher: true, // 快速切换器
+  "global-search": true, // 搜索面板
+  "command-palette": true, // 命令面板
+  graph: true, // 图谱数据命令
+  outline: false,
+  backlink: false,
+  "outgoing-link": false,
+  "tag-pane": false,
+  properties: false,
+  "page-preview": false,
+  templates: false,
+  "daily-notes": false,
+  "note-composer": false,
+  "editor-status": false,
+  bookmarks: false,
+  "word-count": false,
+  "file-recovery": false,
+  sync: false,
+  "core-plugins": true,
+  appearance: true,
+};
+
+interface CorePluginStub {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+function corePluginStub(id: string): CorePluginStub | undefined {
+  if (!(id in CORE_PLUGIN_STATES)) return undefined;
+  return { id, name: id, enabled: CORE_PLUGIN_STATES[id] };
+}
+
 function proxyPlugins(registry: PluginRegistry): Record<string, Plugin> {
   return new Proxy(
     {},
     {
-      get: (_t, prop: string) => registry.get(prop) ?? undefined,
-      has: (_t, prop: string) => registry.plugins.has(prop),
-      ownKeys: () => [...registry.plugins.keys()],
+      get: (_t, prop: string) => registry.get(prop) ?? corePluginStub(prop),
+      has: (_t, prop: string) => registry.plugins.has(prop) || prop in CORE_PLUGIN_STATES,
+      ownKeys: () => [...new Set([...registry.plugins.keys(), ...Object.keys(CORE_PLUGIN_STATES)])],
       getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
     },
   ) as Record<string, Plugin>;
@@ -632,13 +817,28 @@ function buildModule(app: ObsidianApp, host: Host, recorder: ApiRecorder): Recor
     ItemView,
     View,
     MarkdownView,
-    FileView: MarkdownView,
+    // 文件视图继承链：ItemView → FileView → EditableFileView → …
+    // （早先把 FileView 指向 MarkdownView，导致 extends EditableFileView 的插件直接崩）
+    FileView,
+    EditableFileView,
+    ImageView,
+    PDFView,
+    AudioView,
+    VideoView,
+    WorkspaceRoot,
+    WorkspaceFloating,
     EmptyView: class {},
     WorkspaceLeaf,
     Workspace,
     MarkdownRenderer,
 
     // UI
+    ColorComponent,
+    SecretComponent,
+    DisplayValueComponent,
+    ProgressBarComponent,
+    displayTooltip: displayTooltipModule,
+    hideTooltip: hideTooltipModule,
     Scope,
     Notice,
     Modal,
@@ -752,6 +952,9 @@ function buildModule(app: ObsidianApp, host: Host, recorder: ApiRecorder): Recor
   });
 }
 
+/** 供宿主与兼容测试 harness 共用：渲染插件设置页（声明式 1.13 + 命令式两条路）。 */
+export { renderSettingTab, waitForSettingRows } from "./settingDefs";
+
 export {
   Component,
   Events,
@@ -763,6 +966,20 @@ export {
   Plugin,
   PluginSettingTab,
   ItemView,
+  FileView,
+  EditableFileView,
+  ImageView,
+  PDFView,
+  AudioView,
+  VideoView,
+  WorkspaceRoot,
+  WorkspaceFloating,
+  ColorComponent,
+  SecretComponent,
+  DisplayValueComponent,
+  ProgressBarComponent,
+  displayTooltipModule as displayTooltip,
+  hideTooltipModule as hideTooltip,
   MarkdownRenderer,
   MarkdownView,
   Notice,

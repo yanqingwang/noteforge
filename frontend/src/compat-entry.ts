@@ -9,4 +9,6 @@ export { createObsidianApi, createMemoryHost, MemoryFs, createRecorder } from ".
 export { evaluatePlugin, installNodeGlobals, createNodeBuiltins, createElectronStub, withNodePrefixAliases } from "./plugins/loader";
 export { createCmModules } from "./plugins/obsidian/cm-modules";
 export { OBSIDIAN_EXPORT_NAMES } from "./plugins/obsidian/index";
+// 设置页渲染器：应用侧与 harness 共用同一份，测的就是跑的
+export { renderSettingTab, waitForSettingRows } from "./plugins/obsidian/settingDefs";
 export type { Host, PluginManifest, ObsidianApi } from "./plugins/obsidian/index";

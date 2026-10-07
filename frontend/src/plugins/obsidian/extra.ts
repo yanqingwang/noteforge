@@ -9,8 +9,8 @@ import { StateField } from "@codemirror/state";
 import { Component, Scope, escapeHtml, setIcon } from "./events";
 import { ICONS } from "./icon-registry";
 import { base64ToBytes, bytesToBase64 } from "./types";
-import { ItemView, MarkdownView, Workspace } from "./workspace";
-import { Modal } from "./ui";
+import { EditableFileView, MarkdownView, Workspace } from "./workspace";
+import { Modal, SearchComponent, Setting } from "./ui";
 
 /* ---------- 语言 / 版本 / 图标 ---------- */
 
@@ -356,24 +356,48 @@ export const CodeMirror = {
  * SettingGroup / SettingPage：Obsidian 设置界面的分组容器。
  * 插件常用 `new SettingGroup("名称").setDesc("…").addItem(s => s.setName(…).addToggle(…))`。
  */
+export interface SettingGroupOptions {
+  title?: string;
+  desc?: string;
+  heading?: boolean;
+}
+
 export class SettingGroup {
   settingEl: HTMLElement;
   nameEl: HTMLElement;
   descEl: HTMLElement;
   itemsEl: HTMLElement;
 
-  constructor(name?: string) {
+  /**
+   * Obsidian 的签名是 `new SettingGroup(containerEl, options?)`，选项形如
+   * `{ title, desc, heading }`。
+   *
+   * 早先把第一个参数当"标题字符串"处理，于是插件写
+   * `new SettingGroup(this.containerEl)` 时整组被渲染进一个游离 div，
+   * 设置页看上去一片空白（iconic 的 display() 就是这么写的）。
+   * 现在两种写法都支持：首参是元素就是容器，是字符串就是标题。
+   */
+  constructor(containerEl?: HTMLElement | string, options?: string | SettingGroupOptions) {
+    const isContainer = typeof containerEl === "object" && containerEl !== null;
+    const opt: SettingGroupOptions =
+      typeof options === "string" ? { title: options } : (options ?? {});
     this.settingEl = document.createElement("div");
     this.settingEl.className = "nf-setting-group";
+    if (isContainer) (containerEl as HTMLElement).appendChild(this.settingEl);
     this.nameEl = document.createElement("div");
     this.nameEl.className = "nf-setting-group-name";
-    this.nameEl.textContent = name ?? "";
+    this.nameEl.textContent = isContainer ? (opt.title ?? "") : ((containerEl as string) ?? opt.title ?? "");
     this.descEl = document.createElement("div");
     this.descEl.className = "nf-setting-group-desc";
     this.descEl.style.display = "none";
     this.itemsEl = document.createElement("div");
     this.itemsEl.className = "nf-setting-group-items";
     this.settingEl.append(this.nameEl, this.descEl, this.itemsEl);
+    if (opt.desc) {
+      this.descEl.textContent = opt.desc;
+      this.descEl.style.display = "";
+    }
+    if (opt.heading) this.settingEl.classList.add("mod-heading");
   }
 
   setName(name: string): this {
@@ -403,20 +427,27 @@ export class SettingGroup {
   }
 
   /** 添加一行设置。cb 收到一个 Setting（语义与 new Setting(el) 一致）。 */
-  addItem(cb: (setting: SettingLike) => unknown): this {
+  /**
+   * 每行都必须是**真正的 Setting 实例**。
+   * 早先这里套了一个只转发 9 个方法的 SettingImpl 壳，插件调 addExtraButton /
+   * addColorPicker / addSlider 就报 "… is not a function"（iconic 就这么挂的）。
+   */
+  addItem(cb: (setting: Setting) => unknown): this {
     const row = document.createElement("div");
     this.itemsEl.appendChild(row);
-    cb(new SettingImpl(row));
+    cb(new Setting(row));
     return this;
   }
 
-  /** 兼容旧写法：addSetting。 */
-  addSetting(cb: (setting: SettingLike) => unknown): this {
+  /** 兼容旧写法：addSetting（Obsidian 里就是 addItem 的别名）。 */
+  addSetting(cb: (setting: Setting) => unknown): this {
     return this.addItem(cb);
   }
 
-  addSearch(cb: (c: unknown) => unknown): this {
-    cb({});
+  addSearch(cb: (c: SearchComponent) => unknown): this {
+    const row = document.createElement("div");
+    this.itemsEl.appendChild(row);
+    cb(new SearchComponent(row));
     return this;
   }
 
@@ -428,91 +459,10 @@ export class SettingGroup {
 
 export class SettingPage extends SettingGroup {
   constructor(name?: string) {
+    // SettingPage 本身没有容器参数，由宿主在显示时把它挂到对话框里
     super(name);
     this.settingEl.classList.add("nf-setting-page");
   }
-}
-
-/** SettingGroup.addItem 的参数类型（结构上与 Setting 一致）。 */
-export interface SettingLike {
-  setName(name: string): SettingLike;
-  setDesc(desc: string): SettingLike;
-  addItem(cb: (s: SettingLike) => unknown): SettingLike;
-  addToggle(cb: (c: unknown) => unknown): SettingLike;
-  addText(cb: (c: unknown) => unknown): SettingLike;
-  addTextArea(cb: (c: unknown) => unknown): SettingLike;
-  addDropdown(cb: (c: unknown) => unknown): SettingLike;
-  addButton(cb: (c: unknown) => unknown): SettingLike;
-  then(cb: (s: SettingLike) => unknown): SettingLike;
-}
-
-/** 真正的 Setting 实现放在 ui.ts，这里延迟 require 以避免循环依赖。 */
-class SettingImpl {
-  setting: {
-    setName(n: string): unknown;
-    setDesc(d: string): unknown;
-    addToggle(cb: (c: unknown) => unknown): unknown;
-    addText(cb: (c: unknown) => unknown): unknown;
-    addTextArea(cb: (c: unknown) => unknown): unknown;
-    addDropdown(cb: (c: unknown) => unknown): unknown;
-    addButton(cb: (c: unknown) => unknown): unknown;
-    then(cb: (s: unknown) => unknown): unknown;
-  };
-
-  constructor(containerEl: HTMLElement) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = getSettingClass();
-    this.setting = new mod(containerEl) as unknown as SettingImpl["setting"];
-  }
-
-  setName(n: string): SettingLike {
-    this.setting.setName(n);
-    return this;
-  }
-  setDesc(d: string): SettingLike {
-    this.setting.setDesc(d);
-    return this;
-  }
-  addItem(cb: (s: SettingLike) => unknown): SettingLike {
-    const row = document.createElement("div");
-    cb(new SettingImpl(row));
-    return this;
-  }
-  addToggle(cb: (c: unknown) => unknown): SettingLike {
-    this.setting.addToggle(cb);
-    return this;
-  }
-  addText(cb: (c: unknown) => unknown): SettingLike {
-    this.setting.addText(cb);
-    return this;
-  }
-  addTextArea(cb: (c: unknown) => unknown): SettingLike {
-    this.setting.addTextArea(cb);
-    return this;
-  }
-  addDropdown(cb: (c: unknown) => unknown): SettingLike {
-    this.setting.addDropdown(cb);
-    return this;
-  }
-  addButton(cb: (c: unknown) => unknown): SettingLike {
-    this.setting.addButton(cb);
-    return this;
-  }
-  then(cb: (s: SettingLike) => unknown): SettingLike {
-    cb(this);
-    return this;
-  }
-}
-
-type SettingCtor = new (containerEl: HTMLElement) => unknown;
-let settingCtor: SettingCtor | null = null;
-function getSettingClass(): SettingCtor {
-  if (settingCtor) return settingCtor;
-  // ui.ts 已经在模块图里，通过全局桥接拿到，避免与 extra.ts 形成循环 import
-  const g = globalThis as unknown as { Setting?: SettingCtor };
-  if (!g.Setting) throw new Error("Setting 尚未就绪（兼容层初始化顺序问题）");
-  settingCtor = g.Setting;
-  return settingCtor;
 }
 
 /* ---------- 渲染子组件 ---------- */
@@ -563,36 +513,18 @@ export class ConfirmationModal extends Modal {
 
 /* ---------- 视图补充 ---------- */
 
-/** 文本文件视图基类（插件用它显示自定义格式的纯文本文件）。 */
-export abstract class TextFileView extends ItemView {
-  data = "";
-  private onSaveCb: ((data: string) => Promise<void>) | null = null;
-
-  getViewData(): string {
-    return this.data;
-  }
-
-  setViewData(data: string, clear: boolean): void {
-    this.data = data;
-    if (clear) this.contentEl.empty?.();
-  }
-
-  clear(): void {
-    this.data = "";
-    this.contentEl.empty?.();
-  }
-
-  requestSave(): void {
-    void this.onSaveCb?.(this.data);
+/**
+ * 文本文件视图基类（插件用它显示自定义格式的纯文本文件）。
+ * 继承 EditableFileView（与 Obsidian 的继承链一致），保存能力直接用基类的。
+ */
+export abstract class TextFileView extends EditableFileView {
+  override getViewType(): string {
+    return "text-file-view";
   }
 
   onSave(data: string): Promise<void> {
     this.data = data;
     return Promise.resolve();
-  }
-
-  getViewType(): string {
-    return "text-file-view";
   }
 
   abstract onload(): void;

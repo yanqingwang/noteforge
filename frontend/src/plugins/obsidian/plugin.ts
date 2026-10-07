@@ -25,6 +25,8 @@ export interface Command {
 }
 
 export interface PluginContext {
+  /** 宿主给插件定的注册键（Obsidian 里就是插件目录名，未必等于 manifest.id）。 */
+  registryKey?: string;
   host: import("./types").Host;
   /** 宿主插件注册表（命令/设置页/视图的汇总） */
   registry?: import("./index").PluginRegistry;
@@ -106,8 +108,15 @@ export abstract class Plugin extends Component {
     return (this.app as unknown as { workspace?: Record<string, unknown> })?.workspace;
   }
 
-  registerView(type: string, factory: (leaf: never) => unknown): void {
-    (this.ws()?.registerView as ((t: string, f: unknown) => void) | undefined)?.(type, factory);
+  registerView(
+    type: string,
+    factory: (leaf: never) => unknown,
+    opts?: { name?: string; icon?: string; ext?: string },
+  ): void {
+    (this.ws()?.registerView as ((t: string, f: unknown, o?: unknown) => void) | undefined)?.(type, factory, opts);
+    // 同步登记到 app.viewRegistry，插件才会认为这个视图「已安装」
+    const vr = (this.app as { viewRegistry?: { registerView?: (...a: unknown[]) => void } })?.viewRegistry;
+    vr?.registerView?.(type, factory, opts);
   }
 
   registerEphemeralView(type: string, factory: (leaf: never) => unknown): void {
@@ -196,8 +205,11 @@ export abstract class Plugin extends Component {
 
   addSettingTab(tab: unknown): void {
     this.settingTabs.push(tab);
-    // 直接写 registry：插件可能在 onload 之后才注册设置页，宿主要能实时看到
-    this.ctx?.registry?.settingsTabs.get(this.manifest.id)?.push(tab);
+    // 直接写 registry：插件可能在 onload 之后才注册设置页，宿主要能实时看到。
+    // 键必须与宿主登记时一致（目录名），否则宿主按目录 id 找不到这个设置页 ——
+    // 目录名与 manifest.id 不一致时（obsidian-nextcloud-sync-yanc 就属于这种）会漏。
+    const key = this.ctx?.registryKey ?? this.manifest.id;
+    this.ctx?.registry?.settingsTabs.get(key)?.push(tab);
   }
 
   getSettingTabs(): unknown[] {

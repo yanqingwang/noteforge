@@ -105,6 +105,11 @@ type MomentLike = {
   fromNow(): string;
   calendar(): string;
   isValid(): boolean;
+  /** 实例上的 localeData（插件读 ._week.dow），以及 locale/周序号等派生量。 */
+  localeData(key?: string): MomentLocaleData;
+  locale(): string;
+  isoWeekday(): number;
+  week(): number;
   clone(): MomentLike;
   year(): number;
   month(): number;
@@ -188,6 +193,11 @@ function mkMoment(v?: DateLike): MomentLike {
     add: (n, unit = "ms") => mkMoment(toDate(v).valueOf() + n * (UNIT_MS[unit] ?? 1)),
     subtract: (n, unit = "ms") => mkMoment(toDate(v).valueOf() - n * (UNIT_MS[unit] ?? 1)),
     diff: (other, unit = "ms") => Math.trunc((m.valueOf() - toDate(other).valueOf()) / (UNIT_MS[unit] ?? 1)),
+    // 实例上的 localeData：插件常写 moment().localeData()._week.dow（calendar）
+    localeData: (key?: string) => momentFn.localeData(key) as unknown as MomentLocaleData,
+    locale: () => CURRENT_LOCALE.name,
+    isoWeekday: () => new Date(toDate(v).valueOf()).getDay() || 7,
+    week: () => Math.ceil(((new Date(toDate(v).valueOf()).getDay() + 6) % 7) / 7),
     isBefore: (other) => m.valueOf() < toDate(other).valueOf(),
     isAfter: (other) => m.valueOf() > toDate(other).valueOf(),
     // unit 支持：calendar 这类插件会写 isSame(x, "day") / isSame(x, "month")
@@ -247,6 +257,25 @@ function mkMoment(v?: DateLike): MomentLike {
  * 附带的 locale()/defineLocale() 是必需项——4/41 个样本插件在加载期就调用
  * `moment.locale("zh")`，缺了会直接抛。
  */
+/** moment().localeData() 的返回形状（插件会读 _week.dow、months() 等）。 */
+interface MomentLocaleData {
+  name: string;
+  weekdays: string[];
+  weekdaysShort: string[];
+  weekdaysMin: string[];
+  months: string[];
+  monthsShort: string[];
+  firstDayOfWeek(): number;
+  dow(): number;
+  doy(): number;
+  firstDayOfYear(): number;
+  longDateFormat(fmt: string): string;
+  /** moment 内部字段，插件也会直接读 */
+  _week: { dow: number; doy: number };
+  _months: { format: string[]; standalone: string[] };
+  _weekdays: { format: string[]; standalone: string[] };
+}
+
 interface MomentFn {
   (v?: DateLike): MomentLike;
   locale(preset?: string): string;
@@ -302,6 +331,10 @@ momentFn.localeData = (key?: string) => {
     doy: () => 6,
     firstDayOfYear: () => 1,
     longDateFormat: (fmt: string) => fmt,
+    // moment 内部字段，插件也会直接读（calendar: moment.localeData()._week.dow）
+    _week: { dow: 1, doy: 4 },
+    _months: { format: MONTHS_SHORT, standalone: MONTHS },
+    _weekdays: { format: WEEKDAYS, standalone: WEEKDAYS },
   });
   // moment 的 localeData 既是对象又能当函数调用（历史包袱），用代理同时满足两种用法
   const fn = (): unknown => data();

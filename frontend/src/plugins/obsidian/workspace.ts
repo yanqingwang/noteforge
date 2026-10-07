@@ -221,6 +221,10 @@ export class Workspace extends Events {
     this.containerEl = document.createElement("div");
     this.containerEl.addClass?.("workspace");
     this.activeEditor = hooks.editor();
+    // 分区容器：iconic 等插件用 instanceof 判断视图在主区还是浮动窗
+    this.rootSplit = new WorkspaceRoot("root");
+    this.leftSplit = new WorkspaceRoot("left");
+    this.rightSplit = new WorkspaceRoot("right");
   }
 
   /** MarkdownRenderer 需要拿到宿主才能渲染 markdown。 */
@@ -440,6 +444,135 @@ export class Workspace extends Events {
     return this.on("layout-change" as never, cb as (...args: unknown[]) => void);
   }
 
+}
+
+/**
+ * 文件视图的继承链（Obsidian）：
+ *   ItemView → FileView → EditableFileView → TextFileView / ImageView / PDFView …
+ *
+ * diagrams（drawio-obsidian）这类插件直接 `extends obsidian.EditableFileView`，
+ * 少了这一层会在模块顶层就抛 "The superclass is not a constructor"。
+ */
+export abstract class FileView extends ItemView {
+  file: TFile | null = null;
+  navigation = false;
+  /** 是否允许在视图中直接编辑 */
+  allowEdit = true;
+
+  constructor(leaf: WorkspaceLeaf) {
+    super(leaf);
+    this.navigation = false;
+  }
+
+  /** 该视图能处理的文件扩展名（Obsidian 用它做拖放判定） */
+  canAcceptExtension(_extension: string): boolean {
+    return false;
+  }
+
+  getViewData(): Promise<string> {
+    return Promise.resolve("");
+  }
+
+  setViewData(_data: string, _clear: boolean): void {}
+
+  getState(): Record<string, unknown> {
+    return { file: this.file?.path ?? null };
+  }
+
+  async setState(state: unknown, _result: unknown): Promise<void> {
+    const path = (state as { file?: string } | null)?.file;
+    if (path) this.file = new TFile(path);
+  }
+
+  requestSave(): void {}
+
+  override getDisplayText(): string {
+    return this.file?.basename ?? this.getViewType();
+  }
+}
+
+export abstract class EditableFileView extends FileView {
+  /** 视图当前内容；宿主按需读写磁盘 */
+  data = "";
+  private saveHandler: ((data: string) => Promise<void>) | null = null;
+
+  override getViewData(): Promise<string> {
+    return Promise.resolve(this.data);
+  }
+
+  override setViewData(data: string, clear: boolean): void {
+    this.data = data;
+    if (clear) this.contentEl.empty?.();
+  }
+
+  clear(): void {
+    this.data = "";
+    this.contentEl.empty?.();
+  }
+
+  /** 宿主注册保存实现（noteforge 由运行时注入：写回 vault 文件） */
+  setSaveHandler(fn: (data: string) => Promise<void>): void {
+    this.saveHandler = fn;
+  }
+
+  override requestSave(): void {
+    void this.saveHandler?.(this.data);
+  }
+
+  /** 直接改内容并落盘（Obsidian 的 onSave 语义） */
+  async save(data: string): Promise<void> {
+    this.data = data;
+    await this.saveHandler?.(data);
+  }
+}
+
+/** 图片 / PDF / 音视频视图：多数插件只需要它们能被继承。 */
+export class ImageView extends EditableFileView {
+  override getViewType(): string {
+    return "image";
+  }
+  override canAcceptExtension(ext: string): boolean {
+    return ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"].includes(ext.toLowerCase());
+  }
+}
+
+export class PDFView extends EditableFileView {
+  override getViewType(): string {
+    return "pdf";
+  }
+  override canAcceptExtension(ext: string): boolean {
+    return ext.toLowerCase() === "pdf";
+  }
+}
+
+export class AudioView extends EditableFileView {
+  override getViewType(): string {
+    return "audio";
+  }
+}
+
+export class VideoView extends EditableFileView {
+  override getViewType(): string {
+    return "video";
+  }
+}
+
+/**
+ * 工作区分区的容器类型。iconic 会用 `getRoot() instanceof WorkspaceRoot/WorkspaceFloating`
+ * 判断视图处于主区还是浮动窗 —— instanceof 是硬依赖，类必须真实存在。
+ */
+export class WorkspaceRoot {
+  type: string;
+  constructor(type = "root") {
+    this.type = type;
+  }
+}
+
+export class WorkspaceFloating {
+  type: string;
+  constructor(type = "floating") {
+    this.type = type;
+  }
 }
 
 /** MarkdownView：把宿主编辑器包装成 Obsidian 的 Editor 视图。 */

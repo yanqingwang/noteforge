@@ -9,6 +9,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { createCmModules } from "./obsidian/cm-modules";
+import { renderSettingTab } from "./obsidian/settingDefs";
 import { createObsidianApi, type ObsidianApi, type PluginRegistry } from "./obsidian/index";
 import { createTauriHost, createEditorAdapter } from "./obsidian/host-tauri";
 import { createElectronStub, createNodeBuiltins, evaluatePlugin, withNodePrefixAliases } from "./loader";
@@ -116,19 +117,32 @@ class ObsidianRuntime {
     if (!api) return [];
     const plugin = api.registry.get(id);
     if (!plugin) return [];
-    const tabs = plugin.getSettingTabs() as Array<{ containerEl?: HTMLElement; display?: () => void }>;
+    const tabs = plugin.getSettingTabs() as Array<{
+      containerEl?: HTMLElement;
+      contentEl?: HTMLElement;
+      display?: () => void;
+    }>;
     const out = [];
     for (const tab of tabs) {
       const el = tab.containerEl;
       if (!el) continue;
-      el.replaceChildren();
-      try {
-        tab.display?.();
-      } catch (e) {
-        const pre = document.createElement("pre");
-        pre.textContent = `设置页渲染失败：${e instanceof Error ? e.message : String(e)}`;
-        pre.style.color = "#c00";
-        el.appendChild(pre);
+      // 只清内容区，不能清 containerEl：
+      // contentEl 是 containerEl 的子元素（Obsidian 语义），清 containerEl 会把它整个摘下来，
+      // 插件随后往这个游离节点里画界面 —— 对话框里就一片空白。
+      const body = tab.contentEl ?? el;
+      body.replaceChildren();
+      if (body !== el && !el.contains(body)) el.appendChild(body);
+      // 声明式（1.13）与命令式两条路都在这里，兼容测试 harness 用的是同一个函数。
+      const rows = renderSettingTab(tab, body);
+      // 判空要看整个 containerEl：插件可能画在 containerEl，也可能画在 contentEl
+      const rendered =
+        el.childElementCount > (body === el ? 0 : 1) || body.childElementCount > 0;
+      if (rows === 0 && !rendered) {
+        // 静默空白也要让用户看见，否则会误判成「插件没有设置项」
+        const hint = document.createElement("div");
+        hint.textContent = "（插件设置页没有渲染出任何配置项）";
+        hint.style.cssText = "color:#888;font-size:12px;padding:8px 0";
+        body.appendChild(hint);
       }
       out.push({ name: `${plugin.manifest.name} 设置`, el, pluginId: id });
     }
@@ -418,7 +432,8 @@ class ObsidianRuntime {
     const PluginClass = ev.defaultExport as (new (app: unknown, manifest: unknown) => { onload?(): void }) | undefined;
     if (typeof PluginClass !== "function") throw new Error("main.js 没有导出插件类");
     const instance = new PluginClass(api.app, manifest);
-    api.registry.add(instance as never);
+    // 用目录名登记：Obsidian 的插件 id 就是目录名，manifest.id 未必一致
+    api.registry.add(instance as never, id);
     await instance.onload?.();
     return true;
   }

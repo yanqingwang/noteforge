@@ -1,3 +1,36 @@
+/* ---------- on() 委托写法的解绑簿记 ---------- */
+
+interface DelegatedHandler {
+  type: string;
+  selector: string;
+  handler: EventListener;
+  wrapper: EventListener;
+}
+
+const delegatedHandlers = new WeakMap<HTMLElement, DelegatedHandler[]>();
+
+function rememberHandler(el: HTMLElement, rec: DelegatedHandler): void {
+  const list = delegatedHandlers.get(el) ?? [];
+  list.push(rec);
+  delegatedHandlers.set(el, list);
+}
+
+function findHandler(
+  el: HTMLElement,
+  type: string,
+  selector: string,
+  handler: EventListener,
+): DelegatedHandler | undefined {
+  return (delegatedHandlers.get(el) ?? []).find(
+    (r) => r.type === type && r.selector === selector && r.handler === handler,
+  );
+}
+
+function forgetHandler(el: HTMLElement, rec: DelegatedHandler): void {
+  const list = (delegatedHandlers.get(el) ?? []).filter((r) => r !== rec);
+  delegatedHandlers.set(el, list);
+}
+
 /**
  * Obsidian 的 DOM 扩展方法。
  *
@@ -129,12 +162,49 @@ export function installDomExtensions(): void {
     P.isShown = function (this: HTMLElement): boolean {
       return this.style.display !== "none" && !this.hasAttribute("hidden");
     };
-    // Obsidian 的 el.on(type, cb) —— 与 onClickEvent 同族但支持任意事件
-    P.on = function (this: HTMLElement, type: string, cb: EventListener, options?: AddEventListenerOptions) {
-      this.addEventListener(type, cb, options);
+    // Obsidian 的 el.on(type, cb) —— 与 onClickEvent 同族但支持任意事件。
+    // 另兼容老插件常见的 jQuery 委托写法 el.on(type, selector, handler)：
+    // 少了这个分支，传进来的 selector 会被当监听器直接喂给 addEventListener，
+    // 插件在构造时就抛 "parameter 2 is not an object"（auto-note-mover 就是这么挂的）。
+    P.on = function (
+      this: HTMLElement,
+      type: string,
+      selectorOrCb: string | EventListener,
+      cbOrOptions?: EventListener | AddEventListenerOptions,
+      maybeOptions?: AddEventListenerOptions,
+    ) {
+      if (typeof selectorOrCb === "string") {
+        const selector = selectorOrCb;
+        const handler = cbOrOptions as EventListener;
+        const options = maybeOptions;
+        const wrapper = ((ev: Event): void => {
+          const target = ev.target as HTMLElement | null;
+          const hit = target?.closest?.(selector);
+          if (hit && this.contains(hit)) handler.call(hit, ev);
+        }) as EventListener;
+        rememberHandler(this, { type, selector, handler, wrapper });
+        this.addEventListener(type, wrapper, options);
+        return;
+      }
+      this.addEventListener(type, selectorOrCb, cbOrOptions as AddEventListenerOptions);
     };
-    P.off = function (this: HTMLElement, type: string, cb: EventListener, options?: EventListenerOptions) {
-      this.removeEventListener(type, cb, options);
+    P.off = function (
+      this: HTMLElement,
+      type: string,
+      selectorOrCb: string | EventListener,
+      cbOrOptions?: EventListener | EventListenerOptions,
+    ) {
+      if (typeof selectorOrCb === "string") {
+        const selector = selectorOrCb;
+        const handler = cbOrOptions as EventListener;
+        const rec = findHandler(this, type, selector, handler);
+        if (rec) {
+          this.removeEventListener(type, rec.wrapper);
+          forgetHandler(this, rec);
+        }
+        return;
+      }
+      this.removeEventListener(type, selectorOrCb, cbOrOptions as EventListenerOptions);
     };
     P.show = function (this: HTMLElement) {
       this.style.removeProperty("display");
@@ -235,7 +305,10 @@ declare global {
     instanceOf(cls: string): boolean;
     isShown(): boolean;
     on(type: string, cb: EventListener, options?: AddEventListenerOptions): void;
+    /** jQuery 委托写法：on(event, selector, handler)，命中选择器才回调，this 指向命中元素。 */
+    on(type: string, selector: string, cb: EventListener, options?: AddEventListenerOptions): void;
     off(type: string, cb: EventListener, options?: EventListenerOptions): void;
+    off(type: string, selector: string, cb: EventListener): void;
     show(): void;
     hide(): void;
     setDisabled(disabled: boolean): void;
