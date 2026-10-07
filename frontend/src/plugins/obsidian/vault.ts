@@ -7,6 +7,7 @@
  */
 
 import { Events, normalizePath, parseLinktext, type CachedMetadataLike } from "./events";
+import { FileSystemAdapter } from "./request";
 import { TAbstractFile, TFile, TFolder } from "./items";
 import type { Host, PluginManifest } from "./types";
 
@@ -350,7 +351,12 @@ export class Vault extends Events {
 
   get adapter() {
     const fs = this.host.fs;
-    return {
+    // 必须是 FileSystemAdapter 的**真实例**：插件会用
+    // `adapter instanceof obsidian.FileSystemAdapter` 决定走本地路径还是资源 URL
+    //（remotely-save 就是这么分支的）。返回普通对象会让 instanceof 为 false，
+    // 插件转而调用 async 的 getResourcePath，然后对 Promise 调 .split 直接崩。
+    const adapter = new FileSystemAdapter(this.host.vaultPath());
+    return Object.assign(adapter, {
       getName: () => this.adapterName,
       getBasePath: () => this.host.vaultPath(),
       exists: async (p: string) => (await fs.stat(normalizePath(p))) !== null,
@@ -375,7 +381,11 @@ export class Vault extends Events {
         throw new Error("noteforge 不提供系统回收站");
       },
       trashLocal: async (p: string) => fs.remove(normalizePath(p)),
-    };
+      /** 资源的可访问 URL（Obsidian 的 DataAdapter API，异步） */
+      getResourcePath: async (p: string) => `app://local/${normalizePath(p).replace(/^\/+/, "")}`,
+      /** 附件 URL（Obsidian 也有，插件用它拼图片链接） */
+      getFilePath: async (p: string) => `app://local/${normalizePath(p).replace(/^\/+/, "")}`,
+    });
   }
 
   private async writeBinaryAdapter(p: string, data: ArrayBuffer): Promise<void> {

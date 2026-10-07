@@ -75,6 +75,45 @@ export function installDomExtensions(): void {
   // fragment.createDiv() 这类调用上炸。
   const nodeProto = globalThis.Node?.prototype;
 
+  // trustedTypes：Chrome 有、Safari/WebKitGTK 没有。
+  // 内置了 Azure SDK 的插件（remotely-save）会往 window.trustedTypes 上挂策略对象，
+  // 没有这个全局就直接 "Cannot set properties of undefined" —— 真机上同样会挂。
+  // 这里给一个可写、能 createPolicy 的最小实现，让它们以为自己在 Chrome 里。
+  try {
+    const g = globalThis as unknown as {
+      trustedTypes?: {
+        createPolicy?: (name: string, rules?: unknown) => Record<string, unknown>;
+        defaultPolicy?: unknown;
+        [k: string]: unknown;
+      };
+    };
+    if (!g.trustedTypes) {
+      const policies = new Map<string, Record<string, unknown>>();
+      g.trustedTypes = {
+        defaultPolicy: undefined,
+        createPolicy: (name: string, rules?: unknown) => {
+          const policy: Record<string, unknown> = {
+            name,
+            createHTML: (input: string) => input,
+            createScript: (input: string) => input,
+            createScriptURL: (input: string) => input,
+            rules,
+          };
+          policies.set(name, policy);
+          return policy;
+        },
+        isHTML: () => false,
+        isScript: () => false,
+        isScriptURL: () => false,
+        emptyPolicy: { createHTML: (i: string) => i, createScript: (i: string) => i, createScriptURL: (i: string) => i },
+      };
+    }
+    const win = (globalThis.window ?? undefined) as unknown as Record<string, unknown> | undefined;
+    if (win && win.trustedTypes === undefined) win.trustedTypes = g.trustedTypes;
+  } catch {
+    /* 极端环境下没有 globalThis.window，忽略 */
+  }
+
   // Obsidian 往 document.body 上加了两个 CSS 变量读写方法（code-styler 等插件直接用）：
   //   getCssPropertyValue(name) / setCssPropertyValue(name, value)
   // 少它们插件在 onload 里就抛 "document.body.getCssPropertyValue is not a function"。
