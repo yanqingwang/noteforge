@@ -1,3 +1,4 @@
+mod bases_cmd;
 mod plugin_cmd;
 mod sync_cmd;
 
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 // ── Managed State ───────────────────────────────────────────────────
-struct AppState {
+pub struct AppState {
     vault: Mutex<Option<Vault>>,
     tree_cache: Mutex<Vec<FileEntry>>,
     sync_config: Mutex<Option<sync_cmd::NextcloudConfig>>,
@@ -389,6 +390,7 @@ fn main() {
             plugin_cmd::install_plugin,
             plugin_cmd::marketplace_index,
             plugin_cmd::marketplace_search,
+            bases_cmd::index_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
