@@ -362,6 +362,7 @@ async function testPlugin(shim, plugin, sharedApi = null) {
 
   // 索引先就绪（与真机一致）
   await api.vault.ensure();
+    await api.setupBases();
 
   const cm = shim.createCmModules();
   const code = readFileSync(resolve(files.dir, "main.js"), "utf8");
@@ -962,6 +963,7 @@ async function main() {
       },
     });
     await api.vault.ensure();
+    await api.setupBases();
     sharedApi = { api, containers: new Map() };
   }
   for (const p of plugins) {

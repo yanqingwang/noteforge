@@ -185,9 +185,17 @@ export interface CreateApiOptions {
   files?: Record<string, string>;
   /** 宿主内置命令的实现 */
   coreHooks?: CoreCommandHooks;
+  /**
+   * 宿主预先建好的 Bases 元数据索引（真机：Rust 的 index_metadata 返回值）。
+   * 不传就在 setupBases() 里用 JS 侧构建 —— 结果一致，只是大 vault 会慢。
+   */
+  basesIndex?: MetaIndexRaw;
 }
 
 // ── Bases（Obsidian 1.9+ 的数据库视图体系）──
+import { IndexStore, fileApiFromIndex, type MetaIndexRaw } from "./bases/index-store";
+import { buildJsIndex } from "./bases/index-js";
+import { ensureBasesHost } from "./bases/registry";
 import {
   BasesEntry,
   BasesEntryGroup,
@@ -226,6 +234,13 @@ export interface ObsidianApi {
   recorder: ApiRecorder;
   /** 卸载全部已加载插件（测试隔离 / 应用重启插件） */
   unloadAll(): Promise<void>;
+  /**
+   * 建 Bases 元数据索引（必须在插件 onload 之前调）。
+   *
+   * 两条路：宿主传了 basesIndex 就用它（真机走 Rust）；否则 JS 侧自己建
+   * （harness 的内存 vault 只有这条路）。建好后同时灌进 metadataCache。
+   */
+  setupBases(): Promise<{ files: number; ms: number; source: "host" | "js" }>;
 }
 
 /** 宿主侧插件注册表：跨插件互查（app.plugins.getPlugin）。 */
@@ -308,6 +323,18 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
   const hooks: WorkspaceHooks = { ...DEFAULT_HOOKS, ...(opts.workspaceHooks ?? {}) };
   const workspace = new Workspace(host, vault, vault.metadataCache, hooks);
   const fileManager = new FileManager({ vault, metadataCache: vault.metadataCache });
+
+  // ── Bases 索引 ────────────────────────────────────────────────────
+  // 优先用宿主传进来的索引（真机走 Rust 一次遍历整个 vault，不卡 webview）；
+  // 没有就退到 JS 侧构建（harness 的内存 vault 只有这条路）。两条路产出同一种
+  // 结构，查询引擎与插件看到的东西完全一致。
+  const basesIndex = new IndexStore(async (cmd, args) => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke(cmd, args);
+  });
+  // 先用空 API 占位，setupBases() 建完索引后换成真的（插件 onload 前一定会换）
+  const basesHostRef = ensureBasesHost(fileApiFromIndex(basesIndex));
+  basesHostRef.filesFn = () => vault.getFiles().map((f) => f.path);
 
   const localStore = new Map<string, unknown>();
   const appScopes: unknown[] = [];
@@ -440,8 +467,38 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
   installObsidianGlobals(module, app, workspace);
   registerCoreCommands(app, coreHooks);
 
+  async function setupBases(): Promise<{ files: number; ms: number; source: "host" | "js" }> {
+    const paths = vault.getFiles().map((f) => f.path);
+    const t0 = Date.now();
+    if (opts.basesIndex) {
+      // 宿主已经建好（真机：Rust 一次遍历）
+      basesIndex.adopt(opts.basesIndex);
+    } else {
+      const raw = await buildJsIndex({
+        files: paths,
+        read: async (p) => {
+          try {
+            return await host.fs.read(p);
+          } catch {
+            return null;
+          }
+        },
+      });
+      basesIndex.adopt(raw);
+    }
+    for (const p of paths) {
+      const entry = basesIndex.toCacheEntry(p);
+      if (entry) vault.metadataCache.setCache(p, entry);
+    }
+    basesHostRef.fileApi = fileApiFromIndex(basesIndex);
+    const issues = basesIndex.getFrontmatterIssues();
+    if (issues.length) console.warn(`[bases] ${issues.length} 个文件的 frontmatter 解析失败`, issues.slice(0, 5));
+    return { files: paths.length, ms: Date.now() - t0, source: opts.basesIndex ? "host" : "js" };
+  }
+
   return {
     module,
+    setupBases,
     app,
     workspace,
     vault,
@@ -666,6 +723,24 @@ function createViewRegistry(workspace?: { viewTypeForExtension(ext: string): str
       byType.set(type, { name: opts?.name ?? type, view: factory });
       if (opts?.ext) extToType.set(opts.ext.toLowerCase().replace(/^\./, ""), type);
       for (const fn of listeners.get(type) ?? []) fn(type);
+    },
+    // 官方 API：按扩展名批量登记视图类型。插件普遍在 onload 里这么用
+    // （media-extended 就是 `registerExtensions([{ext,type}], undefined)`），
+    // 卸载时再 unregisterExtensions 把映射还回来。
+    registerExtensions: (
+      entries: Array<{ ext: string; type?: string }>,
+      defaultType?: string,
+    ): void => {
+      for (const e of entries) {
+        const key = String(e.ext ?? "").toLowerCase().replace(/^\./, "");
+        if (!key) continue;
+        extToType.set(key, e.type ?? defaultType ?? key);
+      }
+    },
+    unregisterExtensions: (entries: Array<{ ext: string }>): void => {
+      for (const e of entries) {
+        extToType.delete(String(e.ext ?? "").toLowerCase().replace(/^\./, ""));
+      }
     },
     trigger: (name: string, ...args: unknown[]): void => {
       for (const fn of listeners.get(name) ?? []) {

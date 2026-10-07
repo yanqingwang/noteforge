@@ -232,6 +232,16 @@ export class Workspace extends Events {
   vault: Vault;
   metadataCache: MetadataCache;
 
+  /**
+   * 悬停链接的来源登记（Obsidian 1.10+）。
+   *
+   * 插件往里写自己的来源名与默认修饰键，悬停链接时 Obsidian 才认得
+   * 「这个链接的预览由谁负责」。calendar-bases 在 onload 里第一句就是
+   * `this.app.workspace.hoverLinkSources.bases = {...}` —— 没有这个对象，
+   * 插件会挂在 "Cannot set properties of undefined (setting 'bases')"。
+   */
+  hoverLinkSources: Record<string, { display: string; defaultMod: boolean }> = {};
+
   constructor(host: Host, vault: Vault, metadataCache: MetadataCache, hooks: WorkspaceHooks) {
     super();
     this.host = host;
@@ -348,6 +358,17 @@ export class Workspace extends Events {
   registerExtension(extension: string, viewType: string): void {
     const ext = String(extension).replace(/^\./, "").toLowerCase();
     if (ext) this.extViews.set(ext, viewType);
+  }
+
+  /**
+   * 撤销扩展名归属（Plugin.unregisterExtensions）。
+   *
+   * 插件在 onunload 里会调它把自己接管的扩展名还回来 —— 缺了这个方法，
+   * 插件卸载时抛 "unregisterExtensions is not a function"（media-extended）。
+   */
+  unregisterExtension(extension: string): void {
+    const ext = String(extension).replace(/^\./, "").toLowerCase();
+    if (ext) this.extViews.delete(ext);
   }
 
   /** 某个扩展名有没有被插件接管；没有则返回 null。 */

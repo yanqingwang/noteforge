@@ -310,6 +310,18 @@ export abstract class Plugin extends Component {
     }
   }
 
+  /**
+   * 撤销扩展名归属（官方 API，插件在 onunload 里调）。
+   * 没有它插件卸载就抛 "unregisterExtensions is not a function"。
+   */
+  unregisterExtensions(exts: unknown[]): void {
+    const ws = this.ws();
+    for (const e of exts) {
+      const ext = String(e).replace(/^\./, "").toLowerCase();
+      (ws?.unregisterExtension as ((e: string) => void) | undefined)?.(ext);
+    }
+  }
+
   registerMarkdownPostProcessor(
     processor: (el: HTMLElement, ctx: { sourcePath: string; frontmatter?: unknown; addChild(child: Component): void }) => unknown,
     sortOrder = 0,

@@ -11,7 +11,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { createCmModules } from "./obsidian/cm-modules";
 import { renderSettingTab } from "./obsidian/settingDefs";
 import { createObsidianApi, type ObsidianApi, type PluginRegistry } from "./obsidian/index";
-import { IndexStore } from "./obsidian/bases/index-store";
 import { createTauriHost, createEditorAdapter } from "./obsidian/host-tauri";
 import { createElectronStub, createNodeBuiltins, evaluatePlugin, withNodePrefixAliases } from "./loader";
 import { editorBridge } from "../editor/bridge";
@@ -52,8 +51,8 @@ class ObsidianRuntime {
   private opts: RuntimeOptions | null = null;
   private loading: Promise<void> | null = null;
   private listChange: (() => void) | null = null;
-  /** Bases 与 metadataCache 共用的元数据索引（frontmatter / 标签 / 链接） */
-  private index = new IndexStore((cmd, args) => invoke(cmd, args));
+  /** 上一次建索引的统计（状态栏提示用） */
+  private indexInfo = { files: 0, ms: 0, source: "js" as "host" | "js" };
 
   /** UI 订阅插件列表变化 */
   subscribe(fn: () => void): () => void {
@@ -71,15 +70,9 @@ class ObsidianRuntime {
     return this.api;
   }
 
-  /** 元数据索引（Bases 查询引擎与插件的 metadataCache 都吃它）。 */
-  indexStore(): IndexStore {
-    return this.index;
-  }
-
-  /** 索引构建耗时（ms），UI 可以显示「已索引 N 个文件，用时 Xms」。 */
-  private indexMs = 0;
-  indexStats(): { files: number; ms: number } {
-    return { files: this.index.paths().length, ms: this.indexMs };
+  /** 索引统计（UI 显示「已索引 N 个文件，用时 Xms」） */
+  indexStats(): { files: number; ms: number; source: "host" | "js" } {
+    return this.indexInfo;
   }
 
   list(): PluginSummary[] {
@@ -423,7 +416,10 @@ class ObsidianRuntime {
     // vault 查询方法是同步的（Obsidian 语义），索引必须先就绪，
     // 否则插件 onload 里的 getMarkdownFiles() 会拿到空数组还不报错 —— 最难查的一类问题。
     await api.vault.ensure();
-    await this.buildIndex(api, vaultRoot);
+    this.indexInfo = await api.setupBases();
+    if (this.indexInfo.files) {
+      console.info(`[index] ${this.indexInfo.files} 个文件，用时 ${this.indexInfo.ms}ms（${this.indexInfo.source === "host" ? "Rust" : "JS"}）`);
+    }
 
     let installed: Array<{
       id: string;
@@ -483,31 +479,6 @@ class ObsidianRuntime {
     this.notify();
   }
 
-  /**
-   * 建元数据索引并灌进 metadataCache。
-   *
-   * 时机很关键：必须在插件 onload 之前完成 —— 插件常在 onload 里读
-   * `metadataCache.getFileCache(f)` / frontmatter，索引没就绪时那些调用
-   * 返回 null 而且**不报错**，是最难查的一类问题。
-   */
-  private async buildIndex(api: ObsidianApi, vaultRoot: string): Promise<void> {
-    const paths = api.vault.getFiles().map((f) => f.path);
-    const res = await this.index.load(paths, vaultRoot);
-    this.indexMs = res.ms;
-    if (!res.ok) {
-      console.warn("[index] 索引构建失败（Bases 会退化为无属性视图）", res.error);
-      return;
-    }
-    for (const p of paths) {
-      const entry = this.index.toCacheEntry(p);
-      if (entry) api.metadataCache.setCache(p, entry);
-    }
-    const issues = this.index.getFrontmatterIssues();
-    if (issues.length) {
-      console.warn(`[index] ${issues.length} 个文件的 frontmatter 解析失败`, issues.slice(0, 5));
-    }
-  }
-
   private async loadOne(id: string, api: ObsidianApi, requireMap: Record<string, Record<string, unknown>>) {
     const dir = `.obsidian/plugins/${id}`;
     const [manifestText, mainCode] = await Promise.all([
@@ -551,7 +522,6 @@ class ObsidianRuntime {
     this.styleEls = [];
     this.plugins.clear();
     this.api = null;
-    this.index = new IndexStore((cmd, args) => invoke(cmd, args));
     this.containers.clear();
     this.dock?.remove();
     this.dock = null;

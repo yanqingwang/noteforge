@@ -75,6 +75,48 @@ export function installDomExtensions(): void {
   // fragment.createDiv() 这类调用上炸。
   const nodeProto = globalThis.Node?.prototype;
 
+  // VTTCue（WebVTT 字幕轨）：Chrome/Firefox 有，jsdom 与 WebKitGTK 都没有。
+  // hls.js 在模块求值阶段就 `class X extends (typeof document > "u" ? fallback : window.VTTCue)`，
+  // 缺了它整包直接抛 "Class extends value undefined"（media-extended 就是这么挂的）。
+  // 真机上同样会挂 —— 所以这个垫片不是只为 harness。
+  try {
+    const g = globalThis as unknown as { VTTCue?: unknown };
+    if (g.VTTCue === undefined) {
+      const win = (globalThis.window ?? undefined) as unknown as { TextTrackCue?: new (...a: unknown[]) => object } | undefined;
+      const Base = win?.TextTrackCue ?? (class {} as unknown as new (...a: unknown[]) => object);
+      class VTTCuePolyfill extends Base {
+        text: string;
+        startTime: number;
+        endTime: number;
+        id: string;
+        align: string;
+        snapToLines: boolean;
+        lineAlign: string;
+        positionAlign: string;
+        size: number;
+        region: unknown;
+        constructor(text?: string, start?: number, end?: number, settings?: Record<string, unknown>) {
+          super(text ?? "", start ?? 0, end ?? 0);
+          this.text = text ?? "";
+          this.startTime = start ?? 0;
+          this.endTime = end ?? 0;
+          this.id = String(settings?.id ?? "");
+          this.align = "center";
+          this.snapToLines = true;
+          this.lineAlign = "start";
+          this.positionAlign = "auto";
+          this.size = 100;
+          this.region = null;
+        }
+      }
+      g.VTTCue = VTTCuePolyfill;
+      const win2 = (globalThis.window ?? undefined) as unknown as Record<string, unknown> | undefined;
+      if (win2 && win2.VTTCue === undefined) win2.VTTCue = g.VTTCue;
+    }
+  } catch {
+    /* 只读环境就跳过 */
+  }
+
   // trustedTypes：Chrome 有、Safari/WebKitGTK 没有。
   // 内置了 Azure SDK 的插件（remotely-save）会往 window.trustedTypes 上挂策略对象，
   // 没有这个全局就直接 "Cannot set properties of undefined" —— 真机上同样会挂。

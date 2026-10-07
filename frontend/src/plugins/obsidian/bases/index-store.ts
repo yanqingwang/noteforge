@@ -15,6 +15,8 @@
  */
 
 import { parse as parseYaml } from "yaml";
+import type { FileApi } from "./expr/file-api";
+import { LinkValue } from "./expr/values";
 
 export interface MetaLinkRaw {
   target: string;
@@ -242,4 +244,62 @@ export class IndexStore {
     push(fmTags);
     return [...out].sort();
   }
+}
+/**
+ * 从索引造 Bases 的 FileApi。
+ *
+ * 查询引擎只认 FileApi，不认 IndexStore —— 这样 harness（内存 vault）与真机
+ * （Tauri + Rust 索引）能共用同一份引擎代码与测试。
+ */
+export function fileApiFromIndex(store: IndexStore): FileApi {
+  return {
+    exists: (p) => store.has(p),
+    basename: (p) => {
+      const name = p.split("/").pop() ?? p;
+      const dot = name.lastIndexOf(".");
+      return dot > 0 ? name.slice(0, dot) : name;
+    },
+    folder: (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "/"),
+    ext: (p) => store.file(p)?.ext ?? "",
+    size: (p) => store.file(p)?.size ?? 0,
+    ctime: (p) => new Date(store.file(p)?.ctime_ms ?? 0),
+    mtime: (p) => new Date(store.file(p)?.mtime_ms ?? 0),
+    properties: (p) => store.frontmatterOf(p),
+    hasProperty: (p, k) => k in store.frontmatterOf(p),
+    tags: (p) => store.allTagsOf(p),
+    links: (p) => (store.file(p)?.links ?? []).map(toLink),
+    embeds: (p) => (store.file(p)?.embeds ?? []).map(toLink),
+    backlinks: (p) => store.backlinksOf(p),
+    resolve: (t) => {
+      // 已经是 vault 内路径就直接认
+      if (store.has(t)) return t;
+      // 尝试按 Obsidian 优先级解析（与 Rust/JS 索引同一套规则）
+      const lower = t.toLowerCase();
+      for (const cand of [lower, `${lower}.md`, `${lower}.html`]) {
+        for (const p of store.paths()) {
+          if (p.toLowerCase() === cand) return p;
+        }
+      }
+      const suffix = store
+        .paths()
+        .filter((p) => p.toLowerCase().endsWith(`/${lower}`))
+        .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+      if (suffix.length) return suffix[0];
+      const base = store
+        .paths()
+        .filter((p) => {
+          const n = p.split("/").pop() ?? p;
+          const dot = n.lastIndexOf(".");
+          return (dot > 0 ? n.slice(0, dot) : n).toLowerCase() === lower;
+        })
+        .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+      if (base.length) return base[0];
+      const fuzzy = store.paths().filter((p) => p.toLowerCase().includes(lower));
+      return fuzzy.length === 1 ? fuzzy[0] : null;
+    },
+  };
+}
+
+function toLink(l: MetaLinkRaw): LinkValue {
+  return new LinkValue(l.path ?? l.target, l.display ?? undefined);
 }

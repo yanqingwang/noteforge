@@ -19,6 +19,7 @@ const api = shim.createObsidianApi(host, {
   },
 });
 await api.vault.ensure();
+await api.setupBases();
 const electron = shim.createElectronStub();
 const cm = shim.createCmModules();
 const requireMap = {
