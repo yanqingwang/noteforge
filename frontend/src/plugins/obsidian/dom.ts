@@ -63,6 +63,10 @@ export function installDomExtensions(): void {
     P.detach = function (this: HTMLElement) {
       this.parentNode?.removeChild(this);
     };
+    // Obsidian 的 createEl 产物还带 getText()（状态栏元素最常用）
+    P.getText = function (this: HTMLElement): string {
+      return this.textContent ?? "";
+    };
     P.setText = function (this: HTMLElement, t: string | DocumentFragment | null) {
       this.textContent = "";
       if (t === null || t === undefined) return this;
@@ -214,6 +218,7 @@ declare global {
     empty(): void;
     detach(): void;
     setText(t: string | DocumentFragment | null): HTMLElement;
+    getText(): string;
     appendText(t: string): void;
     addClass(...classes: string[]): void;
     addClasses(classes: string): void;

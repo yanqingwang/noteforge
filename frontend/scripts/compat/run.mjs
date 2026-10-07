@@ -12,7 +12,7 @@
  *   node scripts/compat/run.mjs vault-agent  # 只测指定插件（可多个）
  *   node scripts/compat/run.mjs --no-fetch   # 用缓存，不再下载
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
@@ -27,6 +27,8 @@ const args = process.argv.slice(2);
 const NO_FETCH = args.includes("--no-fetch");
 /** 只用已有 compat-results.json 重新生成报告（改报告格式时不必重跑 41 个插件） */
 const REPORT_ONLY = args.includes("--report-only");
+/** 默认复用已下载的产物（幂等缓存），加 --refresh 才重新走网络。 */
+const REFRESH = args.includes("--refresh");
 const ONLY = args.filter((a) => !a.startsWith("--"));
 
 const CDN = "https://cdn.jsdelivr.net/gh";
@@ -173,8 +175,22 @@ async function fetchPluginFiles(plugin) {
   const dir = resolve(CACHE, "plugins", plugin.id);
   const mf = resolve(dir, "manifest.json");
   const mj = resolve(dir, "main.js");
+  // 已下载过就直接复用：41 个插件每次都重新校验网络会让 re-run 慢一个数量级
+  if (!REFRESH && !NO_FETCH && existsSync(mf) && existsSync(mj)) {
+    try {
+      return {
+        dir,
+        manifest: JSON.parse(readFileSync(mf, "utf8")),
+        source: "cache",
+        ref: "cache",
+        bytes: statSync(mj).size,
+      };
+    } catch {
+      /* 缓存损坏则重新下载 */
+    }
+  }
   if (NO_FETCH && existsSync(mf) && existsSync(mj)) {
-    return { dir, manifest: JSON.parse(readFileSync(mf, "utf8")), source: "cache", ref: "cache" };
+    return { dir, manifest: JSON.parse(readFileSync(mf, "utf8")), source: "cache", ref: "cache", bytes: statSync(mj).size };
   }
   mkdirSync(dir, { recursive: true });
 
@@ -527,8 +543,17 @@ const md = [
       const err = `${r.error ?? ""} ${r.errorStack ?? ""}`;
       if (r.status === "pass-view-error") return "视图创建/交互期出错";
       if (err.includes("combine")) return "插件自带 lezer 解析器（与宿主 @lezer/common 双实例）";
-      if (err.includes("Class extends value undefined") || err.includes("without 'new'")) return "基类语义不匹配";
-      if (/fs\.|child_process|sandbox/.test(err)) return "需要 Node 文件系统/子进程";
+      if (err.includes("Class extends value undefined") || err.includes("without 'new'")) {
+        return "基类语义不匹配（把 Plugin 当普通类调用 / 缺某基类）";
+      }
+      if (err.includes("JSON at position")) return "解析宿主返回的数据失败（插件读全局状态做 JSON.parse）";
+      if (err.includes("Symbol(")) return "插件自用 Symbol 注册表，与宿主事件系统不一致";
+      if (err.includes("reading 'bind'")) return "插件自带 SDK 在 webview 初始化失败（多为同步 SDK）";
+      if (err.includes("appendChild") || err.includes("createEl")) return "依赖 Obsidian 内部 DOM / CodeMirror 5 兼容层";
+      if (err.includes("this.component.load")) return "内嵌块 API 形状不匹配（embed.load 语义）";
+      if (err.includes("getPrototypeOf") || err.includes("embedByExtension")) return "内嵌块 / 内建 API 的形状差异";
+      if (/\.map|\.replace|\.from|instanceOf/.test(err)) return "插件内部对宿主返回值的形状假设不成立";
+      if (/fs\.|child_process|crypto|spawn/.test(err)) return "需要 Node 文件系统 / 子进程";
       if (/Worker|worker/.test(err)) return "需要 Web Worker";
       if (/moment/.test(err)) return "moment 语义差异";
       if (r.asyncErrors?.length) return "异步期异常（onload 之后）";

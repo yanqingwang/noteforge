@@ -14,14 +14,20 @@ noteforge 可以直接加载 **Obsidian 官方市场的插件**：装在 `<vault
 
 | 判定 | 数量 | 含义 |
 | --- | ---: | --- |
-| ✅ pass | 20 | onload 成功且注册了命令/视图/后处理器 |
-| ⚠️ pass-view-error | 6 | 加载正常，视图实例化或设置页渲染出错 |
-| ❌ fail | 14 | 求值 / 构造 / onload 抛错 |
+| ✅ pass | 24 | onload 成功且注册了命令/视图/后处理器 |
+| ⚠️ pass-view-error | 5 | 加载正常，视图实例化或设置页渲染出错 |
+| ❌ fail | 11 | 求值 / 构造 / onload 抛错 |
 | 📦 产物不可达 | 1 | 本机网络到 github.com 不可达（只在 Release 发产物的插件） |
 
-已验证可用的头部插件：dataview、obsidian-tasks、quickadd、advanced-canvas（39 命令）、
-obsidian-minimal-settings（51 命令）、table-editor-obsidian（22 命令）、folder-notes、
-obsidian-linter、obsidian-style-settings、obsidian-charts、tasknotes、vault-agent 等。
+已验证可用的头部插件：dataview、obsidian-tasks、obsidian-git（42 命令 / 5 视图）、
+quickadd、editing-toolbar（100 命令）、tasknotes（39 命令 / 4 视图）、
+advanced-canvas（39 命令）、obsidian-minimal-settings（51 命令）、
+table-editor-obsidian（22 命令）、periodic-notes、obsidian-linter、obsidian-outliner、
+folder-notes、obsidian-style-settings、obsidian-charts、obsidian-enhancing-mindmap、
+vault-agent 等（完整清单见报告）。
+
+测试驱动补齐的 API 已经覆盖到「插件访问但 shim 未实现 = 0」，剩下的失败不再是「宿主缺
+API」，而是语义/环境差异（见下表）。
 
 ### 已知不兼容（及原因）
 
@@ -30,7 +36,10 @@ obsidian-linter、obsidian-style-settings、obsidian-charts、tasknotes、vault-
 | 需要 Node 文件系统/子进程 | obsidian-git、obsidian-livesync | 插件要读写 `.git`、起 `child_process`，浏览器/webview 里没有 |
 | 插件自带 lezer 解析器 | obsidian-excalidraw | 插件内嵌的 `@lezer/markdown` 与宿主 `@lezer/common` 是两份实例，`NodeSet` 对不上 |
 | 依赖 Obsidian CM5 兼容层深度 | templater | 需要完整 CodeMirror 5 的 mode/overlay/state 体系 |
-| 需要 Worker | 部分大型插件的索引器 | harness 环境无 Worker（真机 webview 有） |
+| 需要 Web Worker | 部分大型插件的索引器 | harness 环境无 Worker（真机 webview 有） |
+| 插件自带的同步 SDK | remotely-save、obsidian-livesync | 它们的加密/同步 SDK 假设 Node 环境 |
+| Obsidian 内部 API 形状 | obsidian-kanban、pdf-plus | `embedRegistry` 的 embed 对象形状与插件假设不同 |
+| 插件自用 Symbol 注册表 | copilot | 宿主事件系统没有对应的注册位 |
 
 ## 下载源与网络
 

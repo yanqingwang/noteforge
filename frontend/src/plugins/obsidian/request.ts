@@ -96,7 +96,10 @@ type MomentLike = {
   diff(other: DateLike, unit?: string): number;
   isBefore(other: DateLike): boolean;
   isAfter(other: DateLike): boolean;
-  isSame(other: DateLike): boolean;
+  isSame(other: DateLike, unit?: string): boolean;
+  isSameOrAfter(other: DateLike, unit?: string): boolean;
+  isSameOrBefore(other: DateLike, unit?: string): boolean;
+  isBetween(a: DateLike, b: DateLike, unit?: string): boolean;
   startOf(unit: string): MomentLike;
   endOf(unit: string): MomentLike;
   fromNow(): string;
@@ -172,6 +175,10 @@ function formatMoment(d: Date, template?: string): string {
   return out;
 }
 
+function sameDate(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 function mkMoment(v?: DateLike): MomentLike {
   const m: MomentLike = {
     format: (t?: string) => formatMoment(new Date(m.valueOf()), t),
@@ -183,7 +190,24 @@ function mkMoment(v?: DateLike): MomentLike {
     diff: (other, unit = "ms") => Math.trunc((m.valueOf() - toDate(other).valueOf()) / (UNIT_MS[unit] ?? 1)),
     isBefore: (other) => m.valueOf() < toDate(other).valueOf(),
     isAfter: (other) => m.valueOf() > toDate(other).valueOf(),
-    isSame: (other) => m.valueOf() === toDate(other).valueOf(),
+    // unit 支持：calendar 这类插件会写 isSame(x, "day") / isSame(x, "month")
+    isSame: (other, unit) => {
+      if (!unit) return m.valueOf() === toDate(other).valueOf();
+      const a = toDate(other);
+      const b = new Date(m.valueOf());
+      const u = unit.toLowerCase();
+      if (u === "day") return sameDate(b, a);
+      if (u === "month") return b.getFullYear() === a.getFullYear() && b.getMonth() === a.getMonth();
+      if (u === "year") return b.getFullYear() === a.getFullYear();
+      if (u === "hour") return sameDate(b, a) && b.getHours() === a.getHours();
+      if (u === "minute") return sameDate(b, a) && b.getHours() === a.getHours() && b.getMinutes() === a.getMinutes();
+      return m.valueOf() === a.valueOf();
+    },
+    isSameOrAfter: (other, unit) => m.valueOf() >= toDate(other).valueOf() || unit === undefined,
+    isSameOrBefore: (other, unit) => m.valueOf() <= toDate(other).valueOf() || unit === undefined,
+    isBetween: (a, b, unit) =>
+      unit ? m.isSame(a, unit) || m.isSame(b, unit) || (m.isAfter(a) && m.isBefore(b))
+           : m.isAfter(a) && m.isBefore(b),
     startOf: (unit) => {
       const d = new Date(toDate(v).valueOf());
       if (unit === "day") d.setHours(0, 0, 0, 0);
