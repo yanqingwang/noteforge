@@ -37,9 +37,11 @@ interface PluginSettingsProps {
   dark: boolean;
   onChanged: () => void;
   onClose: () => void;
+  /** 打开某个插件自己的设置页 */
+  onOpenPluginSettings: (pluginId: string) => void;
 }
 
-export default function PluginSettings({ vaultPath, dark, onChanged, onClose }: PluginSettingsProps) {
+export default function PluginSettings({ vaultPath, dark, onChanged, onClose, onOpenPluginSettings }: PluginSettingsProps) {
   const [tab, setTab] = useState<"installed" | "market">("installed");
   const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
   const [market, setMarket] = useState<MarketEntry[]>([]);
@@ -217,9 +219,19 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose }: 
                       )}
                     </div>
                   </div>
-                  <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
-                    删除
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button
+                      style={btn}
+                      onClick={() => onOpenPluginSettings(p.id)}
+                      title={rt?.hasSettings ? "插件自己的设置页" : "这个插件没有设置页"}
+                      disabled={!rt?.hasSettings}
+                    >
+                      设置
+                    </button>
+                    <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
+                      删除
+                    </button>
+                  </div>
                 </div>
               );
             })

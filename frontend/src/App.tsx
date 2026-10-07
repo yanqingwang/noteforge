@@ -11,6 +11,7 @@ import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import PluginPanel from "./components/PluginPanel";
 import PluginSettings from "./components/PluginSettings";
+import PluginSettingDialog from "./components/PluginSettingDialog";
 import { obsidianRuntime } from "./plugins/obsidianRuntime";
 import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
@@ -42,6 +43,8 @@ function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginSettingsOpen, setPluginSettingsOpen] = useState(false);
+  // 打开某个插件自己的设置页（插件注册了 PluginSettingTab 时才有内容）
+  const [pluginSettingFor, setPluginSettingFor] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
@@ -117,6 +120,7 @@ function App() {
         saveFile: () => saveNoteRef.current?.(),
         toggleMode: (m) => handleSetViewModeRef.current?.(m),
         openSettings: () => setSettingsOpen(true),
+        openPluginSettings: (id: string) => setPluginSettingFor(id),
         // 插件视图统一挂到运行时自持的右侧停靠面板（noteforge 没有 Obsidian 的右侧栏）
         ensureViewContainer: async (type: string) => obsidianRuntime.containerFor(type),
       }).catch((e) => console.warn("[plugin] 加载失败", e));
@@ -507,7 +511,7 @@ function App() {
               ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} />
               : sidebarMode === "outline"
                 ? <OutlinePanel items={outlineItems} dark={theme === "dark"} />
-                : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} />}
+                : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} onOpenPluginSettings={(id) => setPluginSettingFor(id)} />}
           </div>
         )}
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
@@ -557,6 +561,13 @@ function App() {
         <CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
       )}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      {pluginSettingFor && (
+        <PluginSettingDialog
+          pluginId={pluginSettingFor}
+          dark={theme === "dark"}
+          onClose={() => setPluginSettingFor(null)}
+        />
+      )}
       {pluginSettingsOpen && vaultPath && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
           <div style={{ background: theme === "dark" ? "#252526" : "#fff", borderRadius: 8, width: "min(860px, 94vw)", height: "min(660px, 88vh)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -565,6 +576,7 @@ function App() {
               dark={theme === "dark"}
               onChanged={() => void obsidianRuntime.reload()}
               onClose={() => setPluginSettingsOpen(false)}
+              onOpenPluginSettings={(id) => setPluginSettingFor(id)}
             />
           </div>
         </div>

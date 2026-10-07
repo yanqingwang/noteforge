@@ -34,6 +34,8 @@ export interface RuntimeOptions {
   openFile: (path: string) => Promise<void>;
   /** 宿主内置命令：保存 / 切视图模式 / 打开设置 */
   saveFile?: () => void;
+  /** 打开某个插件自己的设置页（UI 层提供模态框） */
+  openPluginSettings?: (pluginId: string) => void;
   toggleMode?: (mode: "source" | "preview" | "live") => void;
   openSettings?: () => void;
   /** 打开某个插件视图（UI 层负责把容器交进来） */
@@ -73,7 +75,11 @@ class ObsidianRuntime {
     return this.plugins.get(id);
   }
 
-  /** 宿主命令（CommandPalette 用），id 形如 `vault-agent:open-chat`。 */
+  /**
+   * 宿主命令（CommandPalette 用），id 形如 `vault-agent:open-chat`。
+   * 另附每个「有设置页」的插件一条打开设置的命令 —— 设置入口不能只藏在面板里，
+   * 命令面板是最快的路径（也是能被自动化验证的路径）。
+   */
   commands(): Array<{ id: string; name: string; run: () => void }> {
     const api = this.api;
     if (!api) return [];
@@ -88,6 +94,18 @@ class ObsidianRuntime {
           void cmd.callback?.();
         },
       });
+    }
+    const openSettings = this.opts?.openPluginSettings;
+    if (openSettings) {
+      for (const p of this.list()) {
+        if (!p.enabled || !p.hasSettings) continue;
+        out.push({
+          id: `plugin-settings:${p.id}`,
+          // 带插件 id 是为了能只用 ASCII 过滤（命令面板搜索）
+          name: `[插件] ${p.name} 设置 (${p.id})`,
+          run: () => openSettings(p.id),
+        });
+      }
     }
     return out;
   }

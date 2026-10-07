@@ -13,9 +13,11 @@ interface PluginPanelProps {
   dark: boolean;
   onOpenSettings: () => void;
   onRefresh: () => void;
+  /** 打开某个插件自己的设置页 */
+  onOpenPluginSettings: (pluginId: string) => void;
 }
 
-export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginPanelProps) {
+export default function PluginPanel({ dark, onOpenSettings, onRefresh, onOpenPluginSettings }: PluginPanelProps) {
   const [plugins, setPlugins] = useState<PluginSummary[]>(() => obsidianRuntime.list());
   const [busy, setBusy] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string | null>(null);
@@ -93,6 +95,16 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginP
               <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {p.name}
               </span>
+              {/* 插件自己的设置页：只有注册了 PluginSettingTab 才有 */}
+              {p.hasSettings && (
+                <button
+                  onClick={() => onOpenPluginSettings(p.id)}
+                  style={btnStyle}
+                  title={`${p.name} 的设置`}
+                >
+                  ⚙
+                </button>
+              )}
               <span style={{ fontSize: 11, opacity: 0.6 }}>{p.version}</span>
             </div>
             {p.error && (
