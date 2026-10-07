@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T09:46:07.828Z",
+  "generatedAt": "2026-10-07T11:19:37.183Z",
   "sampleGeneratedAt": "2026-10-07T08:51:27.194Z",
   "total": 10,
   "summary": {
@@ -135,6 +135,14 @@
       "manifestVersion": "1.1.0",
       "ref": "cache",
       "settingRows": 2,
+      "commandSmoke": {
+        "html-effectiveness:export-note": {
+          "ok": true,
+          "newFiles": [
+            "README.html"
+          ]
+        }
+      },
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -209,7 +217,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 269
+      "ms": 298
     },
     {
       "id": "drawio-obsidian",
@@ -327,7 +335,7 @@
       "topApi": [
         "addIcon×2"
       ],
-      "ms": 497,
+      "ms": 537,
       "asyncErrors": [
         "Cannot read properties of null (reading 'style')"
       ]
@@ -440,7 +448,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 155,
+      "ms": 180,
       "asyncErrors": [
         "No available storage method found."
       ]
@@ -545,7 +553,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 89
+      "ms": 92
     },
     {
       "id": "md-to-html-effect",
@@ -574,6 +582,20 @@
       "manifestVersion": "1.0.25",
       "ref": "cache",
       "settingRows": 2,
+      "commandSmoke": {
+        "md-to-html-effect:convert-md-to-html": {
+          "ok": true,
+          "newFiles": [
+            "README.html"
+          ]
+        },
+        "md-to-html-effect:convert-batch-md-to-html": {
+          "ok": true,
+          "newFiles": [
+            "README.html"
+          ]
+        }
+      },
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -648,7 +670,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 85
+      "ms": 188
     },
     {
       "id": "vault-agent",
@@ -758,7 +780,7 @@
       "topApi": [
         "setIcon×4"
       ],
-      "ms": 221
+      "ms": 248
     },
     {
       "id": "quadrant-chart",
@@ -872,7 +894,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 218
+      "ms": 226
     },
     {
       "id": "obsidian-nextcloud-sync-yanc",
@@ -980,7 +1002,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 140
+      "ms": 162
     },
     {
       "id": "nextcloud-sync-yanc",
@@ -1005,7 +1027,7 @@
       "bytes": 0,
       "manifestVersion": null,
       "ref": null,
-      "ms": 5968
+      "ms": 9541
     },
     {
       "id": "iconic",
@@ -1129,7 +1151,7 @@
         "getIconIds×1",
         "getLanguage×1"
       ],
-      "ms": 155,
+      "ms": 143,
       "asyncErrors": [
         "sleep is not defined"
       ]

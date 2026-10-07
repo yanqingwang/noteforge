@@ -323,6 +323,21 @@ const VAULT_FILES = {
   ".obsidian/community-plugins.json": "[]\n",
 };
 
+/**
+ * 命令冒烟白名单：pluginId → 要真跑一遍的命令 id。
+ *
+ * 只放「本地文件操作 + 不需要交互」的写路径命令 —— 这些命令挂了或没产出文件，
+ * 插件就算"加载通过"也是不能用。跑之前后的 vault 文件差集就是产出证据。
+ * 弹窗类（create-chart）、网络类（sync-now）不放进来：会卡住或需要交互。
+ */
+const COMMAND_SMOKE = {
+  "md-to-html-effect": ["md-to-html-effect:convert-md-to-html", "md-to-html-effect:convert-batch-md-to-html"],
+  "html-effectiveness": ["html-effectiveness:export-note"],
+  "html-to-md-effect": [],
+  "quadrant-chart": [],
+  "obsidian-nextcloud-sync-yanc": [],
+};
+
 async function testPlugin(shim, plugin, sharedApi = null) {
   const t0 = Date.now();
   const result = {
@@ -607,6 +622,71 @@ async function testPlugin(shim, plugin, sharedApi = null) {
   }
   if (tabErrors.length) result.settingTabErrors = tabErrors;
 
+  // 命令冒烟：白名单里的命令真跑一遍，看有没有产出文件
+  const smokeIds = COMMAND_SMOKE[plugin.id] ?? [];
+  if (smokeIds.length) {
+    // 每个插件都从干净 vault 开始：上一个插件冒烟产出的文件会让下一个插件
+    // 走「已存在则跳过」的分支，测出来是假的（md-to-html 与 export-note 都写 README.html）
+    for (const f of api.vault.getFiles()) {
+      if (!VAULT_FILES[f.path]) {
+        try {
+          await api.vault.delete(f);
+        } catch {
+          /* 删不掉就算了，冒烟结果里会体现出来 */
+        }
+      }
+    }
+    const before = new Set(api.vault.getFiles().map((f) => f.path));
+    result.commandSmoke = {};
+    for (const id of smokeIds) {
+      const cmd = (registered.getCommands?.() ?? []).find((c) => c.id === id);
+      if (!cmd) {
+        result.commandSmoke[id] = { ok: false, error: "命令未注册" };
+        continue;
+      }
+      // Obsidian 语义：命令可以只实现 checkCallback —— 先用 checking=true 问"现在能不能用"，
+      // 再用 checking=false 触发执行。只调 callback 会把这类命令判成"成功但啥也没干"
+      // （md-to-html-effect 的转换命令就是 checkCallback，之前一直是假阳性）。
+      let run;
+      if (typeof cmd.checkCallback === "function") {
+        let available = false;
+        try {
+          available = Boolean(cmd.checkCallback(true));
+        } catch (e) {
+          result.commandSmoke[id] = { ok: false, error: `checkCallback 抛错：${String(e?.message ?? e).split("\n")[0]}` };
+          continue;
+        }
+        if (!available) {
+          result.commandSmoke[id] = { ok: false, error: "checkCallback 返回 false（当前上下文不可用，如没有活动文件）" };
+          continue;
+        }
+        run = () => cmd.checkCallback(false);
+      } else if (typeof cmd.callback === "function") {
+        run = () => cmd.callback();
+      } else {
+        result.commandSmoke[id] = { ok: false, error: "命令既没有 callback 也没有 checkCallback" };
+        continue;
+      }
+      try {
+        await Promise.race([
+          Promise.resolve(run()),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("命令 10s 未返回（可能卡在弹窗或网络）")), 10000)),
+        ]);
+        // 插件常写成 `void doAsyncWork()`（不 await），命令回调立刻返回。
+        // 直接取快照会看不到产出，所以轮询等一小会儿。
+        let added = [];
+        for (let i = 0; i < 20; i++) {
+          added = api.vault.getFiles().map((f) => f.path).filter((f) => !before.has(f));
+          if (added.length) break;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        result.commandSmoke[id] = { ok: true, newFiles: added };
+      } catch (e) {
+        result.commandSmoke[id] = { ok: false, error: String(e?.message ?? e).split("\n")[0] };
+      }
+    }
+  }
+
   const snap = api.recorder.snapshot();
   result.unsupportedApi = snap.unsupported;
   result.accessedApi = snap.accessed;
@@ -841,6 +921,7 @@ async function main() {
   plugins = [...plugins].sort((a, b) => b.downloads - a.downloads);
 
   console.log(`兼容性测试开始：${plugins.length} 个插件（样本生成于 ${sample.generatedAt}）\n`);
+
   const results = [];
   // 共享模式：先建一个 app，所有插件都塞进去（真机行为）
   let sharedApi = null;

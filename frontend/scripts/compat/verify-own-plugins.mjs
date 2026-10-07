@@ -48,6 +48,9 @@ const EXPECT = {
     minCommands: 9,
     views: 1,
     minSettingRows: 2, // 设置页就是「标题 + 默认主题下拉」两行（见 main.ts display()）
+    // 它的视图 onOpen 是空的（见 main.ts:1058），iframe 在打开 html 文件时才填 ——
+    // 所以"视图打开后是空的"是设计如此，不能当缺陷。真机验证过 paint-board.html 能渲染。
+    containerView: true,
   },
   "md-to-html-effect": {
     label: "MD to HTML Effectiveness（Markdown 转 HTML）",
@@ -82,7 +85,7 @@ const EXPECT = {
     minCommands: 4,
     views: 1,
     minSettingRows: 3,
-    minViewText: 1, // 接管扩展名的视图：画布文字很少，但至少不能是空壳
+    expectViewTags: ["svg"], // 接管扩展名(.mdx)的视图：画布是 SVG，文本长度为 0 是正常的
   },
   "obsidian-nextcloud-sync-yanc": {
     label: "Nextcloud sync YANC（双向同步）",
@@ -139,6 +142,14 @@ for (const [id, exp] of Object.entries(EXPECT)) {
     problems.push(`视图数 ${r.views} < 期望 ${exp.views}`);
   }
   for (const [type, shell] of Object.entries(r.viewShells ?? {})) {
+    const tags = shell.tags ?? [];
+    if (exp.expectViewTags?.length) {
+      for (const t of exp.expectViewTags) {
+        if (!tags.includes(t)) problems.push(`视图 ${type} 里没有 <${t}>（现有标签：${tags.join(",") || "无"}）`);
+      }
+      continue;
+    }
+    if (exp.containerView) continue; // 容器型视图：打开后为空是设计如此
     const empty = shell.children === 0 && shell.textLen === 0;
     if (empty) problems.push(`视图 ${type} 渲染为空（0 子元素 / 0 文本）`);
     else if ((exp.minViewText ?? 0) > shell.textLen) {
@@ -154,6 +165,12 @@ for (const [id, exp] of Object.entries(EXPECT)) {
       problems.push(`设置页只渲染 ${rowsGot} 行 < 期望 ${exp.minSettingRows}`);
     }
   }
+  // 写路径命令冒烟：要真的产出文件，光"回调没抛错"不算数
+  for (const [cid, res] of Object.entries(r.commandSmoke ?? {})) {
+    if (!res.ok) problems.push(`命令 ${cid} 执行失败：${res.error ?? "未知"}`);
+    else if (!res.newFiles?.length) problems.push(`命令 ${cid} 执行了但没有任何文件产出`);
+  }
+
   if (r.settingTabErrors?.length) problems.push(`设置页报错：${r.settingTabErrors[0]}`);
   if (r.viewErrors?.length) problems.push(`视图报错：${r.viewErrors[0]}`);
 
