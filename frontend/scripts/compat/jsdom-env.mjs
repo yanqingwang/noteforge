@@ -77,9 +77,57 @@ export function installDom() {
   }
   if (typeof w.self === "undefined") w.self = w;
 
+  // 浏览器里天然存在、jsdom 没有的全局。插件在 webview 里当全局用，
+  // 缺了就是 "xxx is not defined" —— 真机（WebKitGTK）都有，属环境缺口。
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    // 最小 2D 矩阵：插件一般只用 a/b/c/d/e/f 与 toString()
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(init) {
+        const m = Array.isArray(init) ? init : typeof init === "string" ? parseCssMatrix(init) : [];
+        [this.a, this.b, this.c, this.d, this.e, this.f] =
+          m.length >= 6 ? m : [1, 0, 0, 1, 0, 0];
+      }
+      multiply() { return this; }
+      translate(x = 0, y = 0) { this.e += x; this.f += y; return this; }
+      scale(x = 1, y = x) { this.a *= x; this.d *= y; return this; }
+      inverse() { return this; }
+      transformPoint(p = {}) { return { x: this.a * (p.x ?? 0) + this.c * (p.y ?? 0) + this.e, y: this.b * (p.x ?? 0) + this.d * (p.y ?? 0) + this.f }; }
+      toString() { return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`; }
+    };
+    // CSS matrix(...) 解析（只取 6 个数字，够用）
+    function parseCssMatrix(s) {
+      const n = (s.match(/-?[\d.e+-]+/g) ?? []).map(Number).filter((x) => !Number.isNaN(x));
+      return n.slice(0, 6);
+    }
+  }
+  // 事件三件套：内联代码常直接调全局 addEventListener（obsidian-livesync 就这么挂的）
+  for (const k of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
+    if (globalThis[k] === undefined && typeof w[k] === "function") globalThis[k] = w[k].bind(w);
+  }
+  // crypto.randomUUID：jsdom 的 window.crypto 可能没有这一项
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID !== "function") {
+    try {
+      globalThis.crypto.randomUUID = () =>
+        "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+          const r = (Math.random() * 16) | 0;
+          const v = ch === "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+    } catch {
+      /* 只读就跳过 */
+    }
+  }
+  if (w.crypto && typeof w.crypto.randomUUID !== "function") {
+    try {
+      w.crypto.randomUUID = globalThis.crypto?.randomUUID;
+    } catch {
+      /* 只读就跳过 */
+    }
+  }
+
   // 前面挂在 globalThis 上的垫片要同步到 window：插件在 webview 里是当 window 全局用的，
   // 只挂 globalThis 会让 window.fetch 有了、window.indexedDB 还是 undefined。
-  for (const k of ["indexedDB", "IDBKeyRange", "trustedTypes", "matchMedia"]) {
+  for (const k of ["indexedDB", "IDBKeyRange", "trustedTypes", "matchMedia", "DOMMatrix", "crypto", "addEventListener", "removeEventListener", "dispatchEvent"]) {
     if (w[k] === undefined && globalThis[k] !== undefined) {
       try {
         w[k] = globalThis[k];

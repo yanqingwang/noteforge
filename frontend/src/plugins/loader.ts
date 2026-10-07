@@ -80,6 +80,8 @@ export function installNodeGlobals(): void {
 /** 把插件 main.js 当 CJS 执行一遍。 */
 export function evaluatePlugin(code: string, opts: EvaluateOptions): EvaluateResult {
   installNodeGlobals();
+  // window.require 与插件内的 require 用同一张表（否则插件拿到的模块集合不一样）
+  installWindowRequire(opts.requireMap);
 
   const required: Array<{ name: string; provided: boolean }> = [];
   const unresolved: string[] = [];
@@ -363,6 +365,43 @@ function createEventsModule(): RequireEntry {
  * 也常见 `require("node:fs")`（尤其被 vite/rollup 打包过一次的产物），
  * 两种写法都要能解析到同一份实现。
  */
+/**
+ * 把 `window.require` / `globalThis.require` 装上（Obsidian 也提供）。
+ *
+ * 插件会合法地用 `window.require("node:crypto")`、`window.require("electron")`
+ * 这类全局 require —— obsidian-importer 就是 `Platform.isDesktopApp ? window.require("node:crypto") : null`
+ * 然后调 randomUUID。缺了它轻则功能降级，重则整包求值失败。
+ */
+export function installWindowRequire(map?: Record<string, RequireEntry>): void {
+  const g = globalThis as unknown as Record<string, unknown>;
+  if (g.require && g.__nfRequireInstalled) return;
+  const resolved = withNodePrefixAliases(map ?? createNodeBuiltins());
+  const req = (name: string): RequireEntry => {
+    if (resolved[name]) return resolved[name];
+    if (name === "obsidian") {
+      throw new Error("window.require(\"obsidian\") 不可用：请用 import/require 的 obsidian 模块");
+    }
+    const stub = new Proxy(
+      {},
+      {
+        get: (_t, prop: string) => {
+          if (prop === "__esModule") return false;
+          if (prop === "default") return undefined;
+          return () => {
+            throw new Error(`noteforge 沙箱未提供模块 "${name}" 的导出 "${String(prop)}"`);
+          };
+        },
+        has: () => true,
+      },
+    ) as RequireEntry;
+    return stub;
+  };
+  g.require = req;
+  g.__nfRequireInstalled = true;
+  const win = (globalThis.window ?? undefined) as unknown as Record<string, unknown> | undefined;
+  if (win) win.require = req;
+}
+
 export function withNodePrefixAliases(map: Record<string, RequireEntry>): Record<string, RequireEntry> {
   const out: Record<string, RequireEntry> = { ...map };
   for (const name of Object.keys(map)) out[`node:${name}`] = map[name];

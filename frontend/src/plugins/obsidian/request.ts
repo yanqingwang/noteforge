@@ -260,15 +260,22 @@ function mkMoment(v?: DateLike): MomentLike {
 /** moment().localeData() 的返回形状（插件会读 _week.dow、months() 等）。 */
 interface MomentLocaleData {
   name: string;
-  weekdays: string[];
-  weekdaysShort: string[];
-  weekdaysMin: string[];
-  months: string[];
-  monthsShort: string[];
+  /** moment 的 localeData 里这些是函数（monthsShort() 取数组），不是数组本身 */
+  weekdays(): string[];
+  weekdaysShort(): string[];
+  weekdaysMin(): string[];
+  months(): string[];
+  monthsShort(): string[];
   firstDayOfWeek(): number;
   dow(): number;
   doy(): number;
   firstDayOfYear(): number;
+  meridiem(h?: number): string;
+  meridiemHour(h: number): number;
+  ordinal(n: number): string;
+  monthsParse(): string[];
+  monthsRegex(): string;
+  weekdaysParse(): string[];
   longDateFormat(fmt: string): string;
   /** moment 内部字段，插件也会直接读 */
   _week: { dow: number; doy: number };
@@ -280,6 +287,8 @@ interface MomentFn {
   (v?: DateLike): MomentLike;
   locale(preset?: string): string;
   locales(): string[];
+  /** 注册/更新 locale（moment 的 locale 维护 API，插件会调） */
+  updateLocale(name: string, config?: unknown): string;
   defineLocale(name: string, config: unknown): string;
   localeData(key?: string): Record<string, unknown>;
   duration: (input?: unknown, unit?: string) => Record<string, number>;
@@ -308,6 +317,8 @@ momentFn.locale = (preset?: string): string => {
   return CURRENT_LOCALE.name;
 };
 momentFn.locales = (): string[] => ["en", "zh", "zh-cn", "zh-tw", "ja", "de", "fr", "es", "ru", "ko"];
+// moment 的 locale 维护 API：插件会注册/更新自己的 locale（journals 就调 updateLocale）
+momentFn.updateLocale = (_name: string, _config?: unknown): string => CURRENT_LOCALE.name;
 momentFn.defineLocale = (name: string, _config: unknown): string => {
   CURRENT_LOCALE.name = name;
   return name;
@@ -319,17 +330,27 @@ const MONTHS_SHORT = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8
 
 momentFn.localeData = (key?: string) => {
   // Obsidian 界面是中文，weekdays/months 给中文；插件主要取 dow()/months() 这类
+  // 注意 months/weekdays* 在 moment 里是**函数**（localeData().monthsShort()），
+  // 不是数组。给成数组的话插件按 moment 的用法调用就抛
+  // "monthsShort is not a function"（journals 是这么挂的）。
   const data = () => ({
     name: key ?? CURRENT_LOCALE.name,
-    weekdays: WEEKDAYS,
-    weekdaysShort: WEEKDAYS_SHORT,
-    weekdaysMin: WEEKDAYS_SHORT,
-    months: MONTHS,
-    monthsShort: MONTHS_SHORT,
+    weekdays: (): string[] => WEEKDAYS,
+    weekdaysShort: (): string[] => WEEKDAYS_SHORT,
+    weekdaysMin: (): string[] => WEEKDAYS_SHORT,
+    months: (): string[] => MONTHS,
+    monthsShort: (): string[] => MONTHS_SHORT,
     firstDayOfWeek: () => 1,
     dow: () => 1,
     doy: () => 6,
     firstDayOfYear: () => 1,
+    // moment 的 localeData 里这些也都是**函数**，插件按 moment 的用法调
+    meridiem: (h?: number) => (h !== undefined && h < 12 ? "上午" : "下午"),
+    meridiemHour: (h: number) => h % 12 || 12,
+    ordinal: (n: number) => `${n}`,
+    monthsParse: (): string[] => MONTHS_SHORT,
+    monthsRegex: (): string => "",
+    weekdaysParse: (): string[] => WEEKDAYS_SHORT,
     longDateFormat: (fmt: string) => fmt,
     // moment 内部字段，插件也会直接读（calendar: moment.localeData()._week.dow）
     _week: { dow: 1, doy: 4 },

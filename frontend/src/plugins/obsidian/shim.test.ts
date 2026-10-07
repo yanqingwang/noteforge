@@ -6,6 +6,7 @@
  */
 
 import { installDomExtensions } from "./dom";
+import { installWindowRequire } from "../loader";
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryHost } from "./types";
 import { createObsidianApi, OBSIDIAN_EXPORT_NAMES } from "./index";
@@ -430,6 +431,32 @@ describe("导出清单", () => {
     expect(app.isMobile).toBe(false);
     expect(app.isDesktop).toBe(true);
     expect(typeof app.isIosApp).toBe("boolean");
+  });
+
+  it("moment.localeData 的 months/weekdays/meridiem 都是函数（moment 语义）", () => {
+    const { a } = api();
+    const ld = (a.module.moment as unknown as (v?: undefined) => { localeData(): Record<string, unknown> })().localeData();
+    const monthsShort = ld.monthsShort;
+    expect(typeof monthsShort).toBe("function");
+    expect((monthsShort as () => string[])()).toContain("1月");
+    for (const k of ["months", "weekdays", "weekdaysShort", "weekdaysMin", "monthsParse", "weekdaysParse"]) {
+      expect(typeof ld[k], `localeData.${k} 应为函数`).toBe("function");
+    }
+    expect(typeof ld.meridiem).toBe("function");
+    expect(typeof (a.module.moment as unknown as { updateLocale(n: string): string }).updateLocale).toBe("function");
+  });
+
+  it("window.require 可用（Obsidian 也提供，插件用 window.require("+"node:crypto"+")）", () => {
+    installDomExtensions();
+    installWindowRequire();
+    const req = (globalThis as unknown as { require?: (n: string) => Record<string, unknown> }).require;
+    expect(typeof req).toBe("function");
+    const cryptoMod = req?.("node:crypto") as { randomUUID?: unknown };
+    expect(typeof cryptoMod?.randomUUID).toBe("function");
+    expect(typeof req?.("os").platform).toBe("function");
+    // 未提供的模块返回「调用即抛」的壳，而不是让插件拿到 undefined
+    const unknownMod = req?.("some-missing-module") as { foo?: () => unknown };
+    expect(() => (unknownMod?.foo as () => unknown)()).toThrow();
   });
 
   it("moment.localeData() 带 _week（插件读 ._week.dow）", () => {
