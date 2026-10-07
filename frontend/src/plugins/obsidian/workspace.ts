@@ -161,9 +161,19 @@ export class WorkspaceLeaf {
     this.type = state.type;
     const factory = this.workspace.getViewFactory(state.type);
     if (!factory) return;
+    // 视图类型此时才确定，向宿主要一个已挂载的容器：
+    // 插件通常自己走 getRightLeaf().setViewState()，容器必须来自宿主才有意义。
+    const hostEl = this.workspace.hooks.getLeafContainer(this.type);
+    if (hostEl && hostEl !== this.containerEl) {
+      this.containerEl = hostEl;
+      hostEl.replaceChildren();
+    }
     const view = factory(this);
     this.view = view;
     await view.onOpen();
+    if (this.containerEl && !view.containerEl.isConnected) {
+      this.containerEl.appendChild(view.containerEl);
+    }
   }
 
   getDisplayText(): string {
@@ -249,7 +259,8 @@ export class Workspace extends Events {
   }
 
   private makeLeaf(type: string, container?: HTMLElement): WorkspaceLeaf {
-    const leaf = new WorkspaceLeaf(this, type, container ?? this.hooks.getLeafContainer(type) ?? undefined);
+    const hostEl = this.hooks.getLeafContainer(type);
+    const leaf = new WorkspaceLeaf(this, type, container ?? hostEl ?? undefined);
     const arr = this.leaves.get(type) ?? [];
     arr.push(leaf);
     this.leaves.set(type, arr);

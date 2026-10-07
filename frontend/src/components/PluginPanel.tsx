@@ -6,7 +6,7 @@
  * 差别只在 noteforge 用侧栏承载而不是右侧栏。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { obsidianRuntime, type PluginSummary } from "../plugins/obsidianRuntime";
 
 interface PluginPanelProps {
@@ -17,12 +17,11 @@ interface PluginPanelProps {
 
 export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginPanelProps) {
   const [plugins, setPlugins] = useState<PluginSummary[]>(() => obsidianRuntime.list());
-  const [view, setView] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const viewTypeRef = useRef<string | null>(null);
+  const [currentView, setCurrentView] = useState<string | null>(null);
 
   useEffect(() => obsidianRuntime.subscribe(() => setPlugins(obsidianRuntime.list())), []);
+  useEffect(() => obsidianRuntime.onViewChange(setCurrentView), []);
 
   const toggle = async (p: PluginSummary) => {
     setBusy(p.id);
@@ -41,15 +40,9 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginP
 
   const vaultRoot = () => window.localStorage.getItem("nf-last-vault") ?? "";
 
+  // 视图由运行时挂到右侧停靠面板，所以这里不用等 React 渲染容器
   const openView = async (type: string) => {
-    setView(type);
-    viewTypeRef.current = type;
-    // 等 React 把容器挂上再交给 runtime
-    requestAnimationFrame(() => {
-      if (viewTypeRef.current === type && containerRef.current) {
-        void obsidianRuntime.openView(type);
-      }
-    });
+    await obsidianRuntime.openView(type);
   };
 
   const fg = dark ? "#ccc" : "#333";
@@ -125,13 +118,14 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginP
               <button
                 key={`${v.plugin.id}:${v.type}`}
                 onClick={() => void openView(v.type)}
+                title="在右侧停靠面板打开"
                 style={{
                   display: "block",
                   width: "100%",
                   textAlign: "left",
                   padding: "6px 12px",
                   border: "none",
-                  background: view === v.type ? (dark ? "#333" : "#eaeaea") : "transparent",
+                  background: currentView === v.type ? (dark ? "#333" : "#eaeaea") : "transparent",
                   color: fg,
                   cursor: "pointer",
                   fontSize: 13,
@@ -143,17 +137,6 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh }: PluginP
           </>
         )}
       </div>
-
-      {/* 插件视图挂载点 */}
-      <div
-        ref={containerRef}
-        style={{ display: view ? "block" : "none", borderTop: `1px solid ${border}`, background: dark ? "#1e1e1e" : "#fff", minHeight: 220, maxHeight: "55%", overflow: "auto" }}
-      />
-      {view && (
-        <button onClick={() => setView(null)} style={{ ...btnStyle, margin: 6 }}>
-          关闭视图
-        </button>
-      )}
 
       <div style={{ padding: 8, fontSize: 11, opacity: 0.55, background: dark ? "#2a2a2a" : "#fafafa" }}>兼容性测试结论见 AIReports/noteforge-obsidian-plugin-compat-*.md</div>
     </div>

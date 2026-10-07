@@ -122,15 +122,115 @@ class ObsidianRuntime {
     return this.containers.get(type) ?? null;
   }
 
-  /** 打开插件视图（宿主把视图 DOM 挂进容器）。 */
+  private dock: HTMLElement | null = null;
+  private dockBody: HTMLElement | null = null;
+  private dockTitle: HTMLElement | null = null;
+  private viewChange: ((type: string | null) => void) | null = null;
+
+  /** 订阅「当前打开的插件视图」（侧栏面板用它显示状态）。 */
+  onViewChange(fn: (type: string | null) => void): () => void {
+    this.viewChange = fn;
+    return () => {
+      if (this.viewChange === fn) this.viewChange = null;
+    };
+  }
+
+  /**
+   * 停靠面板：noteforge 没有 Obsidian 的右侧栏，插件视图统一挂在右侧浮层里。
+   * 由运行时自己创建 DOM —— 不依赖 React 是否正好渲染了那个 tab，
+   * 之前就是因为容器由侧栏渲染，命令面板里打开视图时拿不到容器。
+   */
+  private ensureDock(type: string): HTMLElement {
+    if (!this.dock || !this.dockBody) {
+      const dock = document.createElement("div");
+      dock.className = "nf-plugin-dock";
+      Object.assign(dock.style, {
+        position: "fixed",
+        top: "46px",
+        right: "0",
+        bottom: "22px",
+        width: "380px",
+        maxWidth: "46vw",
+        background: "var(--background-primary, #fff)",
+        borderLeft: "1px solid var(--background-modifier-border, #ddd)",
+        boxShadow: "-6px 0 24px rgba(0,0,0,.14)",
+        zIndex: "9000",
+        display: "flex",
+        flexDirection: "column",
+      } as Partial<CSSStyleDeclaration>);
+      const bar = document.createElement("div");
+      Object.assign(bar.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "6px 10px",
+        borderBottom: "1px solid var(--background-modifier-border, #ddd)",
+        font: "12px sans-serif",
+      } as Partial<CSSStyleDeclaration>);
+      const title = document.createElement("span");
+      title.style.flex = "1";
+      const close = document.createElement("button");
+      close.textContent = "✕";
+      close.title = "关闭";
+      Object.assign(close.style, { border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", color: "inherit" } as Partial<CSSStyleDeclaration>);
+      close.addEventListener("click", () => this.closeView());
+      bar.append(title, close);
+      const body = document.createElement("div");
+      body.style.flex = "1";
+      body.style.overflow = "auto";
+      body.style.padding = "8px";
+      dock.append(bar, body);
+      document.body.appendChild(dock);
+      this.dock = dock;
+      this.dockBody = body;
+      this.dockTitle = title;
+    }
+    if (this.dockTitle) this.dockTitle.textContent = viewTitle(type);
+    return this.dockBody;
+  }
+
+  closeView(): void {
+    const api = this.api;
+    const type = this.currentView;
+    if (api && type) {
+      const leaf = api.workspace.getMostRecentLeaf();
+      if (leaf?.view) leaf.view.onunload?.();
+    }
+    this.dock?.remove();
+    this.dock = null;
+    this.dockBody = null;
+    this.dockTitle = null;
+    this.currentView = null;
+    this.viewChange?.(null);
+  }
+
+  private currentView: string | null = null;
+
+  /**
+   * 给某个视图类型返回真实 DOM 容器（同步）。
+   * 插件常自己走 `getRightLeaf().setViewState({type})` 这条路（不经过 openView），
+   * 所以 WorkspaceLeaf 必须能从宿主这里拿到已挂载的容器，否则视图渲染在游离节点上、
+   * 屏幕上什么都看不到。
+   */
+  containerFor(type: string): HTMLElement {
+    const existing = this.containers.get(type);
+    if (existing?.isConnected) return existing;
+    const body = this.ensureDock(type);
+    const el = document.createElement("div");
+    el.className = "nf-plugin-view";
+    el.dataset.pluginView = type;
+    body.replaceChildren(el);
+    this.containers.set(type, el);
+    return el;
+  }
+
+  /** 打开插件视图（把视图 DOM 挂进停靠面板）。 */
   async openView(type: string): Promise<void> {
     const api = this.api;
     if (!api) return;
-    const el = await this.opts?.ensureViewContainer(type);
-    if (!el) {
-      console.warn(`[plugin] 视图 ${type} 没有可用容器`);
-      return;
-    }
+    // 宿主若提供了容器（未来做真正的侧栏视图时）优先用它，否则用停靠面板
+    const hostContainer = await this.opts?.ensureViewContainer?.(type);
+    const el = hostContainer ?? this.ensureDock(type);
     this.registerContainer(type, el);
     const leaf = api.workspace.getLeaf(true);
     leaf.type = type;
@@ -147,8 +247,15 @@ class ObsidianRuntime {
       await view.onOpen();
       el.replaceChildren(view.contentElHost);
       api.workspace.revealLeaf(leaf);
+      this.currentView = type;
+      this.viewChange?.(type);
     } catch (e) {
-      el.textContent = `视图打开失败：${e instanceof Error ? e.message : String(e)}`;
+      el.replaceChildren();
+      const pre = document.createElement("pre");
+      pre.textContent = `视图打开失败：${e instanceof Error ? e.message : String(e)}`;
+      pre.style.color = "#c33";
+      pre.style.whiteSpace = "pre-wrap";
+      el.appendChild(pre);
       console.error("[plugin] 视图打开失败", e);
     }
   }
@@ -191,14 +298,19 @@ class ObsidianRuntime {
         workspaceHooks: {
           activeFile: opts.activeFile,
           openFile: opts.openFile,
-          getLeafContainer: (type) => this.registerContainer(type, null),
+          // 插件自己 setViewState 时，WorkspaceLeaf 会来这里要已挂载的容器
+          getLeafContainer: (type) => this.containers.get(type)?.isConnected ? this.containers.get(type)! : null,
           editor: () => createEditorAdapter((editorBridge.view as never) ?? null),
           editorFile: () => null,
         },
       });
     } else {
-      // 视图仓库跨 vault 复用：容器表也要跟着清
+      // 视图仓库跨 vault 复用：容器表要跟着清（停靠面板下次打开时重建）
       this.containers.clear();
+      this.dock?.remove();
+      this.dock = null;
+      this.dockBody = null;
+      this.dockTitle = null;
     }
     const api = this.api;
     // vault 查询方法是同步的（Obsidian 语义），索引必须先就绪，
@@ -306,6 +418,11 @@ class ObsidianRuntime {
     this.plugins.clear();
     this.api = null;
     this.containers.clear();
+    this.dock?.remove();
+    this.dock = null;
+    this.dockBody = null;
+    this.dockTitle = null;
+    this.currentView = null;
   }
 }
 
@@ -313,6 +430,11 @@ class ObsidianRuntime {
 function nodeStubs(): Record<string, Record<string, unknown>> {
   const electron = createElectronStub();
   return { ...withNodePrefixAliases(createNodeBuiltins()), electron, "node:electron": electron };
+}
+
+function viewTitle(type: string): string {
+  const tail = type.includes("-") ? type.split("-").pop() : type;
+  return `插件视图 · ${tail}`;
 }
 
 export const obsidianRuntime = new ObsidianRuntime();

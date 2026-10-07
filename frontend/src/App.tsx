@@ -117,7 +117,8 @@ function App() {
         saveFile: () => saveNoteRef.current?.(),
         toggleMode: (m) => handleSetViewModeRef.current?.(m),
         openSettings: () => setSettingsOpen(true),
-        ensureViewContainer: async (type: string) => document.querySelector<HTMLElement>(`[data-nf-plugin-view="${type}"]`),
+        // 插件视图统一挂到运行时自持的右侧停靠面板（noteforge 没有 Obsidian 的右侧栏）
+        ensureViewContainer: async (type: string) => obsidianRuntime.containerFor(type),
       }).catch((e) => console.warn("[plugin] 加载失败", e));
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
@@ -400,6 +401,10 @@ function App() {
     { label: "Vault 统计", action: vaultStats },
   ];
 
+  // 插件是异步加载的：订阅运行时，否则命令面板的 useMemo 拿不到后注册的插件命令
+  const [pluginTick, setPluginTick] = useState(0);
+  useEffect(() => obsidianRuntime.subscribe(() => setPluginTick((n) => n + 1)), []);
+
   const commands = useMemo(() => {
     const cmds = [
       { id: 'open-vault', name: '打开 Vault', action: () => handleBrowse() },
@@ -418,7 +423,7 @@ function App() {
       cmds.push({ id: `obsidian-plugin-${oc.id}`, name: oc.name, action: oc.run });
     }
     return cmds;
-  }, [handleBrowse, vaultStats, newNote, saveNote]);
+  }, [handleBrowse, vaultStats, newNote, saveNote, pluginTick]);
 
   return (
     <div data-nf-dark={theme === "dark"} style={{ display: "flex", flexDirection: "column", height: "100vh",
