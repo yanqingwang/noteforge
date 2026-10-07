@@ -148,7 +148,11 @@ function toDate(v: DateLike | undefined): Date {
   return new Date(v.valueOf());
 }
 
-function formatMoment(d: Date, template?: string): string {
+/**
+ * moment 风格的日期格式化。Bases 公式的 `date.format("YYYY-MM-DD")` 走这里，
+ * 与插件看到的 moment.format 保持同一套 token（导出让两处共用一个实现）。
+ */
+export function formatMoment(d: Date, template?: string): string {
   const tokens: Array<[RegExp, () => string]> = [
     [/YYYY/g, () => String(d.getFullYear())],
     [/YY/g, () => pad(d.getFullYear() % 100)],
