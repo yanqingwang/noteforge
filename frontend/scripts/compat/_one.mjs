@@ -20,7 +20,15 @@ const api = shim.createObsidianApi(host, {
 });
 await api.vault.ensure();
 const electron = shim.createElectronStub();
-const requireMap = { obsidian: api.module, electron, "node:electron": electron, ...shim.createNodeBuiltins() };
+const cm = shim.createCmModules();
+const requireMap = {
+  obsidian: api.module,
+  electron,
+  "node:electron": electron,
+  ...shim.createNodeBuiltins(),
+  ...cm,
+  ...Object.fromEntries(Object.entries(cm).map(([k, v]) => [`node:${k}`, v])),
+};
 try {
   const ev = shim.evaluatePlugin(code, {
     filename: `${dir}/main.js`,

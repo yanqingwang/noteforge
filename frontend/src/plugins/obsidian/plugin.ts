@@ -60,7 +60,12 @@ export abstract class Plugin extends Component {
   manifest: PluginManifest;
   private ctx: PluginContext | undefined;
   private cliHandlers: Array<{ id: string; handler: unknown }> = [];
-  private commands: Command[] = [];
+  /**
+   * 内部命令表。名字带 nf 前缀是**必须的**：真实插件会在自己的实例上定义 `commands`
+   * （BRAT 就这么干：`this.commands = new Te(this)`），同名会把这里覆盖成非数组对象，
+   * 之后 getCommands() 展开它就抛 "this.commands is not iterable"。
+   */
+  private nfCommands: Command[] = [];
   private settingTabs: unknown[] = [];
   private ribbonEls: HTMLElement[] = [];
   private statusBarEls: HTMLElement[] = [];
@@ -100,7 +105,7 @@ export abstract class Plugin extends Component {
     this.ribbonEls = [];
     for (const el of this.statusBarEls) el.remove();
     this.statusBarEls = [];
-    this.commands = [];
+    this.nfCommands = [];
   }
 
   /* ---------- 工作区 ---------- */
@@ -160,7 +165,7 @@ export abstract class Plugin extends Component {
 
   addCommand(command: Command): Command {
     const full: Command = { ...command, id: `${this.manifest.id}:${command.id}` };
-    this.commands.push(full);
+    this.nfCommands.push(full);
     // 同步到 app.commands，宿主（命令面板）直接枚举这份注册表
     const reg = (this.app as unknown as { commands?: { commands: Record<string, Command> } })?.commands;
     if (reg) reg.commands[full.id] = full;
@@ -169,14 +174,14 @@ export abstract class Plugin extends Component {
 
   removeCommand(id: string): void {
     const full = `${this.manifest.id}:${id}`;
-    this.commands = this.commands.filter((c) => c.id !== full);
+    this.nfCommands = this.nfCommands.filter((c: Command) => c.id !== full);
     const reg = (this.app as unknown as { commands?: { commands: Record<string, Command> } })?.commands;
     if (reg) delete reg.commands[full];
   }
 
   /** 供宿主读取（命令面板用）。 */
   getCommands(): Command[] {
-    return [...this.commands];
+    return [...this.nfCommands];
   }
 
   /* ---------- UI 部件 ---------- */

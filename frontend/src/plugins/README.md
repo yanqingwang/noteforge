@@ -9,26 +9,39 @@ noteforge 可以直接加载 **Obsidian 官方市场的插件**：装在 `<vault
 
 ## 兼容性现状
 
-结论来自 41 个分层抽样插件的自动兼容性测试（下载量 top + 12 个功能类别 + 本项目自有的
-`vault-agent`），报告在 `wk/AIReports/noteforge-obsidian-plugin-compat-*.md`。
+结论来自 **120 个分层抽样插件**（按下载量分层：头部 40 + 12 个功能类别长尾 + 本项目自有的
+`vault-agent`）的自动兼容性测试，报告在 `wk/AIReports/noteforge-obsidian-plugin-compat-*.md`。
 
 | 判定 | 数量 | 含义 |
 | --- | ---: | --- |
-| ✅ pass | 23 | onload 成功、注册了命令/视图/后处理器，且视图与设置页都渲染得出来 |
-| ⚠️ pass-view-error | 5 | 加载正常，视图实例化出错 |
-| ⚠️ pass-settings-error | 1 | 加载正常，但插件设置页渲染出错（obsidian-style-settings，缺 Style Settings 框架依赖的 API） |
-| ❌ fail | 11 | 求值 / 构造 / onload 抛错 |
-| 📦 产物不可达 | 1 | 本机网络到 github.com 不可达（只在 Release 发产物的插件） |
+| ✅ pass | 66 | onload 成功、注册了命令/视图/后处理器，且视图与设置页都渲染得出来 |
+| ⚠️ pass-view-error | 13 | 加载正常，视图实例化出错 |
+| ⚠️ pass-settings-error | 2 | 加载正常，但插件设置页渲染出错 |
+| 🟡 load-only | 2 | 加载成功但没注册任何可用能力（功能在别处，如状态栏/右键菜单） |
+| ❌ fail | 38 | 求值 / 构造 / onload 抛错，或插件挂死被独立进程硬杀 |
+| 📦 产物不可达 | 0 | 本轮全部取到产物 |
 
-「设置页渲染得出来」是单独一关：设置页崩了或空白，插件等于没装成功，但加载阶段看不出来。
-所以 harness 除了 onload，还会真建视图、真渲染设置页，并统计渲染出的行数。
+其中 11 个 fail 是**插件挂死**（同步死循环 / 微任务饥饿，靠独立进程硬杀兜住，
+不是 API 缺失）；剩下约 27 个是真缺口，已按下面 10 类根因归档。
+「设置页渲染得出来」「视图真的画出东西」都是单独一关：加载阶段看不出来，
+所以 harness 除了 onload 还会真建视图、真渲染设置页，并统计渲染出的行数。
 
-已验证可用的头部插件：dataview、obsidian-tasks、obsidian-git（42 命令 / 5 视图）、
+已验证可用的头部插件（部分）：dataview、obsidian-tasks、obsidian-git（42 命令 / 5 视图）、
 quickadd、editing-toolbar（100 命令）、tasknotes（39 命令 / 4 视图）、
 advanced-canvas（39 命令）、obsidian-minimal-settings（51 命令）、
 table-editor-obsidian（22 命令）、periodic-notes、obsidian-linter、obsidian-outliner、
-folder-notes、obsidian-style-settings、obsidian-charts、obsidian-enhancing-mindmap、
-vault-agent 等（完整清单见报告）。
+folder-notes、obsidian-charts、obsidian-enhancing-mindmap、omnisearch、homepage、
+obsidian42-brat（17 命令）、colored-text、code-styler、iconic、drawio(diagrams)、
+obsidian-nextcloud-sync-yanc、vault-agent 等（完整清单见报告）。
+
+**自有插件的功能级验证**（不只看能不能加载，逐个点名该有的命令 id、检查视图与设置页
+是否真的渲染出内容、写路径命令是否真有产出）：
+
+```bash
+node scripts/compat/verify-own-plugins.mjs     # 先跑 run.mjs --from-vault，再跑这个
+```
+
+当前 5 个正常 / 1 个未启用（html-to-md-effect 在 vault 里只有旧目录残留）。
 
 测试驱动补齐的 API 已经覆盖到「插件访问但 shim 未实现 = 0」，剩下的失败不再是「宿主缺
 API」，而是语义/环境差异（见下表）。
@@ -72,6 +85,9 @@ Obsidian 的设置页有两种写法，宿主都要能渲染：
 | 插件自带的同步 SDK | remotely-save、obsidian-livesync | 它们的加密/同步 SDK 假设 Node 环境 |
 | Obsidian 内部 API 形状 | obsidian-kanban、pdf-plus | `embedRegistry` 的 embed 对象形状与插件假设不同 |
 | 第三方设置框架 | obsidian-style-settings | 它本身是「替别的插件渲染设置页」的框架，依赖 Style Settings 的样式变量 API |
+| CM6 内部深度使用 | calendarium、excalidraw、templater | 直接用 CM6 的 facet/language 内部（`LRLanguage.define`、lezer nodeSet 等），需要真实的 CM6 运行时 |
+| 产物是 ESM | smart-templates | main.js 是 ESM（`import`），兼容层按 CJS 执行 → "Cannot use import statement outside a module" |
+| 需要 Node 运行时 | obsidian-livesync、obsidian-importer、remotely-save | 自带同步/加密 SDK，假设 Node 环境（fs/child_process/util） |
 | 插件自用 Symbol 注册表 | copilot | 宿主事件系统没有对应的注册位 |
 
 ## 下载源与网络

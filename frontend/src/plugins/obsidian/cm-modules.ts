@@ -90,6 +90,26 @@ import { ContextTracker as _ContextTracker, ExternalTokenizer as _ExternalTokeni
 import { findNext as _findNext, findPrevious as _findPrevious, openSearchPanel as _openSearchPanel, search as _search, searchKeymap as _searchKeymap, setSearchQuery as _setSearchQuery } from "@codemirror/search";
 
 /** 模块名 → 导出表。键名与 Obsidian 的 external 列表一致。 */
+/**
+ * @codemirror/language 的 LRLanguage：CM6 里所有语言的基类，
+ * 插件用 `LRLanguage.define({name, parser})` 注册自己的语言（calendarium 就是）。
+ * 之前只在 @lezer/lr 里给了个空类，从 @codemirror/language 取就成了 undefined。
+ */
+class LRLanguage {
+  readonly name: string;
+  readonly parser: unknown;
+  readonly nodeSet: unknown;
+  constructor(config: { name?: string; parser?: unknown; nodeSet?: unknown } = {}) {
+    this.name = config.name ?? "anonymous";
+    this.parser = config.parser ?? null;
+    this.nodeSet = config.nodeSet ?? null;
+  }
+
+  static define(config: { name?: string; parser?: unknown; nodeSet?: unknown } = {}): LRLanguage {
+    return new LRLanguage(config);
+  }
+}
+
 export function createCmModules(): Record<string, Record<string, unknown>> {
   return {
     "@codemirror/state": {
@@ -163,6 +183,8 @@ export function createCmModules(): Record<string, Record<string, unknown>> {
     },
     "@codemirror/language": {
       LanguageSupport: _LanguageSupport,
+      // calendarium 从 @codemirror/language 取 LRLanguage（CM6 里它从这里再导出）
+      LRLanguage,
       StreamLanguage: _StreamLanguage,
       HighlightStyle: _HighlightStyle,
       syntaxTree: _syntaxTree,
@@ -231,7 +253,7 @@ export function createCmModules(): Record<string, Record<string, unknown>> {
       InputStream: _InputStream,
       ContextTracker: _ContextTracker,
       Stack: _Stack,
-      LRLanguage: class {},
+      LRLanguage,
       LocalTokenGroup: class {},
     },
   };

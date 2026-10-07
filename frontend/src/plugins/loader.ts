@@ -276,6 +276,26 @@ export function createNodeBuiltins(): Record<string, RequireEntry> {
 }
 
 /** 禁用的 node 模块：属性访问不抛错，调用即 reject（错误信息指向 vault API）。 */
+/**
+ * 同步版 fs API：调用即抛会让插件整包加载失败（症状是"某个方法是 undefined"，
+ * 根因完全看不出来），但这些 API 的返回值本来就只是"有没有/多大"这类良性值。
+ * 插件在 onload 里问一句 existsSync 就崩太不值当 —— 给良性默认值，
+ * 真要读写时它自然会去用 app.vault，失败会给出明确提示。
+ */
+const FS_SYNC_DEFAULTS: Record<string, unknown> = {
+  existsSync: false,
+  readFileSync: "",
+  writeFileSync: undefined,
+  appendFileSync: undefined,
+  mkdirSync: undefined,
+  unlinkSync: undefined,
+  rmSync: undefined,
+  readdirSync: [] as string[],
+  statSync: { isFile: () => false, isDirectory: () => false, size: 0, mtimeMs: 0 },
+  lstatSync: { isFile: () => false, isDirectory: () => false, size: 0, mtimeMs: 0 },
+  realpathSync: "",
+};
+
 function disabledNodeModule(name: string, hint: string): RequireEntry {
   const reject = (fn: string) => () => {
     throw new Error(`noteforge 沙箱不支持 ${name}.${fn}（${hint}）`);
@@ -286,6 +306,11 @@ function disabledNodeModule(name: string, hint: string): RequireEntry {
       get: (_t, prop: string) => {
         if (prop === "__esModule") return false;
         if (prop === "default") return undefined;
+        // 同步 API 返回良性默认值（见 FS_SYNC_DEFAULTS 的说明）
+        if (prop in FS_SYNC_DEFAULTS) {
+          const v = FS_SYNC_DEFAULTS[prop];
+          return typeof v === "function" ? v : () => v;
+        }
         return reject(String(prop));
       },
       has: () => true,
