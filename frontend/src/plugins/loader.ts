@@ -180,6 +180,25 @@ export function createNodeBuiltins(): Record<string, RequireEntry> {
     format: (f: string, ...a: unknown[]) => f.replace(/%s/g, () => String(a.shift())),
     inspect: (v: unknown) => JSON.stringify(v),
     promisify: <T>(fn: T) => fn,
+    // Node 的 util.deprecate：包一层，首次调用时打一次弃用警告。
+    // 内置 debug 包的 destroy() 会用（`require("util").deprecate(...)`），
+    // 缺了它插件在模块求值阶段就抛 "di.deprecate is not a function"
+    //（consistent-attachments-and-links 就是这么挂的）。
+    deprecate: (fn: (...a: unknown[]) => unknown, msg: string) => {
+      let warned = false;
+      return (...a: unknown[]) => {
+        if (!warned) {
+          warned = true;
+          console.warn(`[弃用] ${msg}`);
+        }
+        return fn(...a);
+      };
+    },
+    types: {
+      isDate: (v: unknown) => v instanceof Date,
+      isRegExp: (v: unknown) => v instanceof RegExp,
+      isPromise: (v: unknown) => typeof (v as { then?: unknown })?.then === "function",
+    },
     inherits: (ctor: unknown, superCtor: unknown) => {
       const ctorProto = (ctor as { prototype: object }).prototype;
       const superProto = (superCtor as { prototype: object }).prototype;

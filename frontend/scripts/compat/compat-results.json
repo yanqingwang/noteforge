@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T13:28:01.043Z",
+  "generatedAt": "2026-10-07T13:56:23.876Z",
   "sampleGeneratedAt": "2026-10-07T08:51:27.194Z",
   "total": 1,
   "summary": {
@@ -16,11 +16,11 @@
   "unresolvedRequires": {},
   "results": [
     {
-      "id": "todoist-sync-plugin",
-      "name": "Todoist Sync",
-      "category": "任务待办",
-      "downloads": 182002,
-      "repo": "jamiebrynes7/obsidian-todoist-plugin",
+      "id": "smart-second-brain",
+      "name": "Smart Second Brain",
+      "category": "AI 智能体",
+      "downloads": 70174,
+      "repo": "s2b-dev/smart-second-brain",
       "status": "fail-harness",
       "phase": "harness",
       "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
