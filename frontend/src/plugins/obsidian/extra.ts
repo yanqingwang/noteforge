@@ -122,6 +122,23 @@ export function parseFrontMatterTags(content: string): string[] {
   return [];
 }
 
+/** 取 frontmatter 里的 aliases（别名）数组。
+ *  Obsidian 语义：值为数组则逐个收为字符串；单个标量（含字符串/数字）收为单元素数组；
+ *  YAML 对象等非字符串值跳过。无 frontmatter 或无 alias 键时返回 null。
+ */
+export function parseFrontMatterAliases(content: string): string[] | null {
+  const info = getFrontMatterInfo(content);
+  if (!info.exists || !info.frontmatter) return null;
+  const v = parseFrontMatterEntry(content, "alias");
+  if (v === undefined) return null;
+  if (Array.isArray(v)) {
+    const out = v.filter((x) => x != null && typeof x !== "object").map(String);
+    return out.length ? out : null;
+  }
+  if (v == null || typeof v === "object") return null;
+  return [String(v)];
+}
+
 function requireYaml(): { parse(s: string): unknown } {
   // events.ts 已静态引入 yaml，这里复用同一实现，避免重复打包
   const g = globalThis as unknown as { __nfYaml?: { parse(s: string): unknown } };

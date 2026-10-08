@@ -74,6 +74,31 @@ cargo test --workspace
 cargo test -p nf-sync
 ```
 
+## Obsidian 插件兼容性
+
+对官方市场按下载量分层抽样的 **121 个真实插件**，用应用侧同一份兼容层代码（构建为 `dist-harness/obsidian-shim.mjs`）在 Node+jsdom 中执行产物，逐插件独立进程、180s 硬杀，覆盖 require / 求值 / 构造 / onload / 视图创建 五个阶段。
+
+**最新结果（2026-10-08）**：
+
+| 判定 | 数量 |
+| --- | ---: |
+| ✅ 完全可用 | 73 |
+| ⚠️ 视图创建出错（功能可用） | 16 |
+| ⚠️ 设置页出错（功能可用） | 3 |
+| 🟡 仅加载 | 4 |
+| ❌ 失败 | 25 |
+
+即 **92/121（76%）功能可用**（含视图/设置页小错），仅缺失 `MarkdownPreviewRenderer` 一项导出。自有插件（html-effectiveness / md-to-html-effect / vault-agent / quadrant-chart / obsidian-nextcloud-sync-yanc）功能级验证全部通过。完整报告：`AIReports/noteforge-obsidian-plugin-compat-2026-10-08.md`。
+
+```bash
+cd frontend
+npx vite build --config vite.harness.config.ts   # 打 harness 包
+node scripts/compat/select-sample.mjs 40          # 生成分层样本
+node scripts/compat/run.mjs                        # 跑全量
+node scripts/compat/verify-own-plugins.mjs         # 自有插件功能级验证
+```
+
+
 ## Arch Linux 打包
 
 ```bash

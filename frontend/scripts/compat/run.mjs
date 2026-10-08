@@ -656,8 +656,13 @@ function writeReport(results, sample, summary) {
     for (const r of results) for (const [k, v] of Object.entries(pick(r) ?? {})) m.set(k, (m.get(k) ?? 0) + v);
     return m;
   };
+  const countOf = (pick) => {
+    const m = new Map();
+    for (const r of results) for (const v of pick(r) ?? []) m.set(v, (m.get(v) ?? 0) + 1);
+    return m;
+  };
   const apiFreq = agg((r) => r.unsupportedApi);
-  const apiUsed = agg((r) => r.accessedApi);
+  const apiUsed = countOf((r) => r.accessedApi);
   const errorFreq = new Map();
   for (const r of results) {
     for (const [k, v] of Object.entries(r.apiErrors ?? {})) {
@@ -665,11 +670,6 @@ function writeReport(results, sample, summary) {
       errorFreq.get(v).push(r.id);
     }
   }
-  const countOf = (pick) => {
-    const m = new Map();
-    for (const r of results) for (const v of pick(r) ?? []) m.set(v, (m.get(v) ?? 0) + 1);
-    return m;
-  };
   const cmUsed = countOf((r) => r.cmModulesUsed);
   const unresolved = countOf((r) => r.unresolvedRequires);
 // 本地日期：ISO 是 UTC，凌晨跑批会把报告写成前一天

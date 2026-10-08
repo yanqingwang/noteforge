@@ -12,7 +12,7 @@ import { createMemoryHost } from "./types";
 import { createObsidianApi, OBSIDIAN_EXPORT_NAMES } from "./index";
 import { TFile, TFolder } from "./items";
 import { normalizePath, getAllTags, parseLinktext, Scope, debounce } from "./events";
-import { getFrontMatterInfo, parseFrontMatterTags } from "./extra";
+import { getFrontMatterInfo, parseFrontMatterTags, parseFrontMatterAliases } from "./extra";
 import { moment } from "./request";
 import { evaluatePlugin } from "../loader";
 import { createCmModules } from "./cm-modules";
@@ -205,6 +205,14 @@ describe("工具函数", () => {
     expect(parseFrontMatterTags("# 无")).toEqual([]);
   });
 
+  it("parseFrontMatterAliases 取数组/标量，缺失返回 null", () => {
+    expect(parseFrontMatterAliases("---\nalias:\n  - 甲\n  - 乙\n---\n")).toEqual(["甲", "乙"]);
+    expect(parseFrontMatterAliases("---\nalias: 单个别名\n---\n")).toEqual(["单个别名"]);
+    expect(parseFrontMatterAliases("---\nalias: 42\n---\n")).toEqual(["42"]);
+    expect(parseFrontMatterAliases("# 无 frontmatter")).toBeNull();
+    expect(parseFrontMatterAliases("---\ntags: [x]\n---\n")).toBeNull();
+  });
+
   it("moment 支持 format 与 locale（4/41 样本插件加载期就调 locale）", () => {
     expect(moment("2026-01-02T03:04:05Z").format("YYYY-MM-DD")).toBe("2026-01-02");
     expect(moment.locale("zh")).toBe("zh");
@@ -313,7 +321,7 @@ describe("导出清单", () => {
       "setIcon", "addIcon", "getIcon", "getIconIds", "getLanguage", "getLinkpath",
       "normalizePath", "parseLinktext", "parseYaml", "stringifyYaml", "debounce",
       "requestUrl", "request", "moment", "displayTooltip", "hideTooltip",
-      "getFrontMatterInfo", "parseFrontMatterEntry", "parseFrontMatterTags",
+      "getFrontMatterInfo", "parseFrontMatterEntry", "parseFrontMatterTags", "parseFrontMatterAliases",
       "prepareSimpleSearch", "prepareFuzzySearch", "requireApiVersion", "sanitizeHTMLToDom",
       "base64ToArrayBuffer", "arrayBufferToBase64",
     ]) {
