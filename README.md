@@ -82,13 +82,13 @@ cargo test -p nf-sync
 
 | 判定 | 数量 |
 | --- | ---: |
-| ✅ 完全可用 | 73 |
+| ✅ 完全可用 | 75 |
 | ⚠️ 视图创建出错（功能可用） | 16 |
 | ⚠️ 设置页出错（功能可用） | 3 |
 | 🟡 仅加载 | 4 |
-| ❌ 失败 | 25 |
+| ❌ 失败 | 23 |
 
-即 **92/121（76%）功能可用**（含视图/设置页小错），仅缺失 `MarkdownPreviewRenderer` 一项导出。自有插件（html-effectiveness / md-to-html-effect / vault-agent / quadrant-chart / obsidian-nextcloud-sync-yanc）功能级验证全部通过。完整报告：`AIReports/noteforge-obsidian-plugin-compat-2026-10-08.md`。
+即 **94/121（78%）功能可用**（含视图/设置页小错），仅缺失 `MarkdownPreviewRenderer` 一项导出。`Plugin` 与 `PluginSettingTab` 均可被 ES5 老插件（`__extends` + `_super.apply`）继承。自有插件（html-effectiveness / md-to-html-effect / vault-agent / quadrant-chart / obsidian-nextcloud-sync-yanc）功能级验证全部通过。完整报告：`AIReports/noteforge-obsidian-plugin-compat-2026-10-08.md`。
 
 ```bash
 cd frontend

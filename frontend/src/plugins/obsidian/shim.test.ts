@@ -269,6 +269,45 @@ function __toCommonJS(x) {
     expect(a.app.commands.commands["cjs:go"]).toBeTruthy();
   });
 
+  it("ES5 IIFE 寄生插件（_super.apply）也能构造并 onload", () => {
+    const { a } = api();
+    // 复刻 folder-note-plugin 的真实 ES5 模式（含 TS __extends 原型链接）
+    const code = `
+var obsidian = require("obsidian");
+var __ = function(){};
+function __extends(d, b) {
+  __.prototype = b.prototype;
+  d.prototype = new __();
+}
+var OldPlugin = (function (_super) {
+  __extends(OldPlugin, _super);
+  function OldPlugin() {
+    return _super !== null && _super.apply(this, arguments) || this;
+  }
+  OldPlugin.prototype.onload = function () {
+    this.addCommand({ id: "old-go", name: "旧", callback: function () {} });
+  };
+  return OldPlugin;
+})(obsidian.Plugin);
+module.exports = { default: OldPlugin };
+`;
+    const ev = evaluatePlugin(code, {
+      filename: "/p/main.js",
+      requireMap: { obsidian: a.module, ...createCmModules() },
+    });
+    expect(ev.error).toBeUndefined();
+    const Cls = ev.defaultExport as new (app: unknown, m: unknown) => {
+      onload(): void;
+      app: unknown;
+    };
+    const p = new Cls(a.app, manifest);
+    // 原型链经 __extends 链接到 Plugin；父类字段与子类方法都可用
+    expect(p).toBeInstanceOf(a.module.Plugin);
+    expect((p as unknown as { app: unknown }).app).toBe(a.app);
+    p.onload();
+    expect(a.app.commands.commands["cjs:old-go"]).toBeTruthy();
+  });
+
   it("未提供的模块在真正使用时报错，而不是加载期静默失败", () => {
     const { a } = api();
     const code = `var m = require("totally-missing-pkg"); module.exports = { v: m.thing };`;

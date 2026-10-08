@@ -57,7 +57,7 @@ export function getPluginContext(app: unknown): PluginContext | undefined {
 /** Plugin 只需要 app 的少数能力，这里用结构类型避免与 index.ts 循环依赖。 */
 export type ObsidianAppLike = object;
 
-export abstract class Plugin extends Component {
+export abstract class PluginBase extends Component {
   manifest: PluginManifest;
   private ctx: PluginContext | undefined;
   private cliHandlers: Array<{ id: string; handler: unknown }> = [];
@@ -394,6 +394,49 @@ export abstract class Plugin extends Component {
   /** Obsidian 里这两个类型是 Plugin 的类型别名 */
   onloadAsync?: never;
 }
+
+/**
+ * 导出的 Plugin：既能 `new`，又能被 ES5 老插件 `.call(this)` / `.apply(this, args)`。
+ *
+ * 背景：部分老插件用 ES5 IIFE 模式寄生（`var P = function(_super){
+ *   function P(){ return _super !== null && _super.apply(this, arguments) || this; }
+ *   ... P.prototype.onload = ...
+ *   return P; }(obsidian.Plugin)`）。ES6 class 只能 new、不能 apply，
+ * 会抛 "Class constructor cannot be invoked without 'new'"。真实 Obsidian 的
+ * Plugin 在这些插件发布的年代是 ES5 函数，故这里做一层可调用包装保持兼容。
+ *
+ * 关键点：ES5 子类构造时 `this` 已按子类原型创建；我们把父类实例的自有字段
+ * 搬到这个 `this` 上，使其同时具备「子类原型方法」与「Plugin 实例字段」。
+ */
+function PluginWrapper(this: unknown, ...args: unknown[]): unknown {
+  // new 路径（ES6 子类 super 或宿主直接 new）：构造真类
+  if (new.target) {
+    return Reflect.construct(PluginBase, args, new.target);
+  }
+  // ES5 寄生路径：调用者是已分配好的子类 this
+  const self = this as Record<string, unknown>;
+  const instance = Reflect.construct(PluginBase, args) as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(instance)) {
+    if (key === "constructor") continue;
+    const desc = Object.getOwnPropertyDescriptor(instance, key);
+    if (desc) Object.defineProperty(self, key, desc);
+  }
+  return self;
+}
+// 原型指向真类：保证 `instanceof Plugin` 与原型方法可见
+PluginWrapper.prototype = PluginBase.prototype;
+Object.defineProperty(PluginWrapper, Symbol.hasInstance, {
+  value(this: unknown, obj: unknown): boolean {
+    return obj instanceof PluginBase;
+  },
+});
+/** 供内部类型与其它模块按 Plugin 引用 */
+type Plugin = PluginBase;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Plugin = PluginWrapper as unknown as (new (...a: any[]) => PluginBase) &
+  (abstract new (...args: any[]) => PluginBase);
+
+export { Plugin };
 
 /** Obsidian 1.5+ 的 Plugin_2（旧名兼容） */
 export class Plugin_2 extends Plugin {}

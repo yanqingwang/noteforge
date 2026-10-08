@@ -1453,7 +1453,7 @@ function protectContentEl(containerEl: HTMLElement, contentEl: HTMLElement): voi
   });
 }
 
-export abstract class PluginSettingTab {
+export abstract class PluginSettingTabBase {
   /** 整个标签页容器（宿主用它做切页动画/滚动定位）。 */
   containerEl: HTMLElement;
   /**
@@ -1508,6 +1508,35 @@ export abstract class PluginSettingTab {
     this.contentEl.replaceChildren();
   }
 }
+
+/**
+ * 导出的 PluginSettingTab：与 plugin.ts 的 Plugin 同理，既能 new 又能被
+ * ES5 老插件（`__extends` + `_super.apply`）调用。ES6 class 只能 new，
+ * 老插件构造时的 `_super.apply(this, args)` 会抛
+ * "Class constructor PluginSettingTab cannot be invoked without 'new'"。
+ */
+function PluginSettingTabWrapper(this: unknown, ...args: unknown[]): unknown {
+  if (new.target) {
+    return Reflect.construct(PluginSettingTabBase, args, new.target);
+  }
+  const self = this as Record<string, unknown>;
+  const instance = Reflect.construct(PluginSettingTabBase, args) as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(instance)) {
+    if (key === "constructor") continue;
+    const desc = Object.getOwnPropertyDescriptor(instance, key);
+    if (desc) Object.defineProperty(self, key, desc);
+  }
+  return self;
+}
+PluginSettingTabWrapper.prototype = PluginSettingTabBase.prototype;
+Object.defineProperty(PluginSettingTabWrapper, Symbol.hasInstance, {
+  value(obj: unknown): boolean {
+    return obj instanceof PluginSettingTabBase;
+  },
+});
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PluginSettingTab = PluginSettingTabWrapper as unknown as new (...a: any[]) => PluginSettingTabBase;
+export { PluginSettingTab };
 
 export abstract class SettingTab extends PluginSettingTab {}
 
