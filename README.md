@@ -109,6 +109,24 @@ cd pkg/manjaro
 makepkg -si
 ```
 
+## Linux 桌面后端（Wayland / X11）
+
+GTK 后端由 GTK 自动选择，**不需要设置任何环境变量**：Wayland 会话下原生跑 Wayland，无合成器或只有 X 的场景自动回落 X11。`.desktop` 启动（菜单 / 双击图标）与命令行启动行为一致。
+
+2026-10-09 在 KWin Wayland（KDE Plasma 6 + Xwayland）实测通过：
+
+| 验证点 | 手段 | 结果 |
+|---|---|---|
+| 窗口真正创建 | `WAYLAND_DEBUG=1` 协议日志 | `xdg_toplevel` 创建、`configure(1200,800)`、连续帧 `attach+commit` |
+| 合成器侧存在 | KWin D-Bus 窗口列表 | `cap=NoteForge class=noteforge` |
+| 后端确为 Wayland | Xlib 遍历 `:1` | 无对应 X 窗口（未走 Xwayland） |
+| 实际渲染 | 截图 | 标题栏 / 菜单 / 工具栏 / 中文文件树 / 状态栏均正常 |
+| `.desktop` 启动 | `gtk-launch noteforge`（不带 `GDK_BACKEND`） | 同上，原生 Wayland |
+
+> 排查提醒：`DISPLAY=:1` 是 KWin 的 Xwayland，X11 截图工具（`import`、`xwd`）**看不到**原生 Wayland 窗口，据此会误判「Wayland 下窗口不出现」。要验证 Wayland 窗口请用 `WAYLAND_DEBUG=1`、KWin D-Bus 或 `spectacle -a`。
+>
+> `GDK_BACKEND=x11` 仅供无合成器的自动化 / CI 场景使用，不是正常运行的前提。
+
 ## 技术栈
 
 | 层 | 技术 |
