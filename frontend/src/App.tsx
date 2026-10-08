@@ -6,6 +6,7 @@ import StatusBar from "./components/StatusBar";
 import FileTree from "./components/FileTree";
 import EditorPane from "./components/EditorPane";
 import type { ViewMode } from "./components/EditorPane";
+import { BasesPane } from "./components/BasesPane";
 import { resolveWikilink, splitWikilink } from "./editor/wikilink";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
@@ -53,6 +54,8 @@ function App() {
   const [htmlMode, setHtmlMode] = useState<ViewMode>(
     () => (localStorage.getItem('nf-html-mode') === 'source' ? 'source' : 'html'));
   const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
+  // .base 走 Bases 面板（Obsidian 的数据库视图），不走编辑器
+  const [basesFile, setBasesFile] = useState<string | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
   const [sidebarMode, setSidebarMode] = useState<"files" | "outline" | "plugins">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
@@ -148,6 +151,8 @@ function App() {
       return;
     }
     const resolved = hit.path;
+    // 打开非 .base 文件时收起 Bases 面板（两个视图不同时占主区）
+    if (!/\.base$/i.test(resolved)) setBasesFile(null);
     if (hit.ambiguous && hit.ambiguous.length > 1) {
       dispatch({ type: 'SET_STATUS', text: `跳转: ${resolved}（同名 ${hit.ambiguous.length} 个，取最浅路径）` } as any);
     } else {
@@ -165,6 +170,14 @@ function App() {
         obsidianRuntime.notifyFileOpen(resolved);
         return;
       }
+    }
+    // .base 是 Bases 数据库视图：走自己的面板，编辑器渲染不了它的语义
+    if (/\.base$/i.test(resolved)) {
+      setBasesFile(resolved);
+      setHtmlViewFile(null);
+      obsidianRuntime.notifyFileOpen(resolved);
+      dispatch({ type: 'SET_STATUS', text: `打开: ${resolved}（Bases 视图）` } as any);
+      return;
     }
     // .html 作为普通文件走编辑器（源码/HTML 两种并列格式在 EditorPane 内切换）
     // 其他附件（图片、PDF）仍走独立查看面板
@@ -428,7 +441,8 @@ function App() {
   // 插件接管的扩展名（如 quadrant-chart 的 .mdx）—— 文件树与快速切换器要放它们进来，
   // 否则这些文件在 UI 里根本不存在。依赖 pluginTick：插件启停/安装后自动重算。
   const pluginExts = useMemo(
-    () => obsidianRuntime.registeredExtensions(),
+    // base 是宿主自带的视图类型，也要放进文件树/切换器，否则 .base 文件在 UI 里不存在
+    () => [...new Set(["base", ...obsidianRuntime.registeredExtensions()])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pluginTick],
   );
@@ -538,6 +552,19 @@ function App() {
                 : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} onOpenPluginSettings={(id) => setPluginSettingFor(id)} />}
           </div>
         )}
+        {basesFile && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+            <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+              <span style={{ fontSize: 12 }}>🗃</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{basesFile}</span>
+              <button onClick={() => setBasesFile(null)} title="关闭"
+                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+            </div>
+            <BasesPane basePath={basesFile} dark={theme === "dark"} onNavigate={readNote}
+              onStatus={(m) => dispatch({ type: 'SET_STATUS', text: m } as any)} />
+          </div>
+        )}
+        {!basesFile && (
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
           activeFile={activeFile || ""} files={files} onNavigate={readNote}
           theme={theme}
@@ -560,6 +587,7 @@ function App() {
                 });
             }, 250);
           }} />
+        )}
         {htmlViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>

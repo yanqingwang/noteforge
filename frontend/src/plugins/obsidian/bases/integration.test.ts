@@ -133,7 +133,6 @@ describe("Bases 全栈", () => {
     await boot();
     const host = currentBasesHost()!;
     const { runQuery } = await import("./query");
-    const { config } = await import("./config");
     const cfg = { views: [{ type: "table", name: "All" }] };
     const out = runQuery({ config: cfg, fileApi: host.fileApi, files: host.files(), selfPath: "x" }, cfg.views[0]);
     expect(out.rows.map((r) => r.path).sort()).toEqual([
