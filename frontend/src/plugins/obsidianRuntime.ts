@@ -41,6 +41,14 @@ export interface RuntimeOptions {
   openSettings?: () => void;
   /** 打开某个插件视图（UI 层负责把容器交进来） */
   ensureViewContainer: (type: string) => Promise<HTMLElement | null>;
+  /**
+   * 主区容器（同步 getter）。
+   *
+   * 文件树/快速切换器里点开的插件接管文件（如 quadrant-chart 的 .mdx）
+   * 渲染在**主编辑区**，跟 .html 走 HtmlViewer 一个位置；
+   * 而命令面板里打开的插件视图仍停靠右侧面板（那是 Obsidian 的右侧栏语义）。
+   */
+  mainContainer?: () => HTMLElement | null;
 }
 
 class ObsidianRuntime {
@@ -156,9 +164,14 @@ class ObsidianRuntime {
     return out;
   }
 
-  private registerContainer(type: string, el: HTMLElement | null): HTMLElement | null {
-    if (el) this.containers.set(type, el);
-    return this.containers.get(type) ?? null;
+  /**
+   * 登记视图容器。key 要按区域隔离：主区与停靠区可能同时开着同一视图类型
+   * （例如命令面板开着侧栏象限图、文件树又点开一个），共用一个 key 会互相覆盖。
+   */
+  private registerContainer(type: string, el: HTMLElement | null, area: "dock" | "main" = "dock"): HTMLElement | null {
+    const key = area === "main" ? `main:${type}` : type;
+    if (el) this.containers.set(key, el);
+    return this.containers.get(key) ?? null;
   }
 
   /** 最近一次「打开文件」通知到的路径（插件视图打开的文件也要算当前文件）。 */
@@ -260,16 +273,21 @@ class ObsidianRuntime {
    * 插件常自己走 `getRightLeaf().setViewState({type})` 这条路（不经过 openView），
    * 所以 WorkspaceLeaf 必须能从宿主这里拿到已挂载的容器，否则视图渲染在游离节点上、
    * 屏幕上什么都看不到。
+   *
+   * area="main"  → 宿主主编辑区（文件树点开的 .mdx 象限图走这里）
+   * area="dock"  → 右侧停靠面板（命令面板打开的插件视图，Obsidian 右侧栏语义）
    */
-  containerFor(type: string): HTMLElement {
-    const existing = this.containers.get(type);
+  containerFor(type: string, area: "dock" | "main" = "dock"): HTMLElement | null {
+    const key = area === "main" ? `main:${type}` : type;
+    const existing = this.containers.get(key);
     if (existing?.isConnected) return existing;
-    const body = this.ensureDock(type);
+    const host = area === "main" ? this.opts?.mainContainer?.() ?? null : this.ensureDock(type);
+    if (!host) return null;
     const el = document.createElement("div");
     el.className = "nf-plugin-view";
     el.dataset.pluginView = type;
-    body.replaceChildren(el);
-    this.containers.set(type, el);
+    host.replaceChildren(el);
+    this.containers.set(key, el);
     return el;
   }
 
@@ -305,14 +323,21 @@ class ObsidianRuntime {
     }
   }
 
-  /** 打开插件视图（把视图 DOM 挂进停靠面板）。state 会传给视图的 setState。 */
-  async openView(type: string, state?: Record<string, unknown>): Promise<void> {
+  /**
+   * 打开插件视图。state 会传给视图的 setState。
+   *
+   * area="main"：渲染进宿主主编辑区（文件树点开的 .mdx 等插件接管文件）
+   * area="dock"：渲染进右侧停靠面板（命令面板打开的视图）
+   */
+  async openView(type: string, state?: Record<string, unknown>, area: "dock" | "main" = "dock"): Promise<void> {
     const api = this.api;
     if (!api) return;
-    // 宿主若提供了容器（未来做真正的侧栏视图时）优先用它，否则用停靠面板
-    const hostContainer = await this.opts?.ensureViewContainer?.(type);
-    const el = hostContainer ?? this.ensureDock(type);
-    this.registerContainer(type, el);
+    // main 区由宿主常驻挂载的容器提供；dock 区优先用宿主容器，否则回落到自持停靠面板
+    const el =
+      area === "main"
+        ? this.containerFor(type, "main") ?? this.ensureDock(type)
+        : (await this.opts?.ensureViewContainer?.(type)) ?? this.ensureDock(type);
+    this.registerContainer(type, el, area);
     const leaf = api.workspace.getLeaf(true);
     leaf.type = type;
     leaf.containerEl = el;
@@ -347,7 +372,10 @@ class ObsidianRuntime {
       } catch {
         /* 视图没实现 getDisplayText 就用兜底标题 */
       }
-      if (this.dockTitle) this.dockTitle.textContent = this.viewTitles.get(type) ?? viewTitle(type);
+      // 只有停靠区才改停靠面板标题；主区视图不该动侧栏的标题
+      if (area === "dock" && this.dockTitle) {
+        this.dockTitle.textContent = this.viewTitles.get(type) ?? viewTitle(type);
+      }
       this.viewChange?.(type);
     } catch (e) {
       el.replaceChildren();

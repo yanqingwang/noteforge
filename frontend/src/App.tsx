@@ -56,6 +56,10 @@ function App() {
   const [htmlViewFile, setHtmlViewFile] = useState<string | null>(null);
   // .base 走 Bases 面板（Obsidian 的数据库视图），不走编辑器
   const [basesFile, setBasesFile] = useState<string | null>(null);
+  // 插件接管的文件（quadrant-chart 的 .mdx 等）在主编辑区渲染，路径用于标题栏
+  const [pluginViewFile, setPluginViewFile] = useState<string | null>(null);
+  // 主区插件视图容器常驻挂载，运行时用 getter 取（见 mainContainer）
+  const mainPluginHostRef = useRef<HTMLDivElement | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
   const [sidebarMode, setSidebarMode] = useState<"files" | "outline" | "plugins">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
@@ -127,6 +131,9 @@ function App() {
         openPluginSettings: (id: string) => setPluginSettingFor(id),
         // 插件视图统一挂到运行时自持的右侧停靠面板（noteforge 没有 Obsidian 的右侧栏）
         ensureViewContainer: async (type: string) => obsidianRuntime.containerFor(type),
+        // 插件接管的文件（.mdx 象限图等）渲染在主编辑区，与 .html 同一位置；
+        // 容器常驻挂载，运行时随时能拿到 ref。
+        mainContainer: () => mainPluginHostRef.current,
       }).catch((e) => console.warn("[plugin] 加载失败", e));
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
@@ -153,6 +160,11 @@ function App() {
     const resolved = hit.path;
     // 打开非 .base 文件时收起 Bases 面板（两个视图不同时占主区）
     if (!/\.base$/i.test(resolved)) setBasesFile(null);
+    // 打开非插件接管文件时收起主区插件视图
+    if (!obsidianRuntime.viewTypeForExtension((resolved.lastIndexOf(".") > 0
+      ? resolved.slice(resolved.lastIndexOf(".") + 1) : "").toLowerCase())) {
+      setPluginViewFile(null);
+    }
     if (hit.ambiguous && hit.ambiguous.length > 1) {
       dispatch({ type: 'SET_STATUS', text: `跳转: ${resolved}（同名 ${hit.ambiguous.length} 个，取最浅路径）` } as any);
     } else {
@@ -165,8 +177,14 @@ function App() {
     if (ext) {
       const viewType = obsidianRuntime.viewTypeForExtension(ext);
       if (viewType) {
+        // 主区渲染：与 .html 走 HtmlViewer 同一位置，占主编辑区而非右侧停靠面板
+        setBasesFile(null);
+        setHtmlViewFile(null);
+        setPluginViewFile(resolved);
         dispatch({ type: 'SET_STATUS', text: `打开: ${resolved}（${viewType} 视图）` } as any);
-        await obsidianRuntime.openView(viewType, { file: resolved });
+        // 等主区容器这一帧挂载出来再挂视图
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        await obsidianRuntime.openView(viewType, { file: resolved }, "main");
         obsidianRuntime.notifyFileOpen(resolved);
         return;
       }
@@ -564,7 +582,19 @@ function App() {
               onStatus={(m) => dispatch({ type: 'SET_STATUS', text: m } as any)} />
           </div>
         )}
-        {!basesFile && (
+        {pluginViewFile && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+            <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+              <span style={{ fontSize: 12 }}>🧩</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pluginViewFile}</span>
+              <button onClick={() => setPluginViewFile(null)} title="关闭"
+                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+            </div>
+            {/* 常驻挂载：运行时按需往这里塞视图 DOM，所以空的时候也要渲染这个 div */}
+            <div ref={mainPluginHostRef} style={{ flex: 1, overflow: "auto", minHeight: 0 }} />
+          </div>
+        )}
+        {!basesFile && !pluginViewFile && (
         <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
           activeFile={activeFile || ""} files={files} onNavigate={readNote}
           theme={theme}
@@ -588,7 +618,7 @@ function App() {
             }, 250);
           }} />
         )}
-        {htmlViewFile && (
+        {htmlViewFile && !pluginViewFile && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
               <span style={{ fontSize: 12 }}>🖼</span>

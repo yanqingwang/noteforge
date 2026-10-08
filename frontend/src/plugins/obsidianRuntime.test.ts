@@ -198,4 +198,32 @@ describe("obsidianRuntime 集成", () => {
     obsidianRuntime.dispose();
     host.remove();
   });
+
+  it("openView(area=main) 渲染进主区容器，且不与停靠区容器互相覆盖", async () => {
+    const { obsidianRuntime } = await import("./obsidianRuntime");
+    const dockHost = document.createElement("div");
+    const mainHost = document.createElement("div");
+    document.body.append(dockHost, mainHost);
+    await obsidianRuntime.init({
+      vaultPath: () => VAULT,
+      activeFile: () => null,
+      openFile: async () => undefined,
+      ensureViewContainer: async () => dockHost,
+      mainContainer: () => mainHost,
+    });
+
+    // 文件树点开 .mdx → 主区
+    await obsidianRuntime.openView("demo-view", undefined, "main");
+    expect(mainHost.textContent ?? "").toContain("demo view body");
+    expect(dockHost.childNodes.length).toBe(0);
+
+    // 命令面板打开同一视图类型 → 仍走停靠区，主区容器不被顶掉
+    await obsidianRuntime.openView("demo-view");
+    expect(dockHost.textContent ?? "").toContain("demo view body");
+    expect(mainHost.textContent ?? "").toContain("demo view body");
+
+    obsidianRuntime.dispose();
+    dockHost.remove();
+    mainHost.remove();
+  });
 });
