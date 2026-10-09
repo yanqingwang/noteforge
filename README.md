@@ -11,7 +11,7 @@
 - **CM6 即输即显（Live Preview）**：CodeMirror 6 装饰式渲染——非光标行隐藏语法标记、光标行回显源码（Typora/MarkText 风格，IME 稳定、低资源占用）
 - **四种编辑模式**：源码 / 预览 / 分栏 / 即输即显，切换不丢撤销栈
 - **Wikilink 双链**：`[[链接|别名]]` 胶囊渲染 + 自动补全 + 跳转导航 + 图谱视图
-- **图片嵌入与粘贴**：`![[图片.png]]` 内联预览；粘贴/拖拽自动存 `attachments/年-月/`
+- **图片嵌入与粘贴**：`![[图片.png]]` 与标准 `![](图片.png)` 均可内联预览（Live Preview 与预览/分栏都渲染）；粘贴/拖拽自动存入附件目录，插入方式可配置（见下）
 - **编辑效率**：16 组格式快捷键、列表续行、自动配对、2 秒自动保存（原子写）
 - **Obsidian 插件兼容**：直接使用官方市场的插件（装在 `.obsidian/plugins/`，与 Obsidian 共用同一目录与 `data.json`）；内置插件市场可搜索并一键安装；插件命令、视图、设置页全部接入宿主 UI
 - **Nextcloud 加密镜像同步**：vault 与 Nextcloud 目录 1:1 镜像，四象限增量，冲突双版本保留，双侧回收站防误删；内容 AES-256-GCM 加密后上传，服务器只存密文
@@ -21,6 +21,23 @@
 - **WASM 插件系统**：Rust 编译到 WASM，安全沙箱
 
 > 注：Joplin Server 同步已在 v0.2.0 移除，由 Nextcloud 镜像同步取代。
+
+## 图片插入与渲染设置
+
+对标 Obsidian「文件与链接」，可在 **设置** 中配置。**默认值与旧行为逐字节一致**，改配置无需重建（加载方式除外）：
+
+| 设置 | 默认 | 可选 |
+|---|---|---|
+| 图片链接样式 | Wiki 双链 `![[…]]` | Markdown `![](…)` |
+| 链接路径写法 | 完整路径 `attachments/2026-10/x.png` | 相对当前笔记 `../attachments/…` · 仅文件名 `x.png`（vault 内唯一时） |
+| 附件目录 | `attachments` | 任意 vault 相对目录 |
+| 附件按月份分目录 | 开（`YYYY-MM/`） | 关 |
+| 图片文件名 | 时间戳 `YYYYMMDDHHmmss` | 序号 `img-<epoch>-<n>` |
+| 粘贴转 WebP | 关 | 开（仅 png/jpg/bmp；不动 svg/gif/ico） |
+| 图片加载方式 | 内嵌 Data URL | 资源协议 `asset://`（需重构建生效） |
+
+> `asset://` 模式需在 `tauri.conf.json` 启用 `assetProtocol`（`scope`），并给 `tauri` 依赖加 `protocol-asset` feature；CSP `img-src` 放行 `http://asset.localhost`。该模式会放宽 webview 的文件读取范围，建议仅用于单机笔记场景。
+
 
 ## 架构
 
