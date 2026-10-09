@@ -146,22 +146,144 @@ function insertLink(view: EditorView): boolean {
 
 // ── 粘贴/拖拽图片（ED-07）───────────────────────────────────────────
 
-function attachmentsPath(): string {
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `attachments/${ym}/${ts}`;
+/** 图片/附件插入配置（对标 Obsidian「文件与链接」）。 */
+export interface AttachConfig {
+  /** vault 相对附件目录，如 "attachments"。 */
+  dir: string;
+  /** 是否放入 `YYYY-MM/` 子目录。 */
+  subfolder: boolean;
+  /** markdown 引用样式。 */
+  linkStyle: "wikilink" | "markdown";
+  /** 文件名方案。 */
+  nameStyle: "timestamp" | "sequence";
+  /** 链接路径写法。 */
+  linkFormat: "absolute" | "relative" | "shortest";
+  /** 粘贴的光栅图片是否转成 webp。 */
+  convertWebp: boolean;
 }
 
-async function saveImage(view: EditorView, file: File, pos?: number): Promise<void> {
-  const ext = (file.name.match(/\.(\w+)$/)?.[1] || file.type.split("/")[1] || "png").toLowerCase();
-  const rel = `${attachmentsPath()}.${ext}`;
+export const DEFAULT_ATTACH_CONFIG: AttachConfig = {
+  dir: "attachments", subfolder: true, linkStyle: "wikilink",
+  nameStyle: "timestamp", linkFormat: "absolute", convertWebp: false,
+};
+
+/** 本次会话已写入的附件相对路径，用于避免同毫秒/同名覆盖。 */
+const usedNames = new Set<string>();
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * 生成附件的 vault 相对路径（纯函数，便于测试）。
+ * - timestamp：`<dir>[/YYYY-MM]/YYYYMMDDHHmmss.ext`
+ * - sequence： `<dir>[/YYYY-MM]/img-<epoch_ms>-<n>.ext`
+ * 名称冲突时追加 `-1`/`-2`…（`sequence` 的 `n` 从 0 起递增）。
+ */
+export function buildAttachmentRel(
+  cfg: Pick<AttachConfig, "dir" | "subfolder" | "nameStyle">,
+  ext: string,
+  now: Date,
+  isTaken: (rel: string) => boolean,
+): string {
+  const dir = cfg.dir.trim().replace(/^\/+|\/+$/g, "") || "attachments";
+  const ym = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  const base = cfg.subfolder ? `${dir}/${ym}` : dir;
+  if (cfg.nameStyle === "sequence") {
+    const stem = `img-${now.getTime()}`;
+    for (let n = 0; ; n++) {
+      const rel = `${base}/${stem}-${n}.${ext}`;
+      if (!isTaken(rel)) return rel;
+    }
+  }
+  const stem = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
+  let rel = `${base}/${stem}.${ext}`;
+  for (let n = 1; isTaken(rel); n++) rel = `${base}/${stem}-${n}.${ext}`;
+  return rel;
+}
+
+/** 由相对路径生成 markdown 插入文本（纯函数）。 */
+export function buildImageMarkdown(rel: string, linkStyle: "wikilink" | "markdown", alt = ""): string {
+  return linkStyle === "markdown" ? `![${alt}](${rel})` : `![[${rel}]]`;
+}
+
+const baseName = (p: string) => p.split("/").pop() || p;
+
+/** 从 `fromDir` 到 vault 相对路径 `toPath` 的相对写法（纯函数）。 */
+export function relativePath(fromDir: string, toPath: string): string {
+  const from = fromDir.split("/").filter(Boolean);
+  const to = toPath.split("/").filter(Boolean);
+  let i = 0;
+  while (i < from.length && i < to.length && from[i] === to[i]) i++;
+  return [...Array(from.length - i).fill(".."), ...to.slice(i)].join("/");
+}
+
+/**
+ * 生成写入笔记的链接路径（纯函数）。
+ * - `absolute`（默认，等同历史行为）：vault 相对全路径 `attachments/2026-10/x.png`
+ * - `relative`：相对当前笔记所在目录 `../attachments/2026-10/x.png`
+ * - `shortest`：仅文件名 `x.png`（vault 内唯一时），否则回落 absolute
+ */
+export function buildImageLinkPath(
+  rel: string,
+  linkFormat: "absolute" | "relative" | "shortest",
+  ctx: { activeFile?: string; files?: string[] } = {},
+): string {
+  if (linkFormat === "shortest") {
+    const base = baseName(rel);
+    const taken = (ctx.files ?? []).some(f => baseName(f) === base);
+    return taken ? rel : base;
+  }
+  if (linkFormat === "relative") {
+    const active = ctx.activeFile ?? "";
+    const dir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
+    return relativePath(dir, rel) || rel;
+  }
+  return rel;
+}
+
+/** 可安全转 webp 的光栅格式（不动 svg/gif/ico，避免丢矢量/动画）。 */
+const WEBP_CONVERTIBLE = new Set(["png", "jpg", "jpeg", "bmp"]);
+
+/** 用 canvas 把图片编码为 webp；不支持/失败时返回 null（调用方回落原图）。 */
+async function encodeWebp(file: File, quality = 0.92): Promise<Blob | null> {
+  try {
+    if (typeof createImageBitmap !== "function" || typeof document === "undefined") return null;
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close?.();
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", quality));
+    return blob && blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveImage(view: EditorView, file: File, opts: EditorExtOptions, pos?: number): Promise<void> {
+  let ext = (file.name.match(/\.(\w+)$/)?.[1] || file.type.split("/")[1] || "png").toLowerCase();
+  const cfg = opts.getAttachConfig?.() ?? DEFAULT_ATTACH_CONFIG;
+  const isTaken = (rel: string) => usedNames.has(rel) || (opts.getFiles?.() ?? []).includes(rel);
+  // 转 webp（默认关闭）—— 成功后扩展名随之改变
+  let blob: Blob = file;
+  if (cfg.convertWebp && WEBP_CONVERTIBLE.has(ext)) {
+    const webp = await encodeWebp(file);
+    if (webp) { blob = webp; ext = "webp"; }
+  }
+  const rel = buildAttachmentRel(cfg, ext, new Date(), isTaken);
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+    const data = Array.from(new Uint8Array(await blob.arrayBuffer()));
     await invoke("write_attachment", { path: rel, data });
-    const insertText = `![[${rel}]]`;
+    usedNames.add(rel);
+    const linkPath = buildImageLinkPath(rel, cfg.linkFormat, {
+      activeFile: opts.getActiveFile?.() ?? "",
+      files: opts.getFiles?.() ?? [],
+    });
+    const alt = file.name.replace(/\.[^.]+$/, "");
+    const insertText = buildImageMarkdown(linkPath, cfg.linkStyle, alt);
     const p = pos ?? view.state.selection.main.head;
     view.dispatch({ changes: { from: p, insert: insertText }, selection: { anchor: p + insertText.length } });
   } catch (e) {
@@ -169,20 +291,20 @@ async function saveImage(view: EditorView, file: File, pos?: number): Promise<vo
   }
 }
 
-function pasteImageHandler(view: EditorView, event: ClipboardEvent): boolean {
+function pasteImageHandler(view: EditorView, event: ClipboardEvent, opts: EditorExtOptions): boolean {
   const files = Array.from(event.clipboardData?.files ?? []).filter(f => f.type.startsWith("image/"));
   if (files.length === 0) return false;
   event.preventDefault();
-  files.forEach(f => saveImage(view, f));
+  files.forEach(f => saveImage(view, f, opts));
   return true;
 }
 
-function dropImageHandler(view: EditorView, event: DragEvent): boolean {
+function dropImageHandler(view: EditorView, event: DragEvent, opts: EditorExtOptions): boolean {
   const files = Array.from(event.dataTransfer?.files ?? []).filter(f => f.type.startsWith("image/"));
   if (files.length === 0) return false;
   event.preventDefault();
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-  files.forEach(f => saveImage(view, f, pos ?? undefined));
+  files.forEach(f => saveImage(view, f, opts, pos ?? undefined));
   return true;
 }
 
@@ -317,18 +439,24 @@ export interface EditorExtOptions {
   extraKeys?: any[];
   /** wikilink 目标是否存在于 vault（live 模式下标记未解析链接） */
   resolveLink?: (target: string) => boolean;
+  /** 图片/附件插入配置（getter，热更新无需重建 EditorView） */
+  getAttachConfig?: () => AttachConfig;
+  /** 当前激活文件路径（relative 链接格式需要） */
+  getActiveFile?: () => string;
+  /** 图片 src 解析（data URL / asset URL），供 Live Preview 与预览面板复用 */
+  resolveImageSrc?: (rel: string) => Promise<string>;
 }
 
 export function nfExtensions(opts: EditorExtOptions): Extension[] {
   return [
     themeFor(opts.theme ?? "light"),
-    ...(opts.live ? [livePreview(opts.resolveLink)] : []),
+    ...(opts.live ? [livePreview({ resolveLink: opts.resolveLink, resolveImageSrc: opts.resolveImageSrc })] : []),
     tableEditing(),
     autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
     closeBrackets(),
     EditorView.domEventHandlers({
-      paste: pasteImageHandler as any,
-      drop: dropImageHandler as any,
+      paste: ((view: EditorView, e: ClipboardEvent) => pasteImageHandler(view, e, opts)) as any,
+      drop: ((view: EditorView, e: DragEvent) => dropImageHandler(view, e, opts)) as any,
     }),
     keymap.of([
       ...(opts.extraKeys ?? []),

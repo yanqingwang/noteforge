@@ -42,13 +42,29 @@ class WikilinkWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-/** `![[img.png]]` → 内联图片预览 */
+type ImageSrcResolver = (rel: string) => Promise<string>;
+
+/** Live Preview 可选注入项。 */
+export interface LivePreviewOpts {
+  /** wikilink 目标是否存在于 vault */
+  resolveLink?: (t: string) => boolean;
+  /** 图片 src 解析（data URL / asset URL） */
+  resolveImageSrc?: ImageSrcResolver;
+}
+
+/** 未注入 resolver 时的兜底：base64 data URL（保持原有行为） */
+function defaultImageSrc(rel: string): Promise<string> {
+  return import("@tauri-apps/api/core").then(({ invoke }) => invoke<string>("read_file_data", { path: rel }));
+}
+
+/** `![[img.png]]` / `![alt](img.png)` → 内联图片预览 */
 class EmbedImageWidget extends WidgetType {
-  private static cache = new Map<string, string>();
   target: string;
-  constructor(target: string) {
+  private resolve: ImageSrcResolver;
+  constructor(target: string, resolve?: ImageSrcResolver) {
     super();
     this.target = target;
+    this.resolve = resolve ?? defaultImageSrc;
   }
   eq(other: EmbedImageWidget) { return other.target === this.target; }
   toDOM(_view: EditorView) {
@@ -59,17 +75,9 @@ class EmbedImageWidget extends WidgetType {
     img.style.maxHeight = "220px";
     img.style.borderRadius = "6px";
     img.alt = this.target;
-    const cached = EmbedImageWidget.cache.get(this.target);
-    if (cached) {
-      img.src = cached;
-    } else {
-      import("@tauri-apps/api/core").then(({ invoke }) =>
-        invoke<string>("read_file_data", { path: this.target }).then((url) => {
-          EmbedImageWidget.cache.set(this.target, url);
-          img.src = url;
-        }).catch(() => { wrap.textContent = `⚠ 未找到附件: ${this.target}`; })
-      );
-    }
+    this.resolve(this.target)
+      .then((url) => { img.src = url; })
+      .catch(() => { wrap.textContent = `⚠ 未找到附件: ${this.target}`; });
     wrap.appendChild(img);
     return wrap;
   }
@@ -138,6 +146,8 @@ class CodeBlockWidget extends WidgetType {
 
 const wikilinkRe = /\[\[([^\]\n]+?)(?:\|([^\]\n]+))?\]\]/g;
 const embedImageRe = /!\[\[([^\]\n]+?)\]\]/g;
+const mdImageRe = /!\[([^\]\n]*)\]\(\s*([^)\s]+?)(?:\s+"[^"]*")?\s*\)/g;
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 
 /**
  * 表格渲染（对标 Obsidian 编辑视图）：
@@ -239,7 +249,7 @@ function isDelimRow(text: string): boolean {
   return t.includes("-") && /^[\s|:-]*-[\s|:-]*$/.test(t);
 }
 
-function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): DecorationSet {
+function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationSet {
   const decos: Array<{ from: number; to: number; deco: Decoration }> = [];
   const add = (from: number, to: number, deco: Decoration) => decos.push({ from, to, deco });
   const state = view.state;
@@ -399,9 +409,19 @@ function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): D
       if (focusLines.has(l)) continue;
       for (const m of line.text.matchAll(embedImageRe)) {
         const target = m[1].split("|")[0];
-        if (/\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i.test(target)) {
+        if (IMAGE_EXT_RE.test(target)) {
           add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
-            Decoration.replace({ widget: new EmbedImageWidget(target) }));
+            Decoration.replace({ widget: new EmbedImageWidget(target, opts?.resolveImageSrc) }));
+        }
+      }
+      for (const m of line.text.matchAll(mdImageRe)) {
+        // `![alt](target)` → 内联图片；跳过外链/协议与锚点
+        const target = m[2];
+        if (/^(?:[a-z][a-z0-9+.-]*:)/i.test(target) || target.startsWith("#")) continue;
+        const rel = target.replace(/^\.\//, "");
+        if (IMAGE_EXT_RE.test(rel)) {
+          add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
+            Decoration.replace({ widget: new EmbedImageWidget(rel, opts?.resolveImageSrc) }));
         }
       }
       for (const m of line.text.matchAll(wikilinkRe)) {
@@ -410,7 +430,7 @@ function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): D
         const raw = m[1];
         const parts = splitWikilink(raw);
         const label = m[2] || parts.alias || parts.target;
-        const resolved = !resolve || resolve(parts.target);
+        const resolved = !opts?.resolveLink || opts.resolveLink(parts.target);
         add(start, start + m[0].length,
           Decoration.replace({ widget: new WikilinkWidget(parts.target, label, resolved) }));
       }
@@ -421,14 +441,14 @@ function buildDecorations(view: EditorView, resolve?: (t: string) => boolean): D
 }
 
 /** Live preview 扩展：live 模式下启用，source/split 模式卸载 */
-export function livePreview(resolveTarget?: (t: string) => boolean): Extension {
+export function livePreview(opts?: LivePreviewOpts): Extension {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
-      constructor(view: EditorView) { this.decorations = buildDecorations(view, resolveTarget); }
+      constructor(view: EditorView) { this.decorations = buildDecorations(view, opts); }
       update(u: ViewUpdate) {
         if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged) {
-          this.decorations = buildDecorations(u.view, resolveTarget);
+          this.decorations = buildDecorations(u.view, opts);
         }
       }
     },

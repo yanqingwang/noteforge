@@ -251,7 +251,13 @@ pub fn render_html(content: &str) -> String {
                 let inner: String = chars[i+3..end].iter().collect();
                 let target = inner.split('|').next().unwrap_or(&inner).to_string();
                 if is_image_ext(&target) {
-                    processed.push_str(&format!("<img src=\"note://{}\" alt=\"{}\" style=\"max-width:100%\"/>", target, target));
+                    // `data-embed` carries the vault-relative path; the frontend
+                    // rewrites it to a data:/asset: URL (see EditorPane preview effect).
+                    processed.push_str(&format!(
+                        "<img data-embed=\"{}\" alt=\"{}\" style=\"max-width:100%\"/>",
+                        escape_html_attr(target.trim()),
+                        escape_html_attr(target.trim())
+                    ));
                 } else {
                     processed.push_str(&format!(
                         "<a href=\"#\" data-note=\"{}\">{}</a>",
@@ -342,6 +348,25 @@ mod tests {
         // 特殊字符被转义，不破坏属性
         assert!(html.contains("&amp;") && html.contains("&quot;"), "{}", html);
         assert!(!html.contains("data-note=\"a&b"), "{}", html);
+    }
+
+    #[test]
+    fn embed_wikilink_image_emits_data_embed() {
+        // 图片嵌入走 data-embed（前端重写为 data:/asset: URL），并对属性做转义
+        let html = render_html("![[attachments/a b&c.png]]");
+        assert!(
+            html.contains("<img data-embed=\"attachments/a b&amp;c.png\""),
+            "{}", html
+        );
+        assert!(!html.contains("note://"), "{}", html);
+    }
+
+    #[test]
+    fn markdown_image_passes_through() {
+        // 标准 markdown 图片不预处理，交由 comrak 输出 <img src="rel">
+        let html = render_html("![](attachments/a.png)");
+        assert!(html.contains("<img"), "{}", html);
+        assert!(html.contains("attachments/a.png"), "{}", html);
     }
 
     #[test]

@@ -30,6 +30,12 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
   const [excludeDirs, setExcludeDirs] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [attachmentDirs, setAttachmentDirs] = useState("");
+  const [attachmentLinkStyle, setAttachmentLinkStyle] = useState("wikilink");
+  const [attachmentNameStyle, setAttachmentNameStyle] = useState("timestamp");
+  const [attachmentSubfolder, setAttachmentSubfolder] = useState(true);
+  const [imageRenderMode, setImageRenderMode] = useState("data");
+  const [attachmentLinkFormat, setAttachmentLinkFormat] = useState("absolute");
+  const [attachmentConvertWebp, setAttachmentConvertWebp] = useState(false);
   const [message, setMessage] = useState("");
   const [syncing, setSyncing] = useState(false);
 
@@ -59,7 +65,13 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
     invoke("get_config", {}).then((cfg: any) => {
       setExcludeDirs((cfg.exclude_dirs || []).join("\n"));
       setShowHidden(cfg.show_hidden || false);
-      setAttachmentDirs(cfg.attachment_dir || "assets");
+      setAttachmentDirs(cfg.attachment_dir || "attachments");
+      setAttachmentLinkStyle(cfg.attachment_link_style || "wikilink");
+      setAttachmentNameStyle(cfg.attachment_name_style || "timestamp");
+      setAttachmentSubfolder(cfg.attachment_subfolder !== false);
+      setImageRenderMode(cfg.image_render_mode || "data");
+      setAttachmentLinkFormat(cfg.attachment_link_format || "absolute");
+      setAttachmentConvertWebp(!!cfg.attachment_convert_webp);
     }).catch((e: any) => setMessage(`加载配置失败: ${e}`));
     invoke("sync_get_config", {}).then((cfg: any) => {
       if (cfg) {
@@ -163,7 +175,13 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
       cfg.exclude_dirs = excludeDirs.split("\n").map((s: string) => s.trim()).filter(Boolean);
       cfg.exclude_dirs = cfg.exclude_dirs.map((d: string) => d.endsWith("/") ? d.slice(0, -1) : d);
       cfg.show_hidden = showHidden;
-      cfg.attachment_dir = attachmentDirs.trim() || "assets";
+      cfg.attachment_dir = attachmentDirs.trim() || "attachments";
+      cfg.attachment_link_style = attachmentLinkStyle;
+      cfg.attachment_name_style = attachmentNameStyle;
+      cfg.attachment_subfolder = attachmentSubfolder;
+      cfg.image_render_mode = imageRenderMode;
+      cfg.attachment_link_format = attachmentLinkFormat;
+      cfg.attachment_convert_webp = attachmentConvertWebp;
       await invoke("update_config", { config: cfg });
       setMessage("✅ 已保存");
       if (onVaultReopen) setTimeout(onVaultReopen, 500);
@@ -193,12 +211,48 @@ export default function SettingsDialog({ open, onClose, onVaultReopen, onSyncSta
           显示隐藏文件夹（以 . 开头）
         </label>
 
-        {/* attachment_dir */}
+        {/* 图片 / 附件 */}
         <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>附件目录</label>
         <input value={attachmentDirs} onChange={e => setAttachmentDirs(e.target.value)}
-          placeholder="assets" style={inputStyle} />
-        <p style={{ color: "#999", fontSize: 11, margin: "-12px 0 16px" }}>
-          附件目录用于双链中加载图片等附件，相对于 vault 根目录。粘贴的图片会保存到这里（按月分目录）。
+          placeholder="attachments" style={inputStyle} />
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>图片链接样式</label>
+        <select value={attachmentLinkStyle} onChange={e => setAttachmentLinkStyle(e.target.value)} style={inputStyle}>
+          <option value="wikilink">Wiki 双链 ![[……]]（默认）</option>
+          <option value="markdown">Markdown ![](……)</option>
+        </select>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>链接路径写法</label>
+        <select value={attachmentLinkFormat} onChange={e => setAttachmentLinkFormat(e.target.value)} style={inputStyle}>
+          <option value="absolute">完整路径 attachments/2026-10/xxx.png（默认）</option>
+          <option value="relative">相对当前笔记 ../attachments/xxx.png</option>
+          <option value="shortest">仅文件名 xxx.png（vault 内唯一时）</option>
+        </select>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>图片文件名</label>
+        <select value={attachmentNameStyle} onChange={e => setAttachmentNameStyle(e.target.value)} style={inputStyle}>
+          <option value="timestamp">时间戳 YYYYMMDDHHmmss（默认）</option>
+          <option value="sequence">序号 img-时间-序号</option>
+        </select>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px", cursor: "pointer" }}>
+          <input type="checkbox" checked={attachmentSubfolder} onChange={e => setAttachmentSubfolder(e.target.checked)} />
+          附件按月份分目录（YYYY-MM）
+        </label>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px", cursor: "pointer" }}>
+          <input type="checkbox" checked={attachmentConvertWebp} onChange={e => setAttachmentConvertWebp(e.target.checked)} />
+          粘贴时转为 WebP（png/jpg/bmp → webp，体积更小）
+        </label>
+
+        <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>图片加载方式</label>
+        <select value={imageRenderMode} onChange={e => setImageRenderMode(e.target.value)} style={inputStyle}>
+          <option value="data">内嵌 Data URL（默认，兼容性最好）</option>
+          <option value="asset">资源协议 asset://（大图更省内存）</option>
+        </select>
+        <p style={{ color: "#999", fontSize: 11, margin: "-2px 0 16px" }}>
+          附件目录相对于 vault 根目录；粘贴/拖拽图片按上方「链接样式 / 文件名 / 按月分目录」规则保存并插入。
+          「资源协议」需重新构建/启动应用后生效。
         </p>
 
         {/* exclude_dirs */}

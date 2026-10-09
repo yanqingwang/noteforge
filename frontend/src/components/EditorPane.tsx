@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { EditorView, keymap, lineNumbers as cmLineNumbers, highlightActiveLine, drawSelection, dropCursor } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { GFM } from "@lezer/markdown";
-import { nfExtensions } from "../editor/extensions";
+import { nfExtensions, DEFAULT_ATTACH_CONFIG } from "../editor/extensions";
+import type { AttachConfig } from "../editor/extensions";
+import { makeImageSrcResolver } from "../editor/imageSrc";
 import { editorBridge, EchoTracker } from "../editor/bridge";
 import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
-import HtmlViewer from "./HtmlViewer";
+import HtmlViewer, { resolveVaultPath } from "./HtmlViewer";
 import { resolveWikilink } from "../editor/wikilink";
 
 type ViewMode = "source" | "preview" | "split" | "live" | "html";
@@ -31,6 +33,10 @@ interface EditorPaneProps {
   theme?: "light" | "dark";
   /** 当前激活文件是 .html：额外提供「HTML」显示格式，与源码并列切换 */
   htmlFile?: string | null;
+  /** vault 配置（图片插入语法 / 附件目录 / 渲染加载方式） */
+  vaultConfig?: any;
+  /** vault 绝对路径（asset 渲染模式需要） */
+  vaultPath?: string;
 }
 
 export type { ViewMode };
@@ -38,7 +44,7 @@ export type { ViewMode };
 const AUTO_SAVE_MS = 2000;
 
 const EditorPane = memo(function EditorPane({
-  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light", htmlFile = null,
+  content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light", htmlFile = null, vaultConfig = null, vaultPath = "",
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -57,14 +63,53 @@ const EditorPane = memo(function EditorPane({
   const effectiveMode: ViewMode = isHtmlFile && mode === "html" ? "source" : mode;
 
   // 最新 props 的 ref 镜像（避免重建 EditorView）
-  const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme });
-  cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme };
+  const cbRef = useRef({ content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme, vaultConfig, vaultPath });
+  cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme, vaultConfig, vaultPath };
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
   // wikilink 解析（live 装饰与预览共用）：判断链接目标是否存在
   const resolveLink = useCallback((target: string) =>
     resolveWikilink(target, cbRef.current.files as unknown as { path: string; is_dir?: boolean }[]).path !== null, []);
+
+  // 图片/附件插入配置（getter 读 cbRef：改配置后无需重建 EditorView）
+  const getAttachConfig = useCallback((): AttachConfig => {
+    const c = cbRef.current.vaultConfig || {};
+    return {
+      dir: c.attachment_dir || DEFAULT_ATTACH_CONFIG.dir,
+      subfolder: c.attachment_subfolder !== false,
+      linkStyle: c.attachment_link_style || "wikilink",
+      nameStyle: c.attachment_name_style || "timestamp",
+      linkFormat: c.attachment_link_format || "absolute",
+      convertWebp: !!c.attachment_convert_webp,
+    };
+  }, []);
+  const getActiveFile = useCallback(() => cbRef.current.activeFile || "", []);
+
+  // 图片 src 解析（data URL / asset URL）；兼容三种链接写法：
+  // 先按 vault 相对，再按「vault 内唯一文件名」，最后按「相对当前笔记目录」。
+  const resolveImageSrc = useMemo(() => {
+    const base = makeImageSrcResolver(() => ({
+      mode: (cbRef.current.vaultConfig?.image_render_mode) || "data",
+      vaultPath: cbRef.current.vaultPath || "",
+    }));
+    const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+    return async (target: string): Promise<string> => {
+      const raw = target.replace(/^\.\//, "");
+      const cands = [raw];
+      if (!raw.includes("/")) {
+        const hits = (cbRef.current.files ?? []).filter(f => f.path.split("/").pop() === raw);
+        if (hits.length === 1) cands.push(hits[0].path);
+      }
+      const noteRel = resolveVaultPath(target, dirOf(cbRef.current.activeFile || ""));
+      if (noteRel && !cands.includes(noteRel)) cands.push(noteRel);
+      let lastErr: unknown;
+      for (const c of cands) {
+        try { return await base(c); } catch (e) { lastErr = e; }
+      }
+      throw lastErr ?? new Error(`未找到附件: ${target}`);
+    };
+  }, []);
   const dirtyRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 编辑器 echo 指纹（乱序安全）：App 异步渲染回写的任何近期旧值都不回灌
@@ -117,7 +162,7 @@ const EditorPane = memo(function EditorPane({
           // 可重组部分：live 装饰（含主题/快捷键/补全）
           liveComp.current.of(nfExtensions({
             live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
-            theme: cbRef.current.theme, resolveLink,
+            theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
           })),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) {
@@ -169,10 +214,10 @@ const EditorPane = memo(function EditorPane({
     view.dispatch({
       effects: liveComp.current.reconfigure(nfExtensions({
         live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
-        theme: cbRef.current.theme, resolveLink,
+        theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
       })),
     });
-  }, [mode, theme]);
+  }, [mode, theme, vaultConfig, resolveImageSrc]);
 
   // ── 外部内容变化（文件切换 / 缓存加载）→ 全文替换 ──
   useEffect(() => {
@@ -256,6 +301,25 @@ const EditorPane = memo(function EditorPane({
       if (ok) a.removeAttribute('title'); else a.setAttribute('title', '未找到该文件');
     });
   }, [previewHtml, mode, files, resolveLink]);
+
+  // ── preview/split 预览面板：把 data-embed / 相对 src 解析为可加载的 URL ──
+  // `nf-render` 产出的 `![[img]]` → <img data-embed="…">；标准 `![](… )` → <img src="…">。
+  // 具体路径写法（绝对/相对/仅文件名）交给 resolveImageSrc 统一解析。
+  useEffect(() => {
+    const host = previewRef.current;
+    if (!host) return;
+    let cancelled = false;
+    host.querySelectorAll("img").forEach(img => {
+      const embed = img.getAttribute("data-embed");
+      if (embed) img.removeAttribute("data-embed");
+      const raw = embed ?? img.getAttribute("src") ?? "";
+      if (!raw || /^(?:data:|blob:|https?:|asset:)/i.test(raw) || raw.startsWith("#")) return;
+      resolveImageSrc(raw)
+        .then(url => { if (!cancelled) img.setAttribute("src", url); })
+        .catch(() => { if (!cancelled) img.setAttribute("title", `未找到附件: ${raw}`); });
+    });
+    return () => { cancelled = true; };
+  }, [previewHtml, mode, activeFile, resolveImageSrc, vaultConfig]);
 
   // 组件卸载前保存
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);

@@ -35,6 +35,7 @@ const btnBase: React.CSSProperties = {
 function App() {
   const [state, dispatch] = useReducer(layoutReducer, null, createInitialState);
   const [vaultPath, setVaultPath] = useState(() => localStorage.getItem('nf-last-vault') || "");
+  const [vaultConfig, setVaultConfig] = useState<any | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [contentCache, setContentCache] = useState<Record<string, {content:string;html:string}>>({});
@@ -117,6 +118,7 @@ function App() {
       const tree: FileEntry[] = await invoke("open_vault", { path });
       setVaultPath(path); setFiles(tree);
       localStorage.setItem('nf-last-vault', path);
+      invoke<any>("get_config").then(setVaultConfig).catch(() => {});
       // Load plugins
       pluginManager.loadPlugins(path);
       // Obsidian 兼容插件：加载 .obsidian/plugins 下已启用的插件
@@ -365,6 +367,8 @@ function App() {
       const tree: FileEntry[] = await invoke("get_file_tree", {});
       treeSigRef.current = tree.map(f => f.path).join("\u0001");
       setFiles(tree);
+      // 设置保存后会触发本刷新：一并重取 vault 配置，让图片插入/渲染设置热生效
+      invoke<any>("get_config").then(setVaultConfig).catch(() => {});
       dispatch({ type: 'SET_STATUS', text: `已刷新: ${vaultPath}` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `刷新失败: ${e}` } as any); }
   }, [vaultPath]);
@@ -600,6 +604,7 @@ function App() {
           theme={theme}
           onOutline={setOutlineItems}
           htmlFile={htmlActive ? activeFile : null}
+          vaultConfig={vaultConfig} vaultPath={vaultPath}
           mode={paneMode} onSetMode={handleSetMode}
           onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
           onContentChange={(newContent) => {
