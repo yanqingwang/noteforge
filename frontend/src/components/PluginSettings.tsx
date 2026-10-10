@@ -46,6 +46,16 @@ const STATS_KEY = "nf-plugin-market-stats";
 const STATS_TS_KEY = "nf-plugin-market-stats-at";
 const INDEX_TTL = 24 * 3600 * 1000;
 
+/** webview 的 fetch 走系统代理（含 PAC），公司网络下比 Rust 直连可靠。 */
+async function fetchText(url: string): Promise<string | null> {
+  try {
+    const r = await fetch(url);
+    return r.ok ? await r.text() : null;
+  } catch {
+    return null;
+  }
+}
+
 interface PluginSettingsProps {
   vaultPath: string;
   dark: boolean;
@@ -92,19 +102,29 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
         const at = Number(localStorage.getItem(INDEX_TS_KEY) ?? 0);
         let indexJson = at && Date.now() - at < INDEX_TTL ? localStorage.getItem(INDEX_KEY) : null;
         if (!indexJson) {
-          indexJson = await invoke<string>("marketplace_index");
+          // webview 的 fetch 走系统代理（公司网络可达），Rust reqwest 是直连 —— 先走前端
+          indexJson =
+            (await fetchText("https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugins.json")) ??
+            (await fetchText("https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugins.json")) ??
+            (await invoke<string>("marketplace_index").catch(() => null));
+          if (!indexJson) {
+            if (!cancelled) setStatus("取市场索引失败：网络不可达（jsDelivr 与 GitHub 均无法访问）");
+            setLoading(false);
+            return;
+          }
           localStorage.setItem(INDEX_KEY, indexJson);
           localStorage.setItem(INDEX_TS_KEY, String(Date.now()));
         }
         let st = localStorage.getItem(STATS_KEY) ?? "";
         const sat = Number(localStorage.getItem(STATS_TS_KEY) ?? 0);
         if (!st || !(sat && Date.now() - sat < INDEX_TTL)) {
-          try {
-            st = await invoke<string>("marketplace_stats");
+          st =
+            (await fetchText("https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugin-stats.json")) ??
+            (await fetchText("https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json")) ??
+            (await invoke<string>("marketplace_stats").catch(() => "")) ?? "";
+          if (st) {
             localStorage.setItem(STATS_KEY, st);
             localStorage.setItem(STATS_TS_KEY, String(Date.now()));
-          } catch {
-            /* 离线：下载量未知，排序回落 */
           }
         }
         if (cancelled) return;

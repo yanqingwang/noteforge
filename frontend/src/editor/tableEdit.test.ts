@@ -217,7 +217,7 @@ describe("表格工具条（鼠标操作）", () => {
     bar = view.dom.querySelector(".nf-table-bar") as HTMLElement;
     expect(bar.dataset.active).toBe("1");
     const labels = [...bar.querySelectorAll("button")].map((b) => b.textContent);
-    expect(labels).toEqual(["＋行↑", "＋行↓", "－行", "＋列←", "＋列→", "－列", "对齐:左"]);
+    expect(labels).toEqual(["＋行↑", "＋行↓", "－行", "＋列←", "＋列→", "－列", "对齐:左", "⇔"]);
     view.destroy();
   });
 

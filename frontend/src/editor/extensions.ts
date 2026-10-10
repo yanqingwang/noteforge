@@ -395,11 +395,13 @@ const lpThemeStyles = (dark: boolean) => ({
     borderRight: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`,
     background: "transparent",
   },
-  ".lp-tcell": { padding: "0 2px" },
+  ".lp-tcell": { padding: "0 6px" },
   ".lp-tsep": {
-    color: dark ? "#454545" : "#c9d1d9",
+    color: dark ? "#4d4d4d" : "#b6bdc4",
     fontWeight: 400,
   },
+  ".lp-trow:hover .lp-tcell": { background: dark ? "#2f2f33" : "#eef2f7" },
+  ".lp-trow:hover .lp-tsep": { color: dark ? "#5a5a5a" : "#a8b2ba" },
   ".lp-link": { color: dark ? "#6cb2ff" : "#0969da", textDecoration: "underline" },
   ".lp-wikilink": {
     color: dark ? "#6cb2ff" : "#0969da", background: dark ? "#1c3a5e" : "#ddf4ff",

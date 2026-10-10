@@ -381,6 +381,87 @@ export function tableNavigate(view: EditorView, dir: 1 | -1): boolean {
   return false; // 首格前 Shift+Tab 交回默认行为
 }
 
+/** 对齐行的列样式（宽度含冒号） */
+function delimCellText(w: number, a: "left" | "center" | "right"): string {
+  const w2 = Math.max(3, w);
+  if (a === "center") return ":" + "-".repeat(w2 - 2) + ":";
+  if (a === "right") return "-".repeat(w2 - 1) + ":";
+  return "-".repeat(w2);
+}
+
+function padCell(s: string, w: number, a: "left" | "center" | "right"): string {
+  const n = Math.max(0, w - s.length);
+  if (a === "right") return " ".repeat(n) + s;
+  if (a === "center") {
+    const l = Math.floor(n / 2);
+    return " ".repeat(l) + s + " ".repeat(n - l);
+  }
+  return s + " ".repeat(n);
+}
+
+/**
+ * 对齐整张表格（Advanced Tables 的核心体验）：
+ * 列宽取每列最宽单元格，按对齐行声明的对齐方式补空格，整表重排。
+ * 返回 true 表示文档已被重排（光标经 mapPos 保留）。
+ */
+export function formatTableAt(view: EditorView): boolean {
+  const t = findTableAt(view.state, view.state.selection.main.head);
+  if (!t) return false;
+  const rows = t.rows;
+  if (rows.length < 2 || !rows[1].delim) return false;
+  const state = view.state;
+
+  const colCount = Math.max(...rows.map(r => r.cells.length));
+  if (colCount < 1) return false;
+
+  // 对齐方式来自对齐行
+  const aligns: Array<"left" | "center" | "right"> = [];
+  for (let i = 0; i < colCount; i++) {
+    const c = rows[1].cells[i];
+    const s = c ? state.sliceDoc(c.from, c.to) : "---";
+    const l = s.startsWith(":"), r = s.endsWith(":");
+    aligns.push(l && r ? "center" : r ? "right" : "left");
+  }
+
+  // 每列最宽单元格
+  const cellText = rows.map(r => r.cells.map(c => state.sliceDoc(c.from, c.to)));
+  const widths: number[] = [];
+  for (let i = 0; i < colCount; i++) {
+    let w = 3;
+    for (const cells of cellText) if (i < cells.length) w = Math.max(w, cells[i].length);
+    widths.push(w);
+  }
+
+  const lines = rows.map((_row, ri) => {
+    const parts: string[] = [];
+    for (let i = 0; i < colCount; i++) {
+      const a = aligns[i] ?? "left";
+      if (ri === 1) parts.push(delimCellText(widths[i], a));
+      else parts.push(padCell(cellText[ri][i] ?? "", widths[i], ri === 0 ? "left" : a));
+    }
+    const body = parts.join(" | ");
+    return "| " + body + " |";
+  });
+
+  const newText = lines.join("\n");
+  const oldText = state.sliceDoc(t.from, t.to);
+  if (newText === oldText) return false;
+
+  const head = state.selection.main.head;
+  const changes = { from: t.from, to: t.to, insert: newText };
+  const newDocLen = state.doc.length - (t.to - t.from) + newText.length;
+  const anchor = Math.max(0, Math.min(state.changes(changes).mapPos(head, 1), newDocLen));
+  view.dispatch({ changes, selection: EditorSelection.single(anchor), scrollIntoView: true });
+  return true;
+}
+
+/** Enter：在当前行下方新建一行并进入首格（Advanced Tables 行为） */
+export function tableNewRow(view: EditorView): boolean {
+  const t = findTableAt(view.state, view.state.selection.main.head);
+  if (!t) return false;
+  return insertRow(view, "below");
+}
+
 // ── 工具条（鼠标操作）────────────────────────────────────────────────
 
 /**
@@ -504,6 +585,8 @@ class TableFloater {
         () => cycleColumnAlign(view),
         false,
       ),
+      this.sep(),
+      this.makeButton("⇔", "对齐整张表格：列宽按最宽单元格（Alt+Shift+F）", () => formatTableAt(view), false),
     );
 
     this.schedulePosition(view);
@@ -537,8 +620,11 @@ export function tableEditing(): Extension {
     tableToolbarPlugin,
     Prec.highest(
       keymap.of([
-        { key: "Tab", run: (v: EditorView) => tableNavigate(v, 1) },
-        { key: "Shift-Tab", run: (v: EditorView) => tableNavigate(v, -1) },
+        // Tab 导航前先对齐整表（Advanced Tables 行为）；再按新文档重新定位单元格
+        { key: "Tab", run: (v: EditorView) => { formatTableAt(v); return tableNavigate(v, 1); } },
+        { key: "Shift-Tab", run: (v: EditorView) => { formatTableAt(v); return tableNavigate(v, -1); } },
+        { key: "Enter", run: (v: EditorView) => tableNewRow(v) },
+        { key: "Alt-Shift-f", run: (v: EditorView) => formatTableAt(v) },
         { key: "Alt-ArrowUp", run: (v: EditorView) => insertRow(v, "above") },
         { key: "Alt-ArrowDown", run: (v: EditorView) => insertRow(v, "below") },
         { key: "Alt-Shift-ArrowUp", run: (v: EditorView) => deleteRow(v) },
