@@ -31,7 +31,7 @@ export default function QuickSwitcher({ files, onSelect, onClose, extraExts = []
     f.path.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 20);
 
-  const open = (p: string) => { onSelect(p); };
+  const open = (p: string) => { onClose(); onSelect(p); };
 
   return (
     <div style={{
@@ -54,6 +54,7 @@ export default function QuickSwitcher({ files, onSelect, onClose, extraExts = []
               setSel(s => Math.max(0, s - 1));
             } else if (e.key === "Enter") {
               e.preventDefault();
+              e.stopPropagation();
               if (results[sel]) open(results[sel].path);
             }
           }}

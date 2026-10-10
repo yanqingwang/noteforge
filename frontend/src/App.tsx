@@ -719,7 +719,7 @@ function App() {
       <StatusBar text={(state as any).statusText || "就绪"} />
 
       {showQuickSwitcher && files.length > 0 && (
-        <QuickSwitcher extraExts={pluginExts} files={files} onSelect={(p) => { readNote(p); setShowQuickSwitcher(false); }}
+        <QuickSwitcher extraExts={pluginExts} files={files} onSelect={(p) => readNote(p)}
           onClose={() => setShowQuickSwitcher(false)} />
       )}
       {showCommandPalette && (

@@ -4,7 +4,7 @@
 
 pkgname=noteforge
 pkgver=0.3.2
-pkgrel=9
+pkgrel=10
 pkgdesc="NoteForge - local-first Markdown knowledge management application (Rust)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/yanqingwang/noteforge"
