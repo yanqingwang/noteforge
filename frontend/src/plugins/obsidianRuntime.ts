@@ -12,7 +12,7 @@ import { createCmModules } from "./obsidian/cm-modules";
 import { renderSettingTab } from "./obsidian/settingDefs";
 import { createObsidianApi, type ObsidianApi, type PluginRegistry } from "./obsidian/index";
 import { createTauriHost, createEditorAdapter } from "./obsidian/host-tauri";
-import { createElectronStub, createNodeBuiltins, evaluatePlugin, withNodePrefixAliases } from "./loader";
+import { createElectronStub, createNodeBuiltins, evaluatePlugin, setHostPlatform, setRunGit, withNodePrefixAliases } from "./loader";
 import { editorBridge } from "../editor/bridge";
 
 export interface PluginSummary {
@@ -400,6 +400,18 @@ class ObsidianRuntime {
     const opts = this.opts;
     if (!opts) return;
     const vaultRoot = opts.vaultPath();
+
+    // 宿主真实平台 + 受限 git 执行：喂给兼容层（os.platform() / child_process.execFile("git")）
+    try {
+      const h = await invoke<{ os: string; arch: string; homedir: string }>("host_os");
+      if (h?.os) setHostPlatform(h);
+    } catch (e) {
+      console.warn("[plugin] host_os 不可用，平台信息回落到默认", e);
+    }
+    setRunGit(async (args) => {
+      const r = await invoke<{ status: number; stdout: string; stderr: string }>("run_git", { vaultRoot, args });
+      return r;
+    });
 
     // 卸载旧插件（含它们的样式）
     await this.api?.unloadAll();

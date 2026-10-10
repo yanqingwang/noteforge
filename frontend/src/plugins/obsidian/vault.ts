@@ -399,6 +399,32 @@ export class Vault extends Events {
   /* ---------- 元数据缓存（见构造函数） ---------- */
 }
 
+/**
+ * 标签形状归一化。插件会直接拿 `getFileCache(file).frontmatter.tags` 去
+ * `forEach(t => t.replace(...))`（Copilot 就是），若数组里混进 null/undefined/非字符串就会崩。
+ * 写缓存时统一成字符串数组；`cache.tags` 的元素统一成 `{ tag: string }`。
+ */
+function normalizeCacheTags(cache: CachedMetadataLike): CachedMetadataLike {
+  let out = cache;
+  const fm = cache.frontmatter;
+  if (fm && typeof fm === "object" && !Array.isArray(fm)) {
+    const tags = (fm as Record<string, unknown>).tags;
+    if (Array.isArray(tags)) {
+      const fixed = tags.filter((t) => t != null).map((t) => String(t));
+      if (fixed.length !== tags.length || tags.some((t) => typeof t !== "string")) {
+        out = { ...out, frontmatter: { ...(fm as Record<string, unknown>), tags: fixed } };
+      }
+    }
+  }
+  if (Array.isArray(cache.tags)) {
+    const fixed = cache.tags
+      .filter((t) => t != null)
+      .map((t) => (typeof t === "object" ? { ...(t as Record<string, unknown>) } : { tag: String(t) }));
+    out = { ...out, tags: fixed };
+  }
+  return out;
+}
+
 export class MetadataCache extends Events {
   resolvedLinks: Record<string, Record<string, number>> = {};
   /**
@@ -427,7 +453,7 @@ export class MetadataCache extends Events {
   }
 
   setCache(path: string, cache: CachedMetadataLike): void {
-    this.caches.set(path, cache);
+    this.caches.set(path, normalizeCacheTags(cache));
   }
 
   fileToLinktext(file: TFile, _sourcePath: string, omitMdExtension?: boolean): string {

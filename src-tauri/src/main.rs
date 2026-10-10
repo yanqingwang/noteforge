@@ -1,4 +1,8 @@
+// Windows 上不要附带控制台黑框（release 构建）；debug 保留控制台方便看日志。
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod bases_cmd;
+mod host_cmd;
 mod plugin_cmd;
 mod sync_cmd;
 
@@ -6,6 +10,7 @@ use nf_core::vault::VaultConfig;
 use nf_vault::{FileEntry, Vault, VaultConfigExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use tauri::Manager;
 
 // ── Managed State ───────────────────────────────────────────────────
 pub struct AppState {
@@ -354,6 +359,16 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        // 显式把打包进二进制的图标设到所有窗口（Windows 标题栏/Alt-Tab 用的是窗口图标，
+        // 与 exe 文件图标是两条路径；不显式设置时可能仍显示 Tauri 默认的图标）。
+        .setup(|app| {
+            if let Some(icon) = app.default_window_icon().cloned() {
+                for (_label, win) in app.webview_windows() {
+                    let _ = win.set_icon(icon.clone());
+                }
+            }
+            Ok(())
+        })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             open_vault,
@@ -390,6 +405,9 @@ fn main() {
             plugin_cmd::install_plugin,
             plugin_cmd::marketplace_index,
             plugin_cmd::marketplace_search,
+            plugin_cmd::marketplace_stats,
+            host_cmd::host_os,
+            host_cmd::run_git,
             bases_cmd::index_metadata,
         ])
         .run(tauri::generate_context!())

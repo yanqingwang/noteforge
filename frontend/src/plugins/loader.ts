@@ -31,6 +31,34 @@ export interface EvaluateResult {
   error?: { message: string; stack?: string; phase: "evaluate" };
 }
 
+/** 宿主真实平台信息。应用启动后用 `setHostPlatform()` 注入（来自 Rust `host_os`）。 */
+export interface HostPlatform {
+  /** Node 风格：win32 / linux / darwin */
+  os: string;
+  arch: string;
+  homedir: string;
+}
+
+// 模块求值时先估一个默认：真 Node（harness）能拿到真实值；webview 里没有 process，先按 linux，
+// 之后由应用调用 setHostPlatform() 覆盖。
+let hostPlatform: HostPlatform = (() => {
+  const p = (globalThis as unknown as { process?: { platform?: string; arch?: string; env?: Record<string, string | undefined>; versions?: { node?: string } } }).process;
+  const real = !!p && !!p.versions?.node && typeof p.platform === "string";
+  const os = real ? p!.platform! : "linux";
+  const arch = real ? (p!.arch ?? "x64") : "x64";
+  const env = p?.env ?? {};
+  const homedir = os === "win32" ? (env.USERPROFILE ?? "C:\\Users\\Default") : (env.HOME ?? "/home/user");
+  return { os, arch, homedir };
+})();
+
+export function setHostPlatform(p: Partial<HostPlatform>): void {
+  hostPlatform = { ...hostPlatform, ...p };
+}
+
+export function getHostPlatform(): HostPlatform {
+  return hostPlatform;
+}
+
 /** 提供全局 shim：插件常假定 node 环境（process/global/Buffer）。 */
 export function installNodeGlobals(): void {
   const g = globalThis as unknown as Record<string, unknown>;
@@ -38,12 +66,13 @@ export function installNodeGlobals(): void {
   if (!g.process) {
     g.process = {
       env: { NODE_ENV: "production", ELECTRON_RUN_AS_NODE: "1" },
-      platform: "linux",
-      arch: "x64",
+      // 用 getter：setHostPlatform() 之后立刻生效，避免读到过期的硬编码值
+      get platform() { return hostPlatform.os; },
+      get arch() { return hostPlatform.arch; },
       version: "v22.0.0",
       versions: { node: "22.0.0", electron: "0.0.0" },
       argv: [],
-      cwd: () => "/",
+      cwd: () => (hostPlatform.os === "win32" ? "C:\\" : "/"),
       nextTick: (fn: (...a: unknown[]) => void, ...args: unknown[]) => queueMicrotask(() => fn(...args)),
     };
   }
@@ -74,6 +103,14 @@ export function installNodeGlobals(): void {
       },
     };
     g.Buffer = B;
+  }
+  // 非跨源隔离环境（Tauri webview 默认没有 COOP/COEP）里没有 SharedArrayBuffer。
+  // 不少打包进插件的库会在**模块顶层无守卫地** `new Int32Array(new SharedArrayBuffer(4))`
+  // 当 4 字节暂存/同步量用（Copilot 就这样），一句就整包加载失败。
+  // 用 ArrayBuffer 顶替：满足特性探测与「当缓冲用」的场景（Atomics 的非 wait/notify 操作
+  // 在普通 ArrayBuffer 上也合法）；真·跨线程共享仍然不可用——那种插件本来就跑不起来。
+  if (!g.SharedArrayBuffer && typeof ArrayBuffer !== "undefined") {
+    g.SharedArrayBuffer = ArrayBuffer;
   }
 }
 
@@ -152,6 +189,73 @@ export function evaluatePlugin(code: string, opts: EvaluateOptions): EvaluateRes
 }
 
 /** node 内建模块的最小桩：够插件在浏览器里跑常见路径。 */
+/** 受限的 git 执行钩子：应用里接 `invoke("run_git")`；harness 无宿主时保持不支持。 */
+export interface GitResult {
+  status: number;
+  stdout: string;
+  stderr: string;
+}
+export type GitRunner = (args: string[]) => Promise<GitResult>;
+
+let runGitImpl: GitRunner | null = null;
+export function setRunGit(fn: GitRunner | null): void {
+  runGitImpl = fn;
+}
+
+const CHILD_UNSUPPORTED = "noteforge 沙箱不支持 child_process（仅允许执行 git）";
+
+/**
+ * `child_process` 的最小实现：只允许跑 `git`（走宿主注入的 runGit），其余一律报不支持。
+ * 目的：让 `vault-force-sync` 这类用 `execFile("git", …)` 的插件能在沙箱里工作。
+ */
+function createChildProcess(): RequireEntry {
+  const noopChild = () => ({ on(): unknown { return this; }, kill(): void {}, pid: 0, stdout: null, stderr: null });
+  const finish = (cb: unknown, run: () => Promise<GitResult>): void => {
+    void run().then(
+      (r) => {
+        if (typeof cb === "function") {
+          cb(
+            r.status === 0 ? null : Object.assign(new Error(`git exited with code ${r.status}`), { code: r.status }),
+            r.stdout,
+            r.stderr,
+          );
+        }
+      },
+      (e: unknown) => {
+        if (typeof cb === "function") cb(e instanceof Error ? e : new Error(String(e)), "", String((e as Error)?.message ?? e));
+      },
+    );
+  };
+  const execFile = (file: unknown, argsOrOpts?: unknown, optsOrCb?: unknown, maybeCb?: unknown) => {
+    const args = Array.isArray(argsOrOpts) ? (argsOrOpts as unknown[]).map(String) : [];
+    const cb = typeof optsOrCb === "function" ? optsOrCb : maybeCb;
+    const exe = String(file ?? "").replace(/\.exe$/i, "").split(/[\\/]/).pop();
+    if (exe !== "git" || !runGitImpl) throw new Error(CHILD_UNSUPPORTED);
+    finish(cb, () => runGitImpl!(args));
+    return noopChild();
+  };
+  const exec = (cmd: unknown, optsOrCb?: unknown, maybeCb?: unknown) => {
+    const cb = typeof optsOrCb === "function" ? optsOrCb : maybeCb;
+    const m = String(cmd ?? "").trim().match(/^git\b([\s\S]*)$/);
+    if (!m || !runGitImpl) throw new Error(CHILD_UNSUPPORTED);
+    const args = (m[1].match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((s) => s.replace(/^["']|["']$/g, ""));
+    finish(cb, () => runGitImpl!(args));
+    return noopChild();
+  };
+  const mod: Record<string, unknown> = { execFile, exec, __esModule: false };
+  return new Proxy(mod, {
+    get(t, p) {
+      const key = p as string;
+      if (key in t) return t[key];
+      if (key === "__esModule") return false;
+      // spawn / fork / execSync 等一律不支持（调用时抛，保持访问不炸）
+      return () => {
+        throw new Error(CHILD_UNSUPPORTED);
+      };
+    },
+  }) as RequireEntry;
+}
+
 export function createNodeBuiltins(): Record<string, RequireEntry> {
   const pathImpl = {
     join: (...p: string[]) => p.filter(Boolean).join("/").replace(/\/+/g, "/"),
@@ -214,7 +318,18 @@ export function createNodeBuiltins(): Record<string, RequireEntry> {
     url: urlImpl,
     events: eventsImpl,
     util: utilImpl,
-    os: { platform: () => "linux", homedir: () => "/home/wang", tmpdir: () => "/tmp", EOL: "\n" },
+    os: {
+      platform: () => hostPlatform.os,
+      arch: () => hostPlatform.arch,
+      homedir: () => hostPlatform.homedir,
+      tmpdir: () =>
+        hostPlatform.os === "win32"
+          ? ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TEMP ?? "C:\\Temp")
+          : "/tmp",
+      get EOL() {
+        return hostPlatform.os === "win32" ? "\r\n" : "\n";
+      },
+    },
     // fs 整体禁用（插件应走 app.vault），但**属性访问不能抛错**：
     // obsidian-git 在模块顶层就取 `require("fs/promises")`，抛错会让它整包加载失败
     // （表现为 “Class extends value undefined”，根因完全看不出来）。
@@ -223,14 +338,7 @@ export function createNodeBuiltins(): Record<string, RequireEntry> {
     "fs/promises": disabledNodeModule("fs/promises", "请用 app.vault 的读写 API"),
     "node:fs": disabledNodeModule("node:fs", "请用 app.vault 的读写 API"),
     "node:fs/promises": disabledNodeModule("node:fs/promises", "请用 app.vault 的读写 API"),
-    child_process: new Proxy(
-      {},
-      {
-        get: () => {
-          throw new Error("noteforge 沙箱不支持 child_process");
-        },
-      },
-    ),
+    child_process: createChildProcess(),
     crypto: {
       randomUUID: () => crypto.randomUUID(),
       getRandomValues: <T extends ArrayBufferView | null>(a: T): T => {
@@ -240,6 +348,36 @@ export function createNodeBuiltins(): Record<string, RequireEntry> {
         return a;
       },
     },
+    // async_hooks：Copilot 用 AsyncLocalStorage 做请求上下文传递
+    async_hooks: {
+      AsyncLocalStorage: class {
+        private store: unknown;
+        getStore(): unknown { return this.store; }
+        run<T>(store: unknown, cb: (...a: unknown[]) => T, ...args: unknown[]): T {
+          const prev = this.store;
+          this.store = store;
+          try {
+            return cb(...args);
+          } finally {
+            this.store = prev;
+          }
+        }
+        enterWith(store: unknown): void { this.store = store; }
+        exit<T>(cb: (...a: unknown[]) => T, ...args: unknown[]): T { return cb(...args); }
+        disable(): void { this.store = undefined; }
+      },
+      createHook: () => ({ enable(): void {}, disable(): void {} }),
+      AsyncResource: class { constructor(..._a: unknown[]) {} },
+      __esModule: false,
+    },
+    // 插件会 `require("process")`（Copilot 就取 process.cwd）——转出全局 shim
+    process: ((): RequireEntry => {
+      const g = globalThis as unknown as { process?: Record<string, unknown> };
+      const p = g.process ?? (g.process = {});
+      if (typeof p.cwd !== "function") p.cwd = () => (hostPlatform.os === "win32" ? "C:\\" : "/");
+      if (!p.env) p.env = {};
+      return p as RequireEntry;
+    })(),
     tty,
     // zlib：插件用 brotli/gzip 解压内嵌资源，给出 Node 同名函数的薄实现
     zlib: {
@@ -357,7 +495,21 @@ function createEventsModule(): RequireEntry {
       return this;
     }
   }
-  return { EventEmitter, default: EventEmitter };
+  // Node 在 EventEmitter 类上还有静态成员；Copilot 会读取/打补丁 `EventEmitter.setMaxListeners`，
+  // 缺了它就报 "Cannot read properties of undefined (reading 'Symbol(...setMaxListeners-shim)')"。
+  const EE = EventEmitter as unknown as Record<string, unknown>;
+  const oncePromise = (emitter: { once?: (ev: string, cb: (...a: unknown[]) => void) => unknown }, ev: string) =>
+    new Promise<unknown[]>((resolve) => emitter.once?.(ev, (...a: unknown[]) => resolve(a)));
+  EE.defaultMaxListeners = 10;
+  EE.setMaxListeners = () => EventEmitter;
+  EE.getEventListeners = () => [];
+  EE.once = oncePromise;
+  const mod: Record<string, unknown> = { EventEmitter, default: EventEmitter };
+  mod.setMaxListeners = EE.setMaxListeners;
+  mod.getEventListeners = EE.getEventListeners;
+  mod.defaultMaxListeners = 10;
+  mod.once = oncePromise;
+  return mod as RequireEntry;
 }
 
 /**
@@ -411,7 +563,7 @@ export function withNodePrefixAliases(map: Record<string, RequireEntry>): Record
 /** Obsidian 插件常用 electron（多数只为 isMacOS/isWin 之类） */
 export function createElectronStub(): RequireEntry {
   const remote = {
-    app: { getPath: (k: string) => `/tmp/${k}`, getVersion: () => "0.0.0", getName: () => "NoteForge" },
+    app: { getPath: (k: string) => (hostPlatform.os === "win32" ? `C:\\Temp\\${k}` : `/tmp/${k}`), getVersion: () => "0.0.0", getName: () => "NoteForge" },
     shell: {
       openExternal: async (url: string) => {
         window.open(url, "_blank");
@@ -429,8 +581,8 @@ export function createElectronStub(): RequireEntry {
     clipboard: remote.clipboard,
     remote,
     ipcRenderer: { on: () => undefined, send: () => undefined, invoke: async () => undefined },
-    isMacOS: false,
-    isWin: false,
-    isLinux: true,
+    get isMacOS() { return hostPlatform.os === "darwin"; },
+    get isWin() { return hostPlatform.os === "win32"; },
+    get isLinux() { return hostPlatform.os === "linux"; },
   };
 }

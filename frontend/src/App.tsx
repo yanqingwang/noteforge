@@ -10,15 +10,14 @@ import { BasesPane } from "./components/BasesPane";
 import { resolveWikilink, splitWikilink } from "./editor/wikilink";
 import AboutDialog from "./components/AboutDialog";
 import SettingsDialog from "./components/SettingsDialog";
-import PluginPanel from "./components/PluginPanel";
+import { obsidianRuntime } from "./plugins/obsidianRuntime";
 import PluginSettings from "./components/PluginSettings";
 import PluginSettingDialog from "./components/PluginSettingDialog";
-import { obsidianRuntime } from "./plugins/obsidianRuntime";
 import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
-import DropdownMenu from "./components/DropdownMenu";
+import DropdownMenu, { type MenuItem } from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
 import { appVersion } from "./version";
 import type { OutlineItem } from "./editor/bridge";
@@ -29,6 +28,12 @@ const btnBase: React.CSSProperties = {
   padding: "5px 10px", border: "none", borderRadius: 4, cursor: "pointer",
   fontSize: 13, background: "transparent", color: "#555",
   display: "flex", alignItems: "center", gap: 4,
+};
+
+/** 最左侧图标栏的按钮（悬停 title 显示文字）。 */
+const railBtn: React.CSSProperties = {
+  width: 30, height: 30, border: "none", borderRadius: 6, cursor: "pointer",
+  background: "transparent", fontSize: 15, lineHeight: 1, padding: 0,
 };
 
 
@@ -62,7 +67,7 @@ function App() {
   // 主区插件视图容器常驻挂载，运行时用 getter 取（见 mainContainer）
   const mainPluginHostRef = useRef<HTMLDivElement | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
-  const [sidebarMode, setSidebarMode] = useState<"files" | "outline" | "plugins">("files");
+  const [sidebarMode, setSidebarMode] = useState<"files" | "outline">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("nf-theme") === "dark" ? "dark" : "light");
@@ -419,7 +424,7 @@ function App() {
     { label: "图谱视图", disabled: true as const },
   ];
 
-  const toolsMenu = [
+  const toolsMenu: MenuItem[] = [
     { label: "设置", action: () => setSettingsOpen(true) },
     { label: "生成测试库", action: async () => {
       if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '请先打开 Vault' } as any); return; }
@@ -489,6 +494,34 @@ function App() {
     return cmds;
   }, [handleBrowse, vaultStats, newNote, saveNote, pluginTick]);
 
+  // 「工具」菜单里的插件区：命令 + 视图 + 管理入口。
+  // 插件默认收在菜单里而不再占侧栏；需要常用快捷方式的话走最左侧的图标栏。
+  const pluginToolsMenu: MenuItem[] = useMemo(() => {
+    const out: MenuItem[] = [
+      { divider: true },
+      { label: "插件", disabled: true },
+    ];
+    const cmds = commands.filter((c) => c.id.startsWith("plugin-") || c.id.startsWith("obsidian-plugin-"));
+    if (cmds.length === 0) out.push({ label: "（暂无插件命令）", disabled: true });
+    for (const c of cmds) out.push({ label: c.name, action: c.action });
+    const views = obsidianRuntime
+      .list()
+      .filter((p) => p.enabled)
+      .flatMap((p) => p.views.map((v) => ({ type: v, plugin: p.name })));
+    if (views.length > 0) {
+      out.push({ divider: true }, { label: "插件视图", disabled: true });
+      for (const v of views) {
+        out.push({ label: `${v.plugin} · ${v.type.split("-").pop()}`, action: () => void obsidianRuntime.openView(v.type) });
+      }
+    }
+    out.push(
+      { divider: true },
+      { label: "插件管理 / 市场…", action: () => setPluginSettingsOpen(true) },
+      { label: "重新加载插件", action: () => void obsidianRuntime.reload() },
+    );
+    return out;
+  }, [commands, pluginTick]);
+
   return (
     <div data-nf-dark={theme === "dark"} style={{ display: "flex", flexDirection: "column", height: "100vh",
       background: theme === "dark" ? "#1e1e1e" : "#fff", colorScheme: theme }}>
@@ -511,7 +544,7 @@ function App() {
         <DropdownMenu label="文件" items={fileMenu} />
         <DropdownMenu label="编辑" items={editMenu} />
         <DropdownMenu label="视图" items={viewMenu} />
-        <DropdownMenu label="工具" items={toolsMenu} />
+        <DropdownMenu label="工具" items={[...toolsMenu, ...pluginToolsMenu]} />
         <DropdownMenu label="帮助" items={helpMenu} />
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: "#999", cursor: "pointer" }}
@@ -545,6 +578,21 @@ function App() {
 
       {/* ── 主区域 ── */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* 最左侧图标栏：关键操作的快捷方式（鼠标悬停显示文字） */}
+        <div style={{ width: 38, flexShrink: 0, background: theme === "dark" ? "#252526" : "#f3f3f3",
+          borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column",
+          alignItems: "center", paddingTop: 6, gap: 2 }}>
+          <button style={railBtn} title="文件 / 大纲（切换侧栏）"
+            onClick={() => { setSidebarVisible(v => !v); setSidebarMode("files"); }}>📁</button>
+          <button style={railBtn} title="快速切换 (Ctrl+O)" onClick={() => setShowQuickSwitcher(true)}>🔍</button>
+          <button style={railBtn} title="命令面板 (Ctrl+P)" onClick={() => setShowCommandPalette(true)}>⌘</button>
+          <div title="插件工具（命令 / 视图）">
+            <DropdownMenu label="🧩" items={[...toolsMenu, ...pluginToolsMenu]} />
+          </div>
+          <div style={{ flex: 1 }} />
+          <button style={railBtn} title="插件管理 / 市场…" onClick={() => setPluginSettingsOpen(true)}>🔌</button>
+          <button style={railBtn} title="设置" onClick={() => setSettingsOpen(true)}>⚙</button>
+        </div>
         {sidebarVisible && files.length > 0 && (
           <div className="nf-sidebar" style={{ width: 260, minWidth: 200, background: theme === "dark" ? "#252526" : "#fafafa", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", borderBottom: "1px solid #eee" }}>
@@ -560,18 +608,10 @@ function App() {
                   color: theme === "dark" ? "#ccc" : "#555" }}>
                 📑 大纲
               </button>
-              <button onClick={() => setSidebarMode("plugins")}
-                style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: sidebarMode === "plugins" ? (theme === "dark" ? "#333" : "#fff") : "transparent",
-                  color: theme === "dark" ? "#ccc" : "#555" }}>
-                🧩 插件
-              </button>
             </div>
             {sidebarMode === "files"
               ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} extraExts={pluginExts} />
-              : sidebarMode === "outline"
-                ? <OutlinePanel items={outlineItems} dark={theme === "dark"} />
-                : <PluginPanel dark={theme === "dark"} onOpenSettings={() => setPluginSettingsOpen(true)} onRefresh={() => void obsidianRuntime.reload()} onOpenPluginSettings={(id) => setPluginSettingFor(id)} />}
+              : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
           </div>
         )}
         {basesFile && (

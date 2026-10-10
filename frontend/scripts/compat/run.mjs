@@ -15,7 +15,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -891,7 +891,7 @@ async function main() {
     process.exit(2);
   }
   installDom();
-  const shim = await import(BUNDLE);
+  const shim = await import(pathToFileURL(BUNDLE).href);
 
   const sampleFile = resolve(HERE, "plugins.sample.json");
   const sample = JSON.parse(readFileSync(sampleFile, "utf8"));

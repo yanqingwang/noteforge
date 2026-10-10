@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 const GH_PROXIES: [&str; 2] = ["https://ghfast.top", "https://gh-proxy.com"];
 const JSDELIVR: &str = "https://cdn.jsdelivr.net/gh";
 const MARKET_INDEX: &str = "https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugins.json";
+/// 官方下载量统计（`{"<id>":{"downloads":N,"updated":ts}}`）。用于「安装量/热度」。
+const MARKET_STATS: &str = "https://cdn.jsdelivr.net/gh/obsidianmd/obsidian-releases@master/community-plugin-stats.json";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InstalledPlugin {
@@ -35,6 +37,8 @@ pub struct MarketplaceEntry {
     pub repo: String,
     pub author: String,
     pub description: String,
+    /// 官方下载量（来自 community-plugin-stats.json；取不到为 0）
+    pub downloads: u64,
 }
 
 #[derive(Serialize)]
@@ -192,30 +196,88 @@ pub async fn marketplace_index() -> Result<String, String> {
     res.text().await.map_err(|e| e.to_string())
 }
 
-/// 从文本里取搜索/展示需要的字段，避免把 2.5MB 的索引整体丢给前端。
+/// 官方下载量统计。前端缓存 24h（与索引同策略）。
 #[tauri::command]
-pub fn marketplace_search(index_json: &str, query: &str, limit: usize) -> Result<Vec<MarketplaceEntry>, String> {
+pub async fn marketplace_stats() -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("NoteForge/0.2")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client.get(MARKET_STATS).send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("HTTP {}", res.status()));
+    }
+    res.text().await.map_err(|e| e.to_string())
+}
+
+/// 兼容性等级：0 通过 / 1 部分可用 / 2 仅加载 / 3 未测 / 4 不兼容。
+fn compat_rank(status: &str) -> u8 {
+    match status {
+        "pass" => 0,
+        "pass-view-error" | "pass-settings-error" => 1,
+        "load-only" => 2,
+        "" => 3,
+        _ => 4,
+    }
+}
+
+/// 从索引里取搜索/展示需要的字段；按 `sort`（compat/downloads/official）**先排序再截断**，
+/// 否则「按热度取前 N」会被索引原顺序的截断吃掉。
+#[tauri::command]
+pub fn marketplace_search(
+    index_json: &str,
+    stats_json: Option<&str>,
+    compat_json: Option<&str>,
+    query: &str,
+    sort: Option<&str>,
+    limit: usize,
+) -> Result<Vec<MarketplaceEntry>, String> {
     let all: Vec<serde_json::Value> = serde_json::from_str(index_json).map_err(|e| e.to_string())?;
+    let stats: serde_json::Value = stats_json
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let compat: serde_json::Value = compat_json
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(serde_json::Value::Null);
+
     let q = query.trim().to_lowercase();
-    let mut out = Vec::new();
-    for v in all {
+    let mut rows: Vec<(MarketplaceEntry, u8)> = Vec::new();
+    for v in &all {
         let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let repo = v.get("repo").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let author = v.get("author").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let description = v.get("description").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        if q.is_empty() || id.to_lowercase().contains(&q)
+        if !(q.is_empty()
+            || id.to_lowercase().contains(&q)
             || name.to_lowercase().contains(&q)
             || description.to_lowercase().contains(&q)
-            || author.to_lowercase().contains(&q)
+            || author.to_lowercase().contains(&q))
         {
-            out.push(MarketplaceEntry { id, name, repo, author, description });
-            if out.len() >= limit.max(1) {
-                break;
-            }
+            continue;
         }
+        let downloads = stats
+            .get(&id)
+            .and_then(|s| s.get("downloads"))
+            .and_then(|d| d.as_u64())
+            .unwrap_or(0);
+        let status = compat.get(&id).and_then(|c| c.get("s")).and_then(|s| s.as_str()).unwrap_or("");
+        rows.push((
+            MarketplaceEntry { id, name, repo, author, description, downloads },
+            compat_rank(status),
+        ));
     }
-    Ok(out)
+
+    match sort.unwrap_or("official") {
+        "downloads" => rows.sort_by(|a, b| b.0.downloads.cmp(&a.0.downloads)),
+        "compat" => rows.sort_by(|a, b| a.1.cmp(&b.1).then(b.0.downloads.cmp(&a.0.downloads))),
+        _ => {} // official：保持索引原顺序
+    }
+    rows.truncate(limit.max(1));
+    Ok(rows.into_iter().map(|(e, _)| e).collect())
 }
 
 async fn fetch_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
@@ -438,11 +500,36 @@ mod tests {
             {"id":"obsidian-tasks-plugin","name":"Tasks","repo":"c/d","author":"y","description":"todo"},
             {"id":"quickadd","name":"QuickAdd","repo":"e/f","author":"z","description":"capture anything"}
         ]"#;
-        assert_eq!(marketplace_search(idx, "todo", 10).unwrap().len(), 1);
-        assert_eq!(marketplace_search(idx, "quick", 10).unwrap()[0].id, "quickadd");
-        assert_eq!(marketplace_search(idx, "query", 10).unwrap()[0].id, "dataview");
-        assert_eq!(marketplace_search(idx, "作者", 10).unwrap().len(), 0);
-        assert_eq!(marketplace_search(idx, "", 2).unwrap().len(), 2, "空查询应返回前 N 条");
+        let none: Option<&str> = None;
+        assert_eq!(marketplace_search(idx, none, none, "todo", None, 10).unwrap().len(), 1);
+        assert_eq!(marketplace_search(idx, none, none, "quick", None, 10).unwrap()[0].id, "quickadd");
+        assert_eq!(marketplace_search(idx, none, none, "query", None, 10).unwrap()[0].id, "dataview");
+        assert_eq!(marketplace_search(idx, none, none, "作者", None, 10).unwrap().len(), 0);
+        assert_eq!(marketplace_search(idx, none, none, "", None, 2).unwrap().len(), 2, "空查询应返回前 N 条");
+    }
+
+    #[test]
+    fn marketplace_search_sorts_before_truncating() {
+        let idx = r#"[
+            {"id":"a","name":"A","repo":"r","author":"x","description":""},
+            {"id":"b","name":"B","repo":"r","author":"x","description":""},
+            {"id":"c","name":"C","repo":"r","author":"x","description":""}
+        ]"#;
+        let stats = r#"{"a":{"downloads":10},"b":{"downloads":300},"c":{"downloads":100}}"#;
+        let compat = r#"{"a":{"s":"fail-load"},"b":{"s":"pass"}}"#;
+
+        // 热度：先排序再截断 → b(300) 在首位，c(100) 次之
+        let hot = marketplace_search(idx, Some(stats), None, "", Some("downloads"), 2).unwrap();
+        assert_eq!(hot.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec!["b", "c"]);
+        assert_eq!(hot[0].downloads, 300);
+
+        // 兼容优先：pass(b) < 未测(c) < 不兼容(a)
+        let bycompat = marketplace_search(idx, Some(stats), Some(compat), "", Some("compat"), 3).unwrap();
+        assert_eq!(bycompat.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec!["b", "c", "a"]);
+
+        // 官方序：保持索引原顺序
+        let official = marketplace_search(idx, None, None, "", Some("official"), 3).unwrap();
+        assert_eq!(official.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec!["a", "b", "c"]);
     }
 
     /// 真实网络测试：验证「从官方市场安装插件」这条路真的能走通。

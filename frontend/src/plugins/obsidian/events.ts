@@ -7,6 +7,7 @@
  */
 
 import { parse as parseYamlImpl, stringify as stringifyYamlImpl } from "yaml";
+import { getHostPlatform } from "../loader";
 import type { EventRef } from "./types";
 
 let refSeq = 0;
@@ -290,9 +291,10 @@ export const Platform = {
   isMobileApp: false,
   isIosApp: false,
   isAndroidApp: false,
-  isMacOS: false,
-  isWin: false,
-  isLinux: true,
+  // 用 getter：宿主平台由 setHostPlatform() 注入，模块求值时未必已就绪
+  get isMacOS() { return getHostPlatform().os === "darwin"; },
+  get isWin() { return getHostPlatform().os === "win32"; },
+  get isLinux() { return getHostPlatform().os === "linux"; },
   isSafari: false,
   isPhone: false,
   isTablet: false,

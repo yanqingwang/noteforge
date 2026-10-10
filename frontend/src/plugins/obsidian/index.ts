@@ -7,7 +7,7 @@
  */
 
 import { createElement, installDomExtensions } from "./dom";
-import { createElectronStub } from "../loader";
+import { createElectronStub, getHostPlatform } from "../loader";
 import {
   Component,
   Events,
@@ -272,6 +272,10 @@ export class PluginRegistry {
    */
   add(p: Plugin, id?: string): void {
     const key = id ?? p.manifest.id;
+    // Obsidian 会给 manifest 注入 `dir`（插件目录，vault 相对）。插件常拿它拼 data.json /
+    // 资源路径；缺了会得到 undefined，再 .replace/.split 就崩（Copilot 就是这么挂的）。
+    const manifest = p.manifest as unknown as { dir?: string };
+    if (manifest && !manifest.dir) manifest.dir = `.obsidian/plugins/${key}`;
     const ctx = (p as unknown as { ctx?: PluginContext }).ctx;
     if (ctx) ctx.registryKey = key;
     this.plugins.set(key, p);
@@ -423,9 +427,10 @@ export function createObsidianApi(host: Host, opts: CreateApiOptions = {}): Obsi
     isTablet: false,
     isAndroidApp: false,
     isIosApp: false,
-    isMacOS: false,
-    isWin: false,
-    isLinux: true,
+    // getter：宿主平台由 setHostPlatform() 注入
+    get isMacOS() { return getHostPlatform().os === "darwin"; },
+    get isWin() { return getHostPlatform().os === "win32"; },
+    get isLinux() { return getHostPlatform().os === "linux"; },
   };
 
   // app.dom / app.containerEl：不少插件直接往这些容器里塞 UI（状态栏、右键菜单层）。

@@ -9,6 +9,16 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { obsidianRuntime, type PluginSummary } from "../plugins/obsidianRuntime";
 import { categorizePlugin, categoryLabel, categoryOrder } from "../plugins/categorize";
+import {
+  compatBadge,
+  compatTitle,
+  formatDownloads,
+  MARKET_SORT_KEY,
+  readMarketSort,
+  SORT_OPTIONS,
+  type CompatEntry,
+  type MarketSort,
+} from "../plugins/marketSort";
 
 interface InstalledPlugin {
   id: string;
@@ -27,10 +37,13 @@ interface MarketEntry {
   repo: string;
   author: string;
   description: string;
+  downloads: number;
 }
 
 const INDEX_KEY = "nf-plugin-market-index";
 const INDEX_TS_KEY = "nf-plugin-market-index-at";
+const STATS_KEY = "nf-plugin-market-stats";
+const STATS_TS_KEY = "nf-plugin-market-stats-at";
 const INDEX_TTL = 24 * 3600 * 1000;
 
 interface PluginSettingsProps {
@@ -50,6 +63,97 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [installing, setInstalling] = useState<string | null>(null);
+  const [sort, setSort] = useState<MarketSort>(() => readMarketSort());
+  const [statsJson, setStatsJson] = useState("");
+  const [compat, setCompat] = useState<Record<string, CompatEntry>>({});
+
+  // 兼容性评测状态表（由 scripts/compat/gen-status.mjs 生成到 public/）
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/compat-status.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j?.plugins) setCompat(j.plugins as Record<string, CompatEntry>);
+      })
+      .catch(() => {
+        /* 无数据 → 全部按「未测」展示 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 索引 + 下载量缓存 24h；排序/兼容数据变化时重取（索引走缓存，成本低）
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const at = Number(localStorage.getItem(INDEX_TS_KEY) ?? 0);
+        let indexJson = at && Date.now() - at < INDEX_TTL ? localStorage.getItem(INDEX_KEY) : null;
+        if (!indexJson) {
+          indexJson = await invoke<string>("marketplace_index");
+          localStorage.setItem(INDEX_KEY, indexJson);
+          localStorage.setItem(INDEX_TS_KEY, String(Date.now()));
+        }
+        let st = localStorage.getItem(STATS_KEY) ?? "";
+        const sat = Number(localStorage.getItem(STATS_TS_KEY) ?? 0);
+        if (!st || !(sat && Date.now() - sat < INDEX_TTL)) {
+          try {
+            st = await invoke<string>("marketplace_stats");
+            localStorage.setItem(STATS_KEY, st);
+            localStorage.setItem(STATS_TS_KEY, String(Date.now()));
+          } catch {
+            /* 离线：下载量未知，排序回落 */
+          }
+        }
+        if (cancelled) return;
+        setStatsJson(st);
+        const top = await invoke<MarketEntry[]>("marketplace_search", {
+          indexJson: indexJson ?? "[]",
+          statsJson: st,
+          compatJson: JSON.stringify(compat),
+          query: "",
+          sort,
+          limit: 60,
+        });
+        if (!cancelled) setMarket(top);
+      } catch (e) {
+        if (!cancelled) setStatus(`取市场索引失败：${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [sort, compat]);
+
+  const search = async (q: string) => {
+    setQuery(q);
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const indexJson = localStorage.getItem(INDEX_KEY) ?? "[]";
+      const res = await invoke<MarketEntry[]>("marketplace_search", {
+        indexJson,
+        statsJson,
+        compatJson: JSON.stringify(compat),
+        query: q,
+        sort,
+        limit: 60,
+      });
+      setMarket(res);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeSort = (s: MarketSort) => {
+    setSort(s);
+    localStorage.setItem(MARKET_SORT_KEY, s);
+  };
 
   const fg = dark ? "#ccc" : "#333";
   const border = dark ? "#3a3a3a" : "#e8e8e8";
@@ -66,53 +170,6 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
   useEffect(() => {
     void refreshInstalled();
   }, [vaultPath]);
-
-  // 索引缓存 24h
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      const at = Number(localStorage.getItem(INDEX_TS_KEY) ?? 0);
-      let indexJson = at && Date.now() - at < INDEX_TTL ? localStorage.getItem(INDEX_KEY) : null;
-      if (!indexJson) {
-        try {
-          indexJson = await invoke<string>("marketplace_index");
-          localStorage.setItem(INDEX_KEY, indexJson);
-          localStorage.setItem(INDEX_TS_KEY, String(Date.now()));
-        } catch (e) {
-          if (!cancelled) setStatus(`取市场索引失败：${e instanceof Error ? e.message : String(e)}`);
-          setLoading(false);
-          return;
-        }
-      }
-      const top = await invoke<MarketEntry[]>("marketplace_search", {
-        indexJson: indexJson ?? "[]",
-        query: "",
-        limit: 60,
-      });
-      if (!cancelled) {
-        setMarket(top);
-        setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const search = async (q: string) => {
-    setQuery(q);
-    if (!q.trim()) return;
-    setLoading(true);
-    try {
-      const indexJson = localStorage.getItem(INDEX_KEY) ?? "[]";
-      const res = await invoke<MarketEntry[]>("marketplace_search", { indexJson, query: q, limit: 40 });
-      setMarket(res);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const install = async (e: MarketEntry) => {
     setInstalling(e.id);
@@ -224,6 +281,7 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
                       <input type="checkbox" checked={p.enabled} onChange={() => void toggleEnabled(p)} title="启用/禁用" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500 }}>
+                          <span title={compatTitle(compat[p.id])} style={{ marginRight: 5 }}>{compatBadge(compat[p.id]).icon}</span>
                           {p.name} <span style={{ opacity: 0.6, fontWeight: 400 }}>{p.version}</span>
                         </div>
                         <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{p.description}</div>
@@ -257,7 +315,20 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
           )
         ) : (
           <>
-            <div style={{ padding: 8, display: "flex", gap: 6 }}>
+            <div style={{ padding: 8, display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>排序</span>
+              <select
+                value={sort}
+                onChange={(e) => changeSort(e.target.value as MarketSort)}
+                style={{ padding: "4px 6px", fontSize: 12, font: "inherit", background: dark ? "#333" : "#fff", color: fg, border: `1px solid ${border}`, borderRadius: 4 }}
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11, opacity: 0.5 }}>兼容性通过的排前面</span>
+            </div>
+            <div style={{ padding: "0 8px 8px", display: "flex", gap: 6 }}>
               <input
                 value={query}
                 onChange={(e) => void search(e.target.value)}
@@ -270,7 +341,9 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
                   onClick={() => {
                     setQuery("");
                     void invoke<string>("marketplace_index").then(async (indexJson) => {
-                      setMarket(await invoke<MarketEntry[]>("marketplace_search", { indexJson, query: "", limit: 60 }));
+                      setMarket(await invoke<MarketEntry[]>("marketplace_search", {
+                        indexJson, statsJson, compatJson: JSON.stringify(compat), query: "", sort, limit: 60,
+                      }));
                     });
                   }}
                 >
@@ -278,22 +351,33 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
                 </button>
               )}
             </div>
-            {market.map((e) => (
-              <div key={e.id} style={cardStyle}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500 }}>{e.name}</div>
-                  <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{e.description}</div>
-                  <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>{e.author} · {e.repo}</div>
+            {market.map((e) => {
+              const entry = compat[e.id];
+              const badge = compatBadge(entry);
+              return (
+                <div key={e.id} style={cardStyle}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500 }}>
+                      <span title={compatTitle(entry)} style={{ marginRight: 5 }}>{badge.icon}</span>
+                      {e.name}
+                    </div>
+                    <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{e.description}</div>
+                    <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>
+                      {e.author} · {e.repo}
+                      {formatDownloads(e.downloads) && <span> · ⬇ {formatDownloads(e.downloads)}</span>}
+                      <span style={{ color: badge.color }}> · {badge.label}</span>
+                    </div>
+                  </div>
+                  {installedIds.has(e.id) ? (
+                    <span style={{ fontSize: 12, opacity: 0.6 }}>已安装</span>
+                  ) : (
+                    <button style={btn} disabled={installing === e.id} onClick={() => void install(e)}>
+                      {installing === e.id ? "安装中…" : "安装"}
+                    </button>
+                  )}
                 </div>
-                {installedIds.has(e.id) ? (
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>已安装</span>
-                ) : (
-                  <button style={btn} disabled={installing === e.id} onClick={() => void install(e)}>
-                    {installing === e.id ? "安装中…" : "安装"}
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
             {!loading && market.length === 0 && (
               <div style={{ padding: 20, opacity: 0.65 }}>没有匹配的插件</div>
             )}
