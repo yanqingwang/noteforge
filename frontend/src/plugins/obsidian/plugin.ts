@@ -228,6 +228,16 @@ export abstract class PluginBase extends Component {
     return el;
   }
 
+  /** 弹一个文本输入框，返回用户输入的内容（取消返回 null）。
+   *  Obsidian 里有 app.prompt 和 plugin.promptText，quadrant-chart 等插件靠它
+   *  实现重命名/命名 cell/改轴标题等交互。宿主不提供的话，这些交互就静默失效。
+   */
+  async promptText(defaultText: string, title: string): Promise<string | null> {
+    const { TextPromptModal } = await import("./extra");
+    const modal = new TextPromptModal(this.app, defaultText, title);
+    return modal.openAndAwait();
+  }
+
   addSettingTab(tab: unknown): void {
     this.settingTabs.push(tab);
     // 直接写 registry：插件可能在 onload 之后才注册设置页，宿主要能实时看到。

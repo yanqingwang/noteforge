@@ -536,6 +536,79 @@ export class ConfirmationModal extends Modal {
   }
 }
 
+/** 文本输入对话框（Obsidian 的 app.prompt / plugin.promptText 语义）。 */
+export class TextPromptModal extends Modal {
+  private result: string | null = null;
+  private resolve!: (value: string | null) => void;
+  private defaultText: string;
+  private promptTitle: string;
+
+  constructor(app: unknown, defaultText: string, title: string) {
+    super(app);
+    this.defaultText = defaultText;
+    this.promptTitle = title;
+  }
+
+  openAndAwait(): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      this.resolve = resolve;
+      this.open();
+    });
+  }
+
+  onOpen(): void {
+    this.setTitle(this.promptTitle);
+    this.contentEl.style.display = "flex";
+    this.contentEl.style.flexDirection = "column";
+    this.contentEl.style.gap = "10px";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = this.defaultText;
+    input.style.cssText =
+      "padding:8px 10px;border:1px solid var(--background-modifier-border,#ccc);border-radius:4px;font-size:14px;outline:none;";
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this.result = input.value;
+        this.close();
+      } else if (e.key === "Escape") {
+        this.result = null;
+        this.close();
+      }
+    });
+    this.contentEl.appendChild(input);
+
+    const btns = this.buttonEl;
+    btns.style.display = "flex";
+    btns.style.justifyContent = "flex-end";
+    btns.style.gap = "8px";
+
+    const cancel = this.addButton();
+    cancel.textContent = "取消";
+    cancel.onclick = () => {
+      this.result = null;
+      this.close();
+    };
+    const ok = this.addButton();
+    ok.textContent = "确定";
+    ok.className = "mod-cta";
+    ok.onclick = () => {
+      this.result = input.value;
+      this.close();
+    };
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 30);
+  }
+
+  onClose(): void {
+    this.resolve?.(this.result);
+  }
+}
+
 /* ---------- 视图补充 ---------- */
 
 /**

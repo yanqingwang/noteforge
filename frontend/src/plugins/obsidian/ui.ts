@@ -97,6 +97,7 @@ export abstract class Modal {
   scope: unknown = null;
   shouldRestoreSelection = false;
   app: unknown;
+  private _onKeyDown: (e: KeyboardEvent) => void = () => {};
 
   constructor(app: unknown) {
     this.app = app;
@@ -117,22 +118,31 @@ export abstract class Modal {
     close.className = "nf-modal-close";
     close.setAttribute("aria-label", "关闭");
     close.textContent = "×";
-    close.onClickEvent?.(() => this.close());
+    close.addEventListener("click", () => this.close());
     this.modalEl.append(close, this.titleEl, this.contentEl, this.buttonEl);
     this.containerEl.appendChild(this.modalEl);
     this.containerEl.addEventListener("mousedown", (e) => {
       if (e.target === this.containerEl) this.close();
     });
+    // ESC 关闭
+    this._onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        this.close();
+      }
+    };
   }
 
   open(): void {
     document.body.appendChild(this.containerEl);
+    document.addEventListener("keydown", this._onKeyDown, true);
     this.onOpen();
     const first = this.contentEl.querySelector<HTMLElement>("input,textarea,button");
     first?.focus();
   }
 
   close(): void {
+    document.removeEventListener("keydown", this._onKeyDown, true);
     this.contentEl.empty?.();
     this.containerEl.remove();
     this.onClose();
@@ -397,6 +407,9 @@ export class MenuItem {
   disabled = false;
   title = "";
   icon = "";
+  section = "";
+  isLabel = false;
+  isChecked = false;
   callback?: (evt: Event) => unknown;
 
   constructor(callback?: (evt: Event) => unknown) {
@@ -405,27 +418,37 @@ export class MenuItem {
 
   setTitle(t: string): this {
     this.title = t;
-    if (this.el) this.el.textContent = t;
+    if (this.el) {
+      const label = this.el.querySelector<HTMLElement>(".nf-menu-label");
+      if (label) label.textContent = t;
+    }
     return this;
   }
 
   setIcon(i: string): this {
     this.icon = i;
-    if (this.el) setIcon(this.el, i);
     return this;
   }
 
   setDisabled(d: boolean): this {
     this.disabled = d;
-    if (this.el) this.el.toggleAttribute?.("aria-disabled", d);
+    if (this.el) this.el.classList.toggle("is-disabled", d);
     return this;
   }
 
-  setIsLabel(_isLabel: boolean): this {
+  setChecked(c: boolean): this {
+    this.isChecked = c;
+    if (this.el) this.el.classList.toggle("is-checked", c);
     return this;
   }
 
-  setSection(_s: string): this {
+  setIsLabel(l: boolean): this {
+    this.isLabel = l;
+    return this;
+  }
+
+  setSection(s: string): this {
+    this.section = s;
     return this;
   }
 
@@ -433,6 +456,13 @@ export class MenuItem {
     this.callback = cb;
     return this;
   }
+}
+
+let openMenu: Menu | null = null;
+
+/** 点击空白 / ESC 时关闭当前打开的菜单（全局只允许一个） */
+function closeOpenMenu(): void {
+  openMenu?.close();
 }
 
 export class Menu {
@@ -452,16 +482,33 @@ export class Menu {
   }
 
   addSeparator(): this {
+    const item = new MenuItem();
+    (item as any)._isSeparator = true;
+    this.items.push(item);
     return this;
   }
 
-  showAtMouseEvent(_evt: MouseEvent): this {
-    this.showAtPosition(0, 0);
+  addSection(section: string): this {
+    const item = new MenuItem();
+    item.setSection(section);
+    item.setIsLabel(true);
+    item.setTitle(section);
+    (item as any)._isSection = true;
+    this.items.push(item);
     return this;
+  }
+
+  showAtMouseEvent(evt: MouseEvent): this {
+    evt.preventDefault?.();
+    evt.stopPropagation?.();
+    return this.showAtPosition(evt.clientX, evt.clientY);
   }
 
   showAtPosition(x: number, y: number): this {
-    this.close();
+    // 关闭上一个菜单（全局只允许一个）
+    closeOpenMenu();
+    openMenu = this;
+
     const el = document.createElement("div");
     el.className = "nf-menu";
     el.setAttribute("role", "menu");
@@ -470,29 +517,131 @@ export class Menu {
       left: `${x}px`,
       top: `${y}px`,
       minWidth: "180px",
-      background: "var(--background-primary,#fff)",
-      border: "1px solid var(--background-modifier-border,#8883)",
+      maxWidth: "min(360px, 90vw)",
+      maxHeight: "min(480px, 80vh)",
+      overflowY: "auto",
+      background: "var(--background-primary, #fff)",
+      border: "1px solid var(--background-modifier-border, #8883)",
       borderRadius: "6px",
       boxShadow: "0 8px 28px rgba(0,0,0,.28)",
       padding: "4px",
       zIndex: "10001",
+      fontSize: "13px",
     } as Partial<CSSStyleDeclaration>);
+
+    // 按 section 分组渲染
+    let lastSection = "";
     for (const item of this.items) {
+      if ((item as any)._isSeparator) {
+        const sep = document.createElement("div");
+        sep.style.cssText = "height:1px;margin:4px 8px;background:var(--background-modifier-border,#e5e5e5);";
+        el.appendChild(sep);
+        continue;
+      }
+      // section 变化时加分隔线 + section 标题
+      if (item.section && item.section !== lastSection && !(item as any)._isSection) {
+        const secHeader = document.createElement("div");
+        secHeader.style.cssText =
+          "padding:6px 10px 2px;font-size:11px;color:var(--text-muted,#888);font-weight:600;text-transform:uppercase;letter-spacing:.5px;";
+        secHeader.textContent = item.section;
+        el.appendChild(secHeader);
+        lastSection = item.section;
+      }
+
       const row = document.createElement("div");
       row.className = "nf-menu-item";
-      row.textContent = item.title;
       row.setAttribute("role", "menuitem");
-      Object.assign(row.style, { padding: "5px 10px", cursor: item.disabled ? "default" : "pointer", opacity: item.disabled ? "0.5" : "1" } as Partial<CSSStyleDeclaration>);
-      if (!item.disabled) {
+      if (item.isLabel) row.classList.add("is-label");
+      if (item.isChecked) row.classList.add("is-checked");
+      if (item.disabled) row.classList.add("is-disabled");
+
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "5px 10px",
+        cursor: item.disabled || item.isLabel ? "default" : "pointer",
+        opacity: item.disabled ? "0.5" : "1",
+        borderRadius: "4px",
+        color: "var(--text-normal, #333)",
+      } as Partial<CSSStyleDeclaration>);
+
+      // 选中态勾选
+      if (item.isChecked) {
+        const check = document.createElement("span");
+        check.textContent = "✓";
+        check.style.cssText = "width:14px;text-align:center;color:var(--interactive-accent,#2d7cf0);font-size:12px;";
+        row.appendChild(check);
+      } else {
+        const pad = document.createElement("span");
+        pad.style.cssText = "width:14px;";
+        row.appendChild(pad);
+      }
+
+      // 图标（如果有）
+      if (item.icon) {
+        const ic = document.createElement("span");
+        ic.className = "nf-menu-icon";
+        ic.textContent = item.icon;
+        ic.style.cssText = "width:16px;text-align:center;font-size:14px;";
+        row.appendChild(ic);
+      }
+
+      const label = document.createElement("span");
+      label.className = "nf-menu-label";
+      label.textContent = item.title;
+      label.style.flex = "1";
+      row.appendChild(label);
+
+      if (!item.disabled && !item.isLabel && item.callback) {
+        row.addEventListener("mouseenter", () => {
+          row.style.background = "var(--background-modifier-hover, rgba(0,0,0,.06))";
+        });
+        row.addEventListener("mouseleave", () => {
+          row.style.background = "transparent";
+        });
         row.addEventListener("click", (e) => {
+          e.stopPropagation();
           item.callback?.(e);
           this.close();
         });
       }
       el.appendChild(row);
     }
+
     document.body.appendChild(el);
     this.el = el;
+
+    // 边界检测：不超出视口右下
+    requestAnimationFrame(() => {
+      if (!this.el) return;
+      const rect = this.el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      if (rect.right > vw - 8) {
+        this.el.style.left = `${Math.max(8, vw - rect.width - 8)}px`;
+      }
+      if (rect.bottom > vh - 8) {
+        this.el.style.top = `${Math.max(8, vh - rect.height - 8)}px`;
+      }
+    });
+
+    // 全局点击/ESC 关闭
+    const onDocClick = (e: MouseEvent) => {
+      if (!this.el) return;
+      if (!this.el.contains(e.target as Node)) this.close();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") this.close();
+    };
+    // 下一帧再绑定，避免触发当前点击
+    setTimeout(() => {
+      document.addEventListener("mousedown", onDocClick, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    }, 0);
+    (this as any)._onDocClick = onDocClick;
+    (this as any)._onKeyDown = onKeyDown;
+
     return this;
   }
 
@@ -502,8 +651,15 @@ export class Menu {
   }
 
   close(): void {
+    if ((this as any)._onDocClick) {
+      document.removeEventListener("mousedown", (this as any)._onDocClick, true);
+    }
+    if ((this as any)._onKeyDown) {
+      document.removeEventListener("keydown", (this as any)._onKeyDown, true);
+    }
     this.el?.remove();
     this.el = null;
+    if (openMenu === this) openMenu = null;
   }
 }
 
