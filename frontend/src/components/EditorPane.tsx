@@ -314,6 +314,9 @@ const EditorPane = memo(function EditorPane({
       if (embed) img.removeAttribute("data-embed");
       const raw = embed ?? img.getAttribute("src") ?? "";
       if (!raw || /^(?:data:|blob:|https?:|asset:)/i.test(raw) || raw.startsWith("#")) return;
+      // 已解析过同一个目标就不再重复 IPC（预览会随输入反复重渲染）
+      if (img.dataset.nfKey === raw) return;
+      img.dataset.nfKey = raw;
       resolveImageSrc(raw)
         .then(url => { if (!cancelled) img.setAttribute("src", url); })
         .catch(() => { if (!cancelled) img.setAttribute("title", `未找到附件: ${raw}`); });

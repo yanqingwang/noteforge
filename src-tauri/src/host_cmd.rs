@@ -68,9 +68,16 @@ pub fn run_git(vault_root: String, args: Vec<String>) -> Result<GitResult, Strin
     }
     // 规范化，确保工作目录落在 vault 之内
     let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let out = Command::new("git")
-        .args(&args)
-        .current_dir(&root)
+    let mut cmd = Command::new("git");
+    cmd.args(&args).current_dir(&root);
+    // 从 GUI 进程 spawn 控制台程序（git.exe）会弹出一个黑框；CREATE_NO_WINDOW 抑制它。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = cmd
         .output()
         .map_err(|e| format!("执行 git 失败：{e}"))?;
     Ok(GitResult {

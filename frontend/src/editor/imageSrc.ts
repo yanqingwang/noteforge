@@ -16,20 +16,27 @@ export type ImageSrcResolver = (rel: string) => Promise<string>;
 
 export function makeImageSrcResolver(getCfg: () => ImageSrcConfig): ImageSrcResolver {
   const cache = new Map<string, string>();
+  const failed = new Set<string>(); // 失败也缓存：预览反复重渲染时不对每个图反复 IPC
   return async (rel: string): Promise<string> => {
     const { mode, vaultPath } = getCfg();
     const key = `${mode}:${rel}`; // 按模式分桶，切换设置后不会命中旧缓存
     const hit = cache.get(key);
     if (hit) return hit;
+    if (failed.has(key)) throw new Error(`此前解析失败: ${rel}`);
     let src: string;
-    if (mode === "asset") {
-      if (!vaultPath) throw new Error("vault 未打开，无法使用 asset 模式");
-      const { convertFileSrc } = await import("@tauri-apps/api/core");
-      const abs = `${vaultPath}/${rel}`.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
-      src = convertFileSrc(abs);
-    } else {
-      const { invoke } = await import("@tauri-apps/api/core");
-      src = await invoke<string>("read_file_data", { path: rel });
+    try {
+      if (mode === "asset") {
+        if (!vaultPath) throw new Error("vault 未打开，无法使用 asset 模式");
+        const { convertFileSrc } = await import("@tauri-apps/api/core");
+        const abs = `${vaultPath}/${rel}`.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+        src = convertFileSrc(abs);
+      } else {
+        const { invoke } = await import("@tauri-apps/api/core");
+        src = await invoke<string>("read_file_data", { path: rel });
+      }
+    } catch (e) {
+      failed.add(key);
+      throw e;
     }
     cache.set(key, src);
     return src;
