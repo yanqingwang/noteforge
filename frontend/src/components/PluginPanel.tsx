@@ -6,8 +6,9 @@
  * 差别只在 noteforge 用侧栏承载而不是右侧栏。
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { obsidianRuntime, type PluginSummary } from "../plugins/obsidianRuntime";
+import { categorizePlugin, categoryLabel, categoryOrder } from "../plugins/categorize";
 
 interface PluginPanelProps {
   dark: boolean;
@@ -53,6 +54,17 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh, onOpenPlu
   const enabled = plugins.filter((p) => p.enabled);
   const views = enabled.flatMap((p) => p.views.map((v) => ({ type: v, plugin: p })));
 
+  // 按功能分类分组（Obsidian 无分类字段，靠名称+描述关键词启发式归类）
+  const groups = useMemo(() => {
+    const byKey = new Map<string, PluginSummary[]>();
+    for (const p of plugins) {
+      const key = categorizePlugin(p.name, p.description);
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(p);
+    }
+    return categoryOrder([...byKey.keys()]).map((key) => [key, byKey.get(key) ?? []] as const);
+  }, [plugins]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 13, color: fg }}>
       <div style={{ padding: "8px 10px", display: "flex", gap: 6, alignItems: "center", borderBottom: `1px solid ${border}` }}>
@@ -82,44 +94,51 @@ export default function PluginPanel({ dark, onOpenSettings, onRefresh, onOpenPlu
           </div>
         )}
 
-        {plugins.map((p) => (
-          <div key={p.id} style={{ padding: "8px 10px", borderBottom: `1px solid ${border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={p.enabled}
-                disabled={busy === p.id}
-                onChange={() => void toggle(p)}
-                title={p.enabled ? "点击禁用" : "点击启用"}
-              />
-              <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {p.name}
-              </span>
-              {/* 插件自己的设置页：只有注册了 PluginSettingTab 才有 */}
-              {p.hasSettings && (
-                <button
-                  onClick={() => onOpenPluginSettings(p.id)}
-                  style={btnStyle}
-                  title={`${p.name} 的设置`}
-                >
-                  ⚙
-                </button>
-              )}
-              <span style={{ fontSize: 11, opacity: 0.6 }}>{p.version}</span>
+        {groups.map(([key, list]) => (
+          <div key={key}>
+            <div style={{ padding: "10px 10px 4px", fontWeight: 600, fontSize: 12, opacity: 0.8 }}>
+              {categoryLabel(key)}（{list.length}）
             </div>
-            {p.error && (
-              <div style={{ fontSize: 11, color: "#d33", marginTop: 4, lineHeight: 1.5, wordBreak: "break-all" }}>
-                加载失败：{p.error}
+            {list.map((p) => (
+              <div key={p.id} style={{ padding: "8px 10px", borderBottom: `1px solid ${border}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={p.enabled}
+                    disabled={busy === p.id}
+                    onChange={() => void toggle(p)}
+                    title={p.enabled ? "点击禁用" : "点击启用"}
+                  />
+                  <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {p.name}
+                  </span>
+                  {/* 插件自己的设置页：只有注册了 PluginSettingTab 才有 */}
+                  {p.hasSettings && (
+                    <button
+                      onClick={() => onOpenPluginSettings(p.id)}
+                      style={btnStyle}
+                      title={`${p.name} 的设置`}
+                    >
+                      ⚙
+                    </button>
+                  )}
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>{p.version}</span>
+                </div>
+                {p.error && (
+                  <div style={{ fontSize: 11, color: "#d33", marginTop: 4, lineHeight: 1.5, wordBreak: "break-all" }}>
+                    加载失败：{p.error}
+                  </div>
+                )}
+                {!p.error && p.enabled && (
+                  <div style={{ fontSize: 11, opacity: 0.65, marginTop: 3 }}>
+                    {p.commands.length > 0 && <span>命令 {p.commands.length}</span>}
+                    {p.commands.length > 0 && p.views.length > 0 && <span> · </span>}
+                    {p.views.length > 0 && <span>视图 {p.views.length}</span>}
+                    {p.hasSettings && <span> · 有设置</span>}
+                  </div>
+                )}
               </div>
-            )}
-            {!p.error && p.enabled && (
-              <div style={{ fontSize: 11, opacity: 0.65, marginTop: 3 }}>
-                {p.commands.length > 0 && <span>命令 {p.commands.length}</span>}
-                {p.commands.length > 0 && p.views.length > 0 && <span> · </span>}
-                {p.views.length > 0 && <span>视图 {p.views.length}</span>}
-                {p.hasSettings && <span> · 有设置</span>}
-              </div>
-            )}
+            ))}
           </div>
         ))}
 

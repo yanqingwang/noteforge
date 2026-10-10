@@ -15,7 +15,6 @@ Obsidian 用起来很舒服，但是太大了，不仅安装包大，使用起�
 - **Wikilink 双链**：`[[链接|别名]]` 胶囊渲染 + 自动补全 + 跳转导航 + 图谱视图
 - **图片嵌入与粘贴**：`![[图片.png]]` 与标准 `![](图片.png)` 均可内联预览（Live Preview 与预览/分栏都渲染）；粘贴/拖拽自动存入附件目录，插入方式可配置（见下）
 - **编辑效率**：16 组格式快捷键、列表续行、自动配对、2 秒自动保存（原子写）
-- 
 - **Nextcloud 加密镜像同步**：vault 与 Nextcloud 目录 1:1 镜像，四象限增量，冲突双版本保留，双侧回收站防误删；内容 AES-256-GCM 加密后上传，服务器只存密文
 - **大 Vault 优化**：SHA256 去重 → 缓存文件树 → 内存常驻 vault
 - **源码语法高亮**：wikilink/标题/加粗/代码着色 + 行号
@@ -111,9 +110,25 @@ cargo test -p nf-sync
 | ❌ 失败 | 23 |
 | **合计** | **121** |
 
-### 完全可用插件清单（75 个，按下载量排序）
+### 完全可用插件清单（75 个，按功能分类）
 
-Dataview、Tasks、Advanced Tables、QuickAdd、Editing Toolbar、TaskNotes、Minimal Theme Settings、Importer、Outliner、Homepage、Linter、BRAT、Self-hosted LiveSync、Advanced Canvas、Periodic Notes、Advanced URI、Better Word Count、Image Converter、Hider、Folder notes、Auto Link Title、Image in Editor、ExcaliBrain、Better Export PDF、Reminder、Charts、File Explorer Note Count、Colored Text、Code Styler、Enhancing Mindmap、Text Format、Find orphaned files and broken links、File Color、Diagrams、Custom File Explorer sorting、Novel word count、Google Drive Sync、Todoist Sync、Heatmap Calendar、Mousewheel Image zoom、Quick Explorer、Paste image rename、Clear Unused Images、Consistent Attachments and Links、ChatGPT MD、Folder Note、Markdown Formatting Assistant、Auto Note Mover、Simple CanvaSearch、Actions URI、Charts View、AI Providers、Karpathy LLM Wiki、Colored Tags Wrangler、Typing Assistant、File Hider、Auto Template Trigger、Smart Connections Visualizer、Hotkeys for templates、Prettier Format、Dataview Serializer、From Template、Dataview Publisher、Dataview to Properties、YouTube Template、Projects Plus、Default Template、Macros、Settings Sidebar Organizer、Note archiver、Auto File Organizer、Auto Archive、Dataview Autocompletion、Dataview Toggle、Vault Agent
+**📊 数据与查询**（6）：Dataview、Dataview Serializer、Dataview Publisher、Dataview to Properties、Dataview Autocompletion、Dataview Toggle
+
+**✏️ 编辑增强**（11）：Advanced Tables、Editing Toolbar、Outliner、Linter、Auto Link Title、Image in Editor、Code Styler、Text Format、Markdown Formatting Assistant、Typing Assistant、Prettier Format
+
+**📈 图表与可视化**（9）：Advanced Canvas、ExcaliBrain、Charts、Enhancing Mindmap、Diagrams、Heatmap Calendar、Simple CanvaSearch、Charts View、Smart Connections Visualizer
+
+**🗂 文件管理**（18）：Importer、Image Converter、Folder notes、Better Export PDF、File Explorer Note Count、Find orphaned files and broken links、File Color、Custom File Explorer sorting、Mousewheel Image zoom、Paste image rename、Clear Unused Images、Consistent Attachments and Links、Folder Note、File Hider、Settings Sidebar Organizer、Note archiver、Auto File Organizer、Auto Archive
+
+**🔄 同步与备份**（3）：Self-hosted LiveSync、Google Drive Sync、Todoist Sync
+
+**✅ 任务与效率**（13）：Tasks、QuickAdd、TaskNotes、Periodic Notes、Reminder、Quick Explorer、Auto Note Mover、Auto Template Trigger、Hotkeys for templates、From Template、YouTube Template、Projects Plus、Default Template
+
+**🤖 AI 与智能**（4）：ChatGPT MD、AI Providers、Karpathy LLM Wiki、Vault Agent
+
+**🎨 界面与主题**（5）：Minimal Theme Settings、Homepage、Hider、Colored Text、Colored Tags Wrangler
+
+**🔧 工具**（6）：BRAT、Advanced URI、Better Word Count、Novel word count、Actions URI、Macros
 
 
 ## Arch Linux 打包

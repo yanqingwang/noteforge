@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { obsidianRuntime, type PluginSummary } from "../plugins/obsidianRuntime";
+import { categorizePlugin, categoryLabel, categoryOrder } from "../plugins/categorize";
 
 interface InstalledPlugin {
   id: string;
@@ -151,6 +152,17 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
   const installedIds = useMemo(() => new Set(installed.map((p) => p.id)), [installed]);
   const runtimeList = obsidianRuntime.list() as PluginSummary[];
 
+  // 已安装插件按功能分类分组（与侧栏插件面板同一套分类）
+  const installedGroups = useMemo(() => {
+    const byKey = new Map<string, InstalledPlugin[]>();
+    for (const p of installed) {
+      const key = categorizePlugin(p.name, p.description || "");
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(p);
+    }
+    return categoryOrder([...byKey.keys()]).map((key) => [key, byKey.get(key) ?? []] as const);
+  }, [installed]);
+
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1,
     padding: "8px 0",
@@ -200,41 +212,48 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
               </button>
             </div>
           ) : (
-            installed.map((p) => {
-              const rt = runtimeList.find((r) => r.id === p.id);
-              return (
-                <div key={p.id} style={cardStyle}>
-                  <input type="checkbox" checked={p.enabled} onChange={() => void toggleEnabled(p)} title="启用/禁用" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500 }}>
-                      {p.name} <span style={{ opacity: 0.6, fontWeight: 400 }}>{p.version}</span>
-                    </div>
-                    <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{p.description}</div>
-                    <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>
-                      {p.author} · {Math.round(p.bytes / 1024)} KB · {p.id}
-                      {!p.has_main && <span style={{ color: "#d33" }}> · 缺少 main.js</span>}
-                      {p.enabled && rt?.error && <span style={{ color: "#d33" }}> · 加载失败：{rt.error}</span>}
-                      {p.enabled && !rt?.error && rt?.loaded && (
-                        <span style={{ color: "#2a7" }}> · 已加载（命令 {rt.commands.length} / 视图 {rt.views.length}）</span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <button
-                      style={btn}
-                      onClick={() => onOpenPluginSettings(p.id)}
-                      title={rt?.hasSettings ? "插件自己的设置页" : "这个插件没有设置页"}
-                      disabled={!rt?.hasSettings}
-                    >
-                      设置
-                    </button>
-                    <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
-                      删除
-                    </button>
-                  </div>
+            installedGroups.map(([key, list]) => (
+              <div key={key}>
+                <div style={{ padding: "10px 10px 4px", fontWeight: 600, fontSize: 12, opacity: 0.8 }}>
+                  {categoryLabel(key)}（{list.length}）
                 </div>
-              );
-            })
+                {list.map((p) => {
+                  const rt = runtimeList.find((r) => r.id === p.id);
+                  return (
+                    <div key={p.id} style={cardStyle}>
+                      <input type="checkbox" checked={p.enabled} onChange={() => void toggleEnabled(p)} title="启用/禁用" />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500 }}>
+                          {p.name} <span style={{ opacity: 0.6, fontWeight: 400 }}>{p.version}</span>
+                        </div>
+                        <div style={{ opacity: 0.65, fontSize: 12, marginTop: 2 }}>{p.description}</div>
+                        <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>
+                          {p.author} · {Math.round(p.bytes / 1024)} KB · {p.id}
+                          {!p.has_main && <span style={{ color: "#d33" }}> · 缺少 main.js</span>}
+                          {p.enabled && rt?.error && <span style={{ color: "#d33" }}> · 加载失败：{rt.error}</span>}
+                          {p.enabled && !rt?.error && rt?.loaded && (
+                            <span style={{ color: "#2a7" }}> · 已加载（命令 {rt.commands.length} / 视图 {rt.views.length}）</span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <button
+                          style={btn}
+                          onClick={() => onOpenPluginSettings(p.id)}
+                          title={rt?.hasSettings ? "插件自己的设置页" : "这个插件没有设置页"}
+                          disabled={!rt?.hasSettings}
+                        >
+                          设置
+                        </button>
+                        <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
           )
         ) : (
           <>
