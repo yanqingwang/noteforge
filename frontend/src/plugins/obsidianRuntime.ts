@@ -49,6 +49,15 @@ export interface RuntimeOptions {
    * 而命令面板里打开的插件视图仍停靠右侧面板（那是 Obsidian 的右侧栏语义）。
    */
   mainContainer?: () => HTMLElement | null;
+  /**
+   * 右侧栏容器（同步 getter）。
+   *
+   * 有则把 dock 视图挂进去（挤压中间主区，不覆盖），没有才回退到 position:fixed 浮层。
+   * 宿主通过 setRightDockVisible 控制右侧栏显隐。
+   */
+  rightDockContainer?: () => HTMLElement | null;
+  /** 右侧栏显隐回调（有视图打开时显示，全部关闭时隐藏） */
+  setRightDockVisible?: (visible: boolean) => void;
 }
 
 class ObsidianRuntime {
@@ -198,11 +207,48 @@ class ObsidianRuntime {
   }
 
   /**
-   * 停靠面板：noteforge 没有 Obsidian 的右侧栏，插件视图统一挂在右侧浮层里。
-   * 由运行时自己创建 DOM —— 不依赖 React 是否正好渲染了那个 tab，
-   * 之前就是因为容器由侧栏渲染，命令面板里打开视图时拿不到容器。
+   * 停靠面板（Obsidian 右侧栏语义）。
+   *
+   * 优先使用宿主提供的右侧栏容器（`opts.rightDockContainer`）——这样 dock 参与
+   * 主区域 flex 布局，中间主区自动伸缩，不会以浮层形式盖住内容。
+   * 宿主没提供时回退到 position:fixed 浮层（独立运行 / 测试环境用）。
    */
   private ensureDock(type: string): HTMLElement {
+    const host = this.opts?.rightDockContainer?.();
+    if (host) {
+      // 宿主右侧栏模式：从已有结构里拿/建 body
+      let body = host.querySelector<HTMLElement>(".nf-dock-body");
+      let titleEl = host.querySelector<HTMLElement>(".nf-dock-title");
+      if (!body) {
+        body = document.createElement("div");
+        body.className = "nf-dock-body";
+        Object.assign(body.style, {
+          flex: "1",
+          overflow: "auto",
+          padding: "8px",
+          // 三重保险，把 position:fixed 的插件元素限制在面板内：
+          // 1. contain:paint 为 fixed 子元素建立 containing block（现代浏览器）
+          // 2. transform:translateZ(0) 同上（兼容老浏览器）
+          // 3. isolation:isolate 建立独立层叠上下文，防止 z-index 泄漏
+          contain: "paint",
+          transform: "translateZ(0)",
+          isolation: "isolate",
+        } as Partial<CSSStyleDeclaration>);
+        const bar = host.querySelector(".nf-dock-bar");
+        if (bar) bar.after(body);
+        else host.appendChild(body);
+      }
+      if (!titleEl) {
+        titleEl = host.querySelector<HTMLElement>(".nf-dock-title");
+      }
+      if (titleEl) titleEl.textContent = viewTitle(type);
+      this.opts?.setRightDockVisible?.(true);
+      this.dock = host;
+      this.dockBody = body;
+      this.dockTitle = titleEl ?? null;
+      return body;
+    }
+    // fallback：fixed 浮层模式（无宿主右侧栏时）
     if (!this.dock || !this.dockBody) {
       const dock = document.createElement("div");
       dock.className = "nf-plugin-dock";
@@ -241,6 +287,10 @@ class ObsidianRuntime {
       body.style.flex = "1";
       body.style.overflow = "auto";
       body.style.padding = "8px";
+      // 同上：三重保险限制 position:fixed 元素在面板内
+      body.style.contain = "paint";
+      (body.style as any).transform = "translateZ(0)";
+      (body.style as any).isolation = "isolate";
       dock.append(bar, body);
       document.body.appendChild(dock);
       this.dock = dock;
@@ -258,10 +308,17 @@ class ObsidianRuntime {
       const leaf = api.workspace.getMostRecentLeaf();
       if (leaf?.view) leaf.view.onunload?.();
     }
-    this.dock?.remove();
-    this.dock = null;
-    this.dockBody = null;
-    this.dockTitle = null;
+    // 宿主右侧栏模式：隐藏而非销毁，下次打开可复用
+    const host = this.opts?.rightDockContainer?.();
+    if (host) {
+      this.opts?.setRightDockVisible?.(false);
+      if (this.dockBody) this.dockBody.replaceChildren();
+    } else {
+      this.dock?.remove();
+      this.dock = null;
+      this.dockBody = null;
+      this.dockTitle = null;
+    }
     this.currentView = null;
     this.viewChange?.(null);
   }
@@ -286,6 +343,18 @@ class ObsidianRuntime {
     const el = document.createElement("div");
     el.className = "nf-plugin-view";
     el.dataset.pluginView = type;
+    // 给每个插件视图容器建立独立的 containing block + 层叠上下文：
+    // position:fixed 的子元素会被限制在容器内，不会溢出到侧栏/工具栏区域
+    // （表现为「打开文件就全屏」）。
+    Object.assign(el.style, {
+      width: "100%",
+      height: "100%",
+      contain: "paint",
+      transform: "translateZ(0)",
+      isolation: "isolate",
+      position: "relative",
+      overflow: "hidden",
+    } as Partial<CSSStyleDeclaration>);
     host.replaceChildren(el);
     this.containers.set(key, el);
     return el;

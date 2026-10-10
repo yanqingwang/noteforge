@@ -66,6 +66,9 @@ function App() {
   const [pluginViewFile, setPluginViewFile] = useState<string | null>(null);
   // 主区插件视图容器常驻挂载，运行时用 getter 取（见 mainContainer）
   const mainPluginHostRef = useRef<HTMLDivElement | null>(null);
+  // 右侧栏（Obsidian right sidebar 语义）：插件 dock 视图挂这里，参与 flex 布局
+  const [rightDockVisible, setRightDockVisible] = useState(false);
+  const rightDockRef = useRef<HTMLDivElement | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
   const [sidebarMode, setSidebarMode] = useState<"files" | "outline">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
@@ -141,6 +144,9 @@ function App() {
         // 插件接管的文件（.mdx 象限图等）渲染在主编辑区，与 .html 同一位置；
         // 容器常驻挂载，运行时随时能拿到 ref。
         mainContainer: () => mainPluginHostRef.current,
+        // 右侧栏容器：dock 视图挂这里（flex 布局，不覆盖中间区）
+        rightDockContainer: () => rightDockRef.current,
+        setRightDockVisible: (v: boolean) => setRightDockVisible(v),
       }).catch((e) => console.warn("[plugin] 加载失败", e));
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
@@ -614,65 +620,97 @@ function App() {
               : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
           </div>
         )}
-        {basesFile && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-            <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-              <span style={{ fontSize: 12 }}>🗃</span>
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{basesFile}</span>
-              <button onClick={() => setBasesFile(null)} title="关闭"
-                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+        {/* 中间主区：flex:1 表示左右侧栏显隐时自动伸缩，所有内容视图（编辑器/Bases/主区插件）都在这里 */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
+          {basesFile && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+              <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+                <span style={{ fontSize: 12 }}>🗃</span>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{basesFile}</span>
+                <button onClick={() => setBasesFile(null)} title="关闭"
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+              </div>
+              <BasesPane basePath={basesFile} dark={theme === "dark"} onNavigate={readNote}
+                onStatus={(m) => dispatch({ type: 'SET_STATUS', text: m } as any)} />
             </div>
-            <BasesPane basePath={basesFile} dark={theme === "dark"} onNavigate={readNote}
-              onStatus={(m) => dispatch({ type: 'SET_STATUS', text: m } as any)} />
-          </div>
-        )}
-        {pluginViewFile && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-            <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-              <span style={{ fontSize: 12 }}>🧩</span>
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pluginViewFile}</span>
-              <button onClick={() => setPluginViewFile(null)} title="关闭"
-                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+          )}
+          {pluginViewFile && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+              <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+                <span style={{ fontSize: 12 }}>🧩</span>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pluginViewFile}</span>
+                <button onClick={() => setPluginViewFile(null)} title="关闭"
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+              </div>
+              {/* 常驻挂载：运行时按需往这里塞视图 DOM，所以空的时候也要渲染这个 div
+                  contain:paint + transform:translateZ(0) 强制为 position:fixed 的子元素建立
+                  containing block —— 这是真正能把 fixed 元素限制在容器内的方法
+                  （position:relative 对 fixed 无效）。防止插件里的 zoom bar、tooltip、
+                  弹层等 fixed 元素溢出到侧栏/工具栏区域，表现为「打开文件就全屏」。 */}
+              <div ref={mainPluginHostRef} style={{
+                flex: 1, overflow: "auto", minHeight: 0, position: "relative",
+                contain: "paint", transform: "translateZ(0)", isolation: "isolate",
+              }} />
             </div>
-            {/* 常驻挂载：运行时按需往这里塞视图 DOM，所以空的时候也要渲染这个 div */}
-            <div ref={mainPluginHostRef} style={{ flex: 1, overflow: "auto", minHeight: 0 }} />
-          </div>
-        )}
-        {!basesFile && !pluginViewFile && (
-        <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
-          activeFile={activeFile || ""} files={files} onNavigate={readNote}
-          theme={theme}
-          onOutline={setOutlineItems}
-          htmlFile={htmlActive ? activeFile : null}
-          vaultConfig={vaultConfig} vaultPath={vaultPath}
-          mode={paneMode} onSetMode={handleSetMode}
-          onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
-          onContentChange={(newContent) => {
-            if (!activeFile) return;
-            // 防抖 250ms：降低 render_markdown 乱序回写压力（编辑器侧另有 echo 守卫兜底）
-            if (renderTimer.current) clearTimeout(renderTimer.current);
-            renderTimer.current = setTimeout(() => {
-              const file = activeFile;
-              invoke<string>("render_markdown", { content: newContent })
-                .then((html: string) => {
-                  setContentCache(c => ({ ...c, [file]: { content: newContent, html } }));
-                })
-                .catch(() => {
-                  setContentCache(c => ({ ...c, [file]: { content: newContent, html: "" } }));
-                });
-            }, 250);
-          }} />
-        )}
-        {htmlViewFile && !pluginViewFile && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-              <span style={{ fontSize: 12 }}>🖼</span>
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{htmlViewFile}</span>
-              <button onClick={() => setHtmlViewFile(null)}
-                title="关闭"
-                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+          )}
+          {!basesFile && !pluginViewFile && (
+          <EditorPane content={cache?.content || ""} previewHtml={cache?.html || ""}
+            activeFile={activeFile || ""} files={files} onNavigate={readNote}
+            theme={theme}
+            onOutline={setOutlineItems}
+            htmlFile={htmlActive ? activeFile : null}
+            vaultConfig={vaultConfig} vaultPath={vaultPath}
+            mode={paneMode} onSetMode={handleSetMode}
+            onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
+            onContentChange={(newContent) => {
+              if (!activeFile) return;
+              // 防抖 250ms：降低 render_markdown 乱序回写压力（编辑器侧另有 echo 守卫兜底）
+              if (renderTimer.current) clearTimeout(renderTimer.current);
+              renderTimer.current = setTimeout(() => {
+                const file = activeFile;
+                invoke<string>("render_markdown", { content: newContent })
+                  .then((html: string) => {
+                    setContentCache(c => ({ ...c, [file]: { content: newContent, html } }));
+                  })
+                  .catch(() => {
+                    setContentCache(c => ({ ...c, [file]: { content: newContent, html: "" } }));
+                  });
+              }, 250);
+            }} />
+          )}
+          {htmlViewFile && !pluginViewFile && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
+                <span style={{ fontSize: 12 }}>🖼</span>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{htmlViewFile}</span>
+                <button onClick={() => setHtmlViewFile(null)}
+                  title="关闭"
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+              </div>
+              <ImageViewer filePath={htmlViewFile} />
             </div>
-            <ImageViewer filePath={htmlViewFile} />
+          )}
+        </div>
+
+        {/* 右侧栏（Obsidian right sidebar 语义）：插件 dock 视图挂这里，参与 flex 布局不覆盖内容 */}
+        {rightDockVisible && (
+          <div ref={rightDockRef} className="nf-right-sidebar" style={{
+            width: 380, flexShrink: 0, maxWidth: "46vw",
+            background: theme === "dark" ? "#252526" : "#fafafa",
+            borderLeft: "1px solid #e0e0e0",
+            display: "flex", flexDirection: "column",
+          }}>
+            <div className="nf-dock-bar" style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              padding: "6px 10px",
+              borderBottom: "1px solid var(--background-modifier-border, #ddd)",
+              fontSize: 12, color: "#777",
+            }}>
+              <span>📌</span>
+              <span className="nf-dock-title" style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}></span>
+              <button onClick={() => obsidianRuntime.closeView()} title="关闭"
+                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "20px" }}>✕</button>
+            </div>
           </div>
         )}
       </div>
