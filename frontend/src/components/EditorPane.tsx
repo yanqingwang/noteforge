@@ -333,7 +333,11 @@ const EditorPane = memo(function EditorPane({
   }, [mode, showHtml, effectiveMode]);
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+    // minHeight: 0 —— 本组件根节点是 App 中间主区（列向 flex）的子项。不写就取
+    // min-height:auto（内容高度下限），编辑区一高就把整根 flex 链撑开，.cm-editor
+    // 的 height:100% 落在 auto 高度上等于没写，.cm-scroller 拿不到确定高度 →
+    // 不成滚动容器 → 外层 overflow:hidden 只裁不滚（表现：滚轮滚不动编辑区）。
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
       {/* Tab bar */}
       <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", background: "#f8f8f8", borderBottom: "1px solid #eee", gap: 4 }}>
         <span style={{ flex: 1, fontSize: 13, color: "#666" }}>📄 {activeFile || "未打开笔记"}</span>
@@ -355,11 +359,14 @@ const EditorPane = memo(function EditorPane({
         </div>
       </div>
 
-      {/* Editor area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-        {/* 宿主 div 常驻：mode 切换只控制显隐，避免卸载导致 CM6 DOM 脱离文档 */}
+      {/* Editor area —— minHeight: 0：列向 flex 子项必须能被压到视口高度，
+          否则它的内容（CM6 整篇文档）会把这条链整体撑高，滚轮永远滚不动 */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative", minHeight: 0 }}>
+        {/* 宿主 div 常驻：mode 切换只控制显隐，避免卸载导致 CM6 DOM 脱离文档。
+            minHeight: 0 同上——它是「编辑区」这一行向 flex 的子项，高度要能被压到
+            视口范围内，CM6 才会真的出内部滚动条。 */}
         <div ref={hostRef} style={{
-          flex: 1, minWidth: 0, overflow: "hidden",
+          flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden",
           display: showHtml || effectiveMode === "preview" ? "none" : "block",
         }} />
         {!activeFile && effectiveMode !== "preview" && !showHtml && (
@@ -390,8 +397,9 @@ const EditorPane = memo(function EditorPane({
           color: #0969da; background: #ddf4ff; border-radius: 3px; padding: 1px 4px; text-decoration: none; cursor: pointer;
         }
         .markdown-body a[data-note]:hover { background: #b6e0ff; text-decoration: underline; }
-        .cm-editor { height: 100%; }
+        .cm-editor { height: 100%; overflow: hidden; }
         .cm-editor.cm-focused { outline: none; }
+        .cm-scroller { overflow: auto !important; }
       `}</style>
     </div>
   );
