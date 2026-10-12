@@ -170,6 +170,62 @@ fn delete_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<(),
     Ok(())
 }
 
+/// 拒绝路径穿越：rel 路径不允许出现 `..` 分量（绝对路径交给 nf-vault 的 join 语义自然落在 vault 外，也要拦）。
+fn ensure_safe_rel(rel: &str) -> Result<(), String> {
+    if rel.is_empty() {
+        return Err("路径为空".into());
+    }
+    let p = std::path::Path::new(rel);
+    if p.is_absolute() || p.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(format!("非法路径: {rel}"));
+    }
+    Ok(())
+}
+
+/// 重命名/移动文件或文件夹（fs::rename 对目录同样有效，仅限 vault 内）。
+#[tauri::command]
+fn rename_entry(old_path: String, new_path: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    ensure_safe_rel(&old_path)?;
+    ensure_safe_rel(&new_path)?;
+    state.with_vault(|vault| vault.rename_note(&old_path, &new_path).map_err(|e| e.to_string()))?;
+    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+    tc.clear();
+    Ok(())
+}
+
+/// 在 vault 内新建文件夹（含父目录）。
+#[tauri::command]
+fn create_folder(folder_path: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    ensure_safe_rel(&folder_path)?;
+    state.with_vault(|vault| {
+        std::fs::create_dir_all(vault.root().join(&folder_path)).map_err(|e| e.to_string())
+    })?;
+    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+    tc.clear();
+    Ok(())
+}
+
+/// 删除文件或文件夹。recursive 仅对目录有意义：必须显式传 true 才会整目录删除。
+#[tauri::command]
+fn delete_entry(entry_path: String, recursive: bool, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    ensure_safe_rel(&entry_path)?;
+    state.with_vault(|vault| {
+        let full = vault.root().join(&entry_path);
+        let meta = std::fs::symlink_metadata(&full).map_err(|e| e.to_string())?;
+        if meta.is_dir() {
+            if !recursive {
+                return Err("目录非空：需要递归删除".into());
+            }
+            std::fs::remove_dir_all(&full).map_err(|e| e.to_string())
+        } else {
+            std::fs::remove_file(&full).map_err(|e| e.to_string())
+        }
+    })?;
+    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+    tc.clear();
+    Ok(())
+}
+
 #[tauri::command]
 async fn get_file_tree(app: tauri::AppHandle) -> Result<Vec<FileEntry>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -396,6 +452,9 @@ fn main() {
             write_note,
             create_note,
             delete_note,
+            rename_entry,
+            create_folder,
+            delete_entry,
             vault_stats,
             render_markdown,
             render_note,

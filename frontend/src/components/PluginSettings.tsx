@@ -63,9 +63,11 @@ interface PluginSettingsProps {
   onClose: () => void;
   /** 打开某个插件自己的设置页 */
   onOpenPluginSettings: (pluginId: string) => void;
+  /** 打开插件的某个视图（从工具菜单并过来的入口） */
+  onOpenView: (viewType: string) => void;
 }
 
-export default function PluginSettings({ vaultPath, dark, onChanged, onClose, onOpenPluginSettings }: PluginSettingsProps) {
+export default function PluginSettings({ vaultPath, dark, onChanged, onClose, onOpenPluginSettings, onOpenView }: PluginSettingsProps) {
   const [tab, setTab] = useState<"installed" | "market">("installed");
   const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
   const [market, setMarket] = useState<MarketEntry[]>([]);
@@ -314,18 +316,30 @@ export default function PluginSettings({ vaultPath, dark, onChanged, onClose, on
                           )}
                         </div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <button
-                          style={btn}
-                          onClick={() => onOpenPluginSettings(p.id)}
-                          title={rt?.hasSettings ? "插件自己的设置页" : "这个插件没有设置页"}
-                          disabled={!rt?.hasSettings}
-                        >
-                          设置
-                        </button>
-                        <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
-                          删除
-                        </button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "stretch" }}>
+                        {p.enabled && rt?.loaded && rt.views.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {rt.views.map((v) => (
+                              <button key={v} style={btn} onClick={() => onOpenView(v)}
+                                title={`打开插件视图 ${v}`}>
+                                ▶ {v.split("-").pop()}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button
+                            style={btn}
+                            onClick={() => onOpenPluginSettings(p.id)}
+                            title={rt?.hasSettings ? "插件自己的设置页" : "这个插件没有设置页"}
+                            disabled={!rt?.hasSettings}
+                          >
+                            设置
+                          </button>
+                          <button style={btn} onClick={() => void uninstall(p)} title="删除插件目录">
+                            删除
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );

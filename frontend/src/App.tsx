@@ -388,6 +388,16 @@ function App() {
     try { const s: any = await invoke("vault_stats", {}); dispatch({ type: 'SET_STATUS', text: s } as any); } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `失败: ${e}` } as any); }
   }, []);
 
+  // 文件树增删改后的静默刷新（不动状态栏，不打扰）
+  const refreshTree = useCallback(async () => {
+    if (!vaultPath) return;
+    try {
+      const tree: FileEntry[] = await invoke("get_file_tree", {});
+      treeSigRef.current = tree.map(f => f.path).join("\u0001");
+      setFiles(tree);
+    } catch { /* 下一次轮询会补上 */ }
+  }, [vaultPath]);
+
   const fileMenu = [
     { label: "打开 Vault", action: () => handleBrowse() },
     { label: "新建笔记", shortcut: "Ctrl+N", action: newNote },
@@ -500,33 +510,17 @@ function App() {
     return cmds;
   }, [handleBrowse, vaultStats, newNote, saveNote, pluginTick]);
 
-  // 「工具」菜单里的插件区：命令 + 视图 + 管理入口。
-  // 插件默认收在菜单里而不再占侧栏；需要常用快捷方式的话走最左侧的图标栏。
+  // 「工具」菜单里的插件区：只保留管理入口。
+  // 命令走命令面板（Ctrl+P）；插件视图并入「插件管理 / 市场」对话框的已安装列表，
+  // 不再在菜单里铺长列表（命令+视图铺开既丑又难找）。
   const pluginToolsMenu: MenuItem[] = useMemo(() => {
-    const out: MenuItem[] = [
-      { divider: true },
-      { label: "插件", disabled: true },
-    ];
-    const cmds = commands.filter((c) => c.id.startsWith("plugin-") || c.id.startsWith("obsidian-plugin-"));
-    if (cmds.length === 0) out.push({ label: "（暂无插件命令）", disabled: true });
-    for (const c of cmds) out.push({ label: c.name, action: c.action });
-    const views = obsidianRuntime
-      .list()
-      .filter((p) => p.enabled)
-      .flatMap((p) => p.views.map((v) => ({ type: v, plugin: p.name })));
-    if (views.length > 0) {
-      out.push({ divider: true }, { label: "插件视图", disabled: true });
-      for (const v of views) {
-        out.push({ label: `${v.plugin} · ${v.type.split("-").pop()}`, action: () => void obsidianRuntime.openView(v.type) });
-      }
-    }
-    out.push(
+    return [
       { divider: true },
       { label: "插件管理 / 市场…", action: () => setPluginSettingsOpen(true) },
       { label: "重新加载插件", action: () => void obsidianRuntime.reload() },
-    );
-    return out;
-  }, [commands, pluginTick]);
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div data-nf-dark={theme === "dark"} style={{ display: "flex", flexDirection: "column", height: "100vh",
@@ -616,7 +610,8 @@ function App() {
               </button>
             </div>
             {sidebarMode === "files"
-              ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} extraExts={pluginExts} />
+              ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} extraExts={pluginExts}
+                  onFsChange={() => void refreshTree()} onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
               : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
           </div>
         )}
@@ -742,6 +737,7 @@ function App() {
               onChanged={() => void obsidianRuntime.reload()}
               onClose={() => setPluginSettingsOpen(false)}
               onOpenPluginSettings={(id) => setPluginSettingFor(id)}
+              onOpenView={(type) => void obsidianRuntime.openView(type)}
             />
           </div>
         </div>

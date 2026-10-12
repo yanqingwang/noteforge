@@ -1,4 +1,5 @@
-import { useEffect, useState, memo } from "react";
+import { useEffect, useState, memo, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { FileEntry } from "../App";
 
 type SortMode = "name-asc" | "name-desc" | "modified-desc" | "modified-asc" | "size-desc" | "size-asc";
@@ -11,6 +12,10 @@ interface FileTreeProps {
   vaultPath?: string;
   /** 插件通过 registerExtensions 声明接管的扩展名（额外纳入文件树） */
   extraExts?: readonly string[];
+  /** 文件系统操作（增删改）成功后刷新树 */
+  onFsChange?: () => void;
+  /** 操作结果提示（走宿主状态栏） */
+  onStatus?: (msg: string) => void;
 }
 
 /**
@@ -44,7 +49,16 @@ export function ancestorDirs(path: string): string[] {
 
 const storageKey = (vaultPath?: string) => (vaultPath ? `nf-expanded:${vaultPath}` : "");
 
-const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath, extraExts }: FileTreeProps) {
+/** 单段名称校验：非空且不含路径分隔符（新建/重命名共用） */
+function validSegment(name: string): boolean {
+  const t = name.trim();
+  return t.length > 0 && !/[/\\]/.test(t) && t !== "." && t !== "..";
+}
+
+/** 文件树右键菜单的目标 */
+interface CtxTarget { path: string; name: string; isDir: boolean; }
+
+const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath, extraExts, onFsChange, onStatus }: FileTreeProps) {
   const [sortMode, setSortMode] = useState<SortMode>("modified-desc");
   const [dirsFirst, setDirsFirst] = useState(true);
   // 展开状态取反义（默认空集 = 全部折叠，类 Obsidian）；按 vault 持久化
@@ -85,6 +99,85 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
     return acc;
   };
 
+  // ── 增删改：右键菜单 + 顶部快捷按钮 ──────────────────────────────
+  const [ctx, setCtx] = useState<{ x: number; y: number; target: CtxTarget } | null>(null);
+  const closeCtx = useCallback(() => setCtx(null), []);
+  // 点击任意处 / Escape 关闭右键菜单
+  useEffect(() => {
+    if (!ctx) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setCtx(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ctx]);
+
+  const say = (msg: string) => onStatus?.(msg);
+
+  const newNote = async (dir?: string) => {
+    const where = dir ? `${dir}/` : "";
+    const name = prompt(`新建笔记（${where || "vault 根目录"}）:`, "新笔记.md");
+    if (!name) return;
+    if (!validSegment(name)) { say("⚠ 名称不能为空且不能含路径分隔符"); return; }
+    const rel = `${where}${name.trim()}`;
+    try {
+      await invoke("create_note", { notePath: rel });
+      say(`已创建: ${rel}`);
+      onFsChange?.();
+      // 创建即打开（Obsidian 行为）
+      onSelect(rel);
+    } catch (e: any) { say(`创建失败: ${e}`); }
+  };
+
+  const newFolder = async (dir?: string) => {
+    const where = dir ? `${dir}/` : "";
+    const name = prompt(`新建文件夹（${where || "vault 根目录"}）:`, "新文件夹");
+    if (!name) return;
+    if (!validSegment(name)) { say("⚠ 名称不能为空且不能含路径分隔符"); return; }
+    const rel = `${where}${name.trim()}`;
+    try {
+      await invoke("create_folder", { folderPath: rel });
+      say(`已创建文件夹: ${rel}`);
+      setExpanded(prev => new Set(prev).add(rel));
+      onFsChange?.();
+    } catch (e: any) { say(`创建文件夹失败: ${e}`); }
+  };
+
+  const rename = async (t: CtxTarget) => {
+    const name = prompt(`重命名「${t.name}」为:`, t.name);
+    if (!name || name.trim() === t.name) return;
+    if (!validSegment(name)) { say("⚠ 名称不能为空且不能含路径分隔符"); return; }
+    const slash = t.path.lastIndexOf("/");
+    const newPath = (slash >= 0 ? t.path.slice(0, slash + 1) : "") + name.trim();
+    try {
+      await invoke("rename_entry", { oldPath: t.path, newPath });
+      say(`已重命名: ${t.path} → ${newPath}`);
+      onFsChange?.();
+    } catch (e: any) { say(`重命名失败: ${e}`); }
+  };
+
+  const remove = async (t: CtxTarget) => {
+    const what = t.isDir ? `文件夹「${t.name}」及其全部内容` : `文件「${t.name}」`;
+    if (!confirm(`确定删除${what}？\n路径: ${t.path}\n（不可恢复）`)) return;
+    try {
+      await invoke("delete_entry", { entryPath: t.path, recursive: t.isDir });
+      say(`已删除: ${t.path}`);
+      onFsChange?.();
+    } catch (e: any) { say(`删除失败: ${e}`); }
+  };
+
+  const ctxItems = (t: CtxTarget): { label: string; action: () => void; danger?: boolean }[] =>
+    t.isDir
+      ? [
+          { label: "📄 在此新建笔记", action: () => void newNote(t.path) },
+          { label: "📁 在此新建文件夹", action: () => void newFolder(t.path) },
+          { label: "✏ 重命名", action: () => void rename(t) },
+          { label: "🗑 删除", action: () => void remove(t), danger: true },
+        ]
+      : [
+          { label: "打开", action: () => onSelect(t.path) },
+          { label: "✏ 重命名", action: () => void rename(t) },
+          { label: "🗑 删除", action: () => void remove(t), danger: true },
+        ];
+
   const smallBtn: React.CSSProperties = {
     flex: 1, fontSize: 11, padding: "2px 0", border: "1px solid #ddd", borderRadius: 3,
     background: "#fff", cursor: "pointer", color: "#555",
@@ -110,30 +203,60 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
           <option value="size-desc">大小 ↓</option>
           <option value="size-asc">大小 ↑</option>
         </select>
-        {/* 批量展开/折叠 */}
+        {/* 批量展开/折叠 + 新建 */}
         <div style={{ display: "flex", gap: 4 }}>
           <button style={smallBtn} onClick={() => setExpanded(collectDirKeys(tree))}>展开全部</button>
           <button style={smallBtn} onClick={() => setExpanded(new Set())}>折叠全部</button>
         </div>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button style={smallBtn} onClick={() => void newNote()}>＋ 笔记</button>
+          <button style={smallBtn} onClick={() => void newFolder()}>＋ 文件夹</button>
+        </div>
       </div>
 
       {/* Tree */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}
+        onContextMenu={(e) => { e.preventDefault(); setCtx(null); }}>
         {tree.map(item => (
           <TreeItem key={item.path || item.name} item={item} depth={0}
             activeFile={activeFile} onSelect={onSelect}
-            expanded={expanded} setExpanded={setExpanded} />
+            expanded={expanded} setExpanded={setExpanded}
+            onCtx={(target, x, y) => setCtx({ x, y, target })} />
         ))}
       </div>
+
+      {/* 右键菜单 */}
+      {ctx && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9000 }} onClick={closeCtx} onContextMenu={(e) => { e.preventDefault(); closeCtx(); }}>
+          <div style={{
+            position: "fixed", left: Math.min(ctx.x, window.innerWidth - 180), top: Math.min(ctx.y, window.innerHeight - 160),
+            minWidth: 160, background: "#fff", border: "1px solid #d0d0d0", borderRadius: 6,
+            boxShadow: "0 4px 16px rgba(0,0,0,.18)", padding: 4, fontSize: 13, color: "#333",
+          }} onClick={(e) => e.stopPropagation()}>
+            {ctxItems(ctx.target).map((it) => (
+              <div key={it.label}
+                style={{
+                  padding: "6px 10px", borderRadius: 4, cursor: "pointer",
+                  color: it.danger ? "#c0392b" : "inherit", whiteSpace: "nowrap",
+                }}
+                onClick={() => { closeCtx(); it.action(); }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = "#f0f4fa"; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "transparent"; }}
+              >{it.label}</div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
 
 interface TreeNode { name: string; path?: string; isDir: boolean; modified: number; size: number; children: TreeNode[]; }
 
-function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded }: {
+function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, onCtx }: {
   item: TreeNode; depth: number; activeFile: string; onSelect: (p: string) => void;
   expanded: Set<string>; setExpanded: (s: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+  onCtx: (target: CtxTarget, x: number, y: number) => void;
 }) {
   const key = item.path || item.name;
   const isCollapsed = item.isDir && !expanded.has(key);
@@ -148,13 +271,15 @@ function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded }: 
             const n = new Set(prev);
             if (isCollapsed) n.add(key); else n.delete(key);
             return n;
-          })}>
+          })}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onCtx({ path: item.path || item.name, name: item.name, isDir: true }, e.clientX, e.clientY); }}>
           <span>{isCollapsed ? "▶" : "▼"}</span>
           <span>📁 {item.name}</span>
         </div>
         {!isCollapsed && item.children.map(c => (
           <TreeItem key={c.path || c.name} item={c} depth={depth + 1}
-            activeFile={activeFile} onSelect={onSelect} expanded={expanded} setExpanded={setExpanded} />
+            activeFile={activeFile} onSelect={onSelect} expanded={expanded} setExpanded={setExpanded}
+            onCtx={onCtx} />
         ))}
       </>
     );
@@ -166,6 +291,7 @@ function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded }: 
       style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13,
         background: activeFile === item.path ? "#d2e3fc" : "transparent", color: "#333", display: "flex", alignItems: "center", gap: 4 }}
       onClick={() => item.path && onSelect(item.path)}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (item.path) onCtx({ path: item.path, name: item.name, isDir: false }, e.clientX, e.clientY); }}
       onMouseEnter={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "#e8f0fe"; }}
       onMouseLeave={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "transparent"; }}>
       <span>{isHtml ? "🌐" : "📝"}</span>
