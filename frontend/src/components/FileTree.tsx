@@ -164,17 +164,46 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
     } catch (e: any) { say(`删除失败: ${e}`); }
   };
 
+  // ── 移动：右键「移动到…」选目标文件夹 / 拖拽到文件夹 ────────────
+  const [moveTarget, setMoveTarget] = useState<CtxTarget | null>(null);
+  const [drag, setDrag] = useState<CtxTarget | null>(null);
+  const [dropDir, setDropDir] = useState<string | null>(null); // null=无高亮; ""=根目录
+
+  const moveTo = async (t: CtxTarget, dir: string) => {
+    const slash = t.path.lastIndexOf("/");
+    const curDir = slash >= 0 ? t.path.slice(0, slash) : "";
+    if (dir === curDir) return; // 原地无操作
+    if (t.isDir && (dir === t.path || dir.startsWith(t.path + "/"))) {
+      say("⚠ 不能把文件夹移动到它自己或其子目录里");
+      return;
+    }
+    const newPath = dir ? `${dir}/${t.name}` : t.name;
+    try {
+      await invoke("rename_entry", { oldPath: t.path, newPath });
+      say(`已移动: ${t.path} → ${newPath}`);
+      if (dir) setExpanded(prev => new Set(prev).add(dir));
+      onFsChange?.();
+      if (activeFile === t.path) onSelect(newPath); // 移动的是当前打开的文件 → 跟随新路径
+    } catch (e: any) { say(`移动失败: ${e}`); }
+  };
+
+  // 全部文件夹（按路径深度排序，供「移动到」选择器用）
+  const allDirs = [...collectDirKeys(tree)].sort((a, b) =>
+    a.split("/").length - b.split("/").length || a.localeCompare(b));
+
   const ctxItems = (t: CtxTarget): { label: string; action: () => void; danger?: boolean }[] =>
     t.isDir
       ? [
           { label: "📄 在此新建笔记", action: () => void newNote(t.path) },
           { label: "📁 在此新建文件夹", action: () => void newFolder(t.path) },
           { label: "✏ 重命名", action: () => void rename(t) },
+          { label: "📂 移动到…", action: () => setMoveTarget(t) },
           { label: "🗑 删除", action: () => void remove(t), danger: true },
         ]
       : [
           { label: "打开", action: () => onSelect(t.path) },
           { label: "✏ 重命名", action: () => void rename(t) },
+          { label: "📂 移动到…", action: () => setMoveTarget(t) },
           { label: "🗑 删除", action: () => void remove(t), danger: true },
         ];
 
@@ -214,14 +243,28 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
         </div>
       </div>
 
-      {/* Tree */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}
-        onContextMenu={(e) => { e.preventDefault(); setCtx(null); }}>
+      {/* Tree（空白处 = 根目录放置区） */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0",
+        outline: dropDir === "" ? "2px dashed #9ab8d8" : "none", outlineOffset: -4 }}
+        onContextMenu={(e) => { e.preventDefault(); setCtx(null); }}
+        onDragOver={(e) => { if (drag) { e.preventDefault(); setDropDir(""); } }}
+        onDragLeave={(e) => {
+          if (dropDir === "" && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropDir(null);
+        }}
+        onDrop={(e) => {
+          if (!drag) return;
+          e.preventDefault();
+          const t = drag;
+          setDrag(null); setDropDir(null);
+          void moveTo(t, "");
+        }}>
         {tree.map(item => (
           <TreeItem key={item.path || item.name} item={item} depth={0}
             activeFile={activeFile} onSelect={onSelect}
             expanded={expanded} setExpanded={setExpanded}
-            onCtx={(target, x, y) => setCtx({ x, y, target })} />
+            onCtx={(target, x, y) => setCtx({ x, y, target })}
+            drag={drag} setDrag={setDrag} dropDir={dropDir} setDropDir={setDropDir}
+            onMoveTo={moveTo} />
         ))}
       </div>
 
@@ -247,39 +290,106 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
           </div>
         </div>
       )}
+
+      {/* 移动到：目标文件夹选择器 */}
+      {moveTarget && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9100, background: "rgba(0,0,0,.25)" }}
+          onClick={() => setMoveTarget(null)}>
+          <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)",
+            width: 260, maxHeight: "70vh", overflowY: "auto", background: "#fff", border: "1px solid #d0d0d0",
+            borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,.2)", padding: 6, fontSize: 13, color: "#333" }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, padding: "4px 6px 8px" }}>
+              移动「{moveTarget.name}」到：
+            </div>
+            {["", ...allDirs].map((d) => {
+              const depth = d ? d.split("/").length : 0;
+              // 文件夹不能移到自己/自己的子目录里
+              const isSelf = moveTarget.isDir && (d === moveTarget.path || d.startsWith(moveTarget.path + "/"));
+              return (
+                <div key={d || "/"} style={{
+                  padding: "5px 8px", paddingLeft: 8 + depth * 14, borderRadius: 4,
+                  cursor: isSelf ? "not-allowed" : "pointer", opacity: isSelf ? 0.4 : 1,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}
+                  title={d || "（vault 根目录）"}
+                  onClick={() => { if (isSelf) return; const t = moveTarget; setMoveTarget(null); void moveTo(t, d); }}
+                  onMouseEnter={(e) => { if (!isSelf) (e.target as HTMLElement).style.background = "#f0f4fa"; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "transparent"; }}
+                >{d ? `📁 ${d.split("/").pop()}` : "🏠（vault 根目录）"}</div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
 
 interface TreeNode { name: string; path?: string; isDir: boolean; modified: number; size: number; children: TreeNode[]; }
 
-function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, onCtx }: {
+function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, onCtx, drag, setDrag, dropDir, setDropDir, onMoveTo }: {
   item: TreeNode; depth: number; activeFile: string; onSelect: (p: string) => void;
   expanded: Set<string>; setExpanded: (s: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   onCtx: (target: CtxTarget, x: number, y: number) => void;
+  drag: CtxTarget | null; setDrag: (t: CtxTarget | null) => void;
+  dropDir: string | null; setDropDir: (d: string | null) => void;
+  onMoveTo: (t: CtxTarget, dir: string) => void;
 }) {
   const key = item.path || item.name;
   const isCollapsed = item.isDir && !expanded.has(key);
   const indent = depth * 16;
 
+  const dragProps = {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      setDrag({ path: key, name: item.name, isDir: item.isDir });
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", key);
+    },
+    onDragEnd: () => { setDrag(null); setDropDir(null); },
+  };
+
   if (item.isDir) {
+    // 拖拽合法性：不能放到自己/自己的子目录里
+    const canDrop = drag && (!drag.isDir || !(key === drag.path || key.startsWith(drag.path + "/")));
     return (
       <>
         <div data-nf-dir={item.name}
-          style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13, color: "#555", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}
+          style={{ padding: "3px 12px", paddingLeft: 12 + indent, cursor: "pointer", fontSize: 13, color: "#555", fontWeight: 500,
+            display: "flex", alignItems: "center", gap: 4,
+            background: dropDir === key ? "#dbe8f8" : undefined,
+            outline: dropDir === key ? "1px dashed #7aa0c8" : "none" }}
           onClick={() => setExpanded(prev => {
             const n = new Set(prev);
             if (isCollapsed) n.add(key); else n.delete(key);
             return n;
           })}
-          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onCtx({ path: item.path || item.name, name: item.name, isDir: true }, e.clientX, e.clientY); }}>
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onCtx({ path: item.path || item.name, name: item.name, isDir: true }, e.clientX, e.clientY); }}
+          {...dragProps}
+          onDragOver={(e) => {
+            if (!canDrop) return;
+            e.preventDefault(); e.stopPropagation(); setDropDir(key);
+          }}
+          onDragLeave={(e) => {
+            if (dropDir === key && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropDir(null);
+          }}
+          onDrop={(e) => {
+            if (!canDrop) return;
+            e.preventDefault(); e.stopPropagation();
+            const t = drag!;
+            setDrag(null); setDropDir(null);
+            onMoveTo(t, key);
+          }}>
           <span>{isCollapsed ? "▶" : "▼"}</span>
           <span>📁 {item.name}</span>
         </div>
         {!isCollapsed && item.children.map(c => (
           <TreeItem key={c.path || c.name} item={c} depth={depth + 1}
             activeFile={activeFile} onSelect={onSelect} expanded={expanded} setExpanded={setExpanded}
-            onCtx={onCtx} />
+            onCtx={onCtx}
+            drag={drag} setDrag={setDrag} dropDir={dropDir} setDropDir={setDropDir}
+            onMoveTo={onMoveTo} />
         ))}
       </>
     );
@@ -292,6 +402,7 @@ function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, on
         background: activeFile === item.path ? "#d2e3fc" : "transparent", color: "#333", display: "flex", alignItems: "center", gap: 4 }}
       onClick={() => item.path && onSelect(item.path)}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (item.path) onCtx({ path: item.path, name: item.name, isDir: false }, e.clientX, e.clientY); }}
+      {...dragProps}
       onMouseEnter={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "#e8f0fe"; }}
       onMouseLeave={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "transparent"; }}>
       <span>{isHtml ? "🌐" : "📝"}</span>
