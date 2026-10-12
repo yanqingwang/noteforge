@@ -8,7 +8,7 @@ import type { Extension } from "@codemirror/state";
 import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { livePreview } from "./livePreview";
-import { tableEditing } from "./tableEdit";
+import { tableEditing, pasteTableFromClipboard, tableContextMenuHandler } from "./tableEdit";
 
 // ── 列表续行（ED-05）────────────────────────────────────────────────
 
@@ -457,8 +457,13 @@ export function nfExtensions(opts: EditorExtOptions): Extension[] {
     autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
     closeBrackets(),
     EditorView.domEventHandlers({
-      paste: ((view: EditorView, e: ClipboardEvent) => pasteImageHandler(view, e, opts)) as any,
+      paste: ((view: EditorView, e: ClipboardEvent) => {
+        // 1) 图片文件粘贴  2) Excel/网页表格粘贴（HTML table 或 TSV）
+        if (pasteImageHandler(view, e, opts)) return true;
+        return pasteTableFromClipboard(view, e);
+      }) as any,
       drop: ((view: EditorView, e: DragEvent) => dropImageHandler(view, e, opts)) as any,
+      contextmenu: ((view: EditorView, e: MouseEvent) => tableContextMenuHandler(view, e)) as any,
     }),
     keymap.of([
       ...(opts.extraKeys ?? []),

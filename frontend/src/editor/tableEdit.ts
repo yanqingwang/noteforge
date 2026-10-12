@@ -641,3 +641,261 @@ export function tableEditing(): Extension {
     ),
   ];
 }
+
+// ── 插入表格 / 粘贴转换（Excel、网页表格）──────────────────────────
+
+/** 生成一行 `| a | b |`；单元格里的 `|` 转义、换行转空格 */
+export function buildMarkdownRow(cells: string[]): string {
+  const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  return "| " + cells.map(esc).join(" | ") + " |";
+}
+
+/** rows → 完整 Markdown 表格文本（首行表头 + 对齐行） */
+export function buildMarkdownTable(rows: string[][]): string {
+  if (!rows.length) return "";
+  const colCount = Math.max.apply(null, rows.map(r => r.length));
+  const pad = (r: string[]) => Array.from({ length: colCount }, (_, i) => {
+    const v = r[i] ?? "";
+    return v.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  });
+  const lines = [buildMarkdownRow(pad(rows[0])), buildMarkdownRow(Array.from({ length: colCount }, () => "---"))];
+  for (const r of rows.slice(1)) lines.push(buildMarkdownRow(pad(r)));
+  return lines.join("\n");
+}
+
+/** 在光标所在行末插入 rows×cols 的空表格（默认列1..列N 表头 + rows-1 空数据行） */
+export function insertTableAt(view: EditorView, rows: number, cols: number): boolean {
+  rows = Math.max(1, Math.min(rows, 30));
+  cols = Math.max(1, Math.min(cols, 20));
+  const pos = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(pos);
+  const indent = line.text.slice(0, line.text.length - line.text.trimStart().length);
+  const header = Array.from({ length: cols }, (_, i) => "列" + (i + 1));
+  const delim = Array.from({ length: cols }, () => "---");
+  // rows 含表头与对齐行：选 3×2 = 表头 + 对齐 + 1 行数据
+  const body = Array.from({ length: Math.max(0, rows - 2) }, () => Array.from({ length: cols }, () => ""));
+  const table = [buildMarkdownRow(header), buildMarkdownRow(delim),
+    ...body.map(r => buildMarkdownRow(r))].map(l => indent + l).join("\n");
+  const at = line.to;
+  const lead = line.text.trim() === "" ? "" : "\n";
+  view.dispatch({ changes: { from: at, insert: lead + table }, scrollIntoView: true });
+  const first = view.state.doc.lineAt(at + lead.length + 1);
+  const parsed = parseCells(first.text, first.from);
+  if (parsed.cells.length) focusCell(view, parsed.cells[0]);
+  return true;
+}
+
+/** HTML 表格 → 二维数组（首个 table；忽略嵌套表格内的行） */
+export function htmlToRows(html: string): string[][] | null {
+  if (typeof DOMParser === "undefined") return null;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const table = doc.querySelector("table");
+  if (!table) return null;
+  const rows: string[][] = [];
+  for (const tr of Array.from(table.querySelectorAll("tr"))) {
+    if (tr.closest("table") !== table) continue; // 嵌套表格的行不重复收集
+    const cells = Array.from(tr.querySelectorAll("th,td")).map(c =>
+      (c.textContent ?? "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim());
+    if (cells.length) rows.push(cells);
+  }
+  return rows.length ? rows : null;
+}
+
+/** TSV（Excel 的 text/plain）→ 二维数组；至少一行含制表符才算表格 */
+export function tsvToRows(text: string): string[][] | null {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n").filter(l => l.trim() !== "");
+  if (!lines.length) return null;
+  const rows = lines.map(l => l.split("\t").map(c => c.trim()));
+  if (!rows.some(r => r.length > 1)) return null;
+  return rows;
+}
+
+/** rows → 在光标行末插入 Markdown 表格 */
+export function insertMarkdownRowsAt(view: EditorView, rows: string[][]): boolean {
+  const pos = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(pos);
+  const lead = line.text.trim() === "" ? "" : "\n";
+  view.dispatch({ changes: { from: line.to, insert: lead + buildMarkdownTable(rows) + "\n" }, scrollIntoView: true });
+  return true;
+}
+
+/** 粘贴：Excel/网页表格 → Markdown 表格。返回 true 表示已接管 */
+export function pasteTableFromClipboard(view: EditorView, event: ClipboardEvent): boolean {
+  const cd = event.clipboardData;
+  if (!cd) return false;
+  const html = cd.getData("text/html") || "";
+  let rows: string[][] | null = null;
+  if (/<table[\s>]/i.test(html)) rows = htmlToRows(html);
+  if (!rows) {
+    const plain = cd.getData("text/plain") || "";
+    if (plain.includes("\t") && plain.includes("\n")) rows = tsvToRows(plain);
+  }
+  if (!rows || !rows.length) return false;
+  event.preventDefault();
+  insertMarkdownRowsAt(view, rows);
+  return true;
+}
+
+// ── 编辑器右键菜单（插入表格 / 表格操作）────────────────────────────
+
+interface PopupItem { label?: string; title?: string; divider?: boolean; header?: string; disabled?: boolean; action?: () => void; }
+
+let popupClose: (() => void) | null = null;
+
+function closeEditorPopup(): void {
+  if (popupClose) popupClose();
+  popupClose = null;
+}
+
+const POPUP_STYLE = [
+  "position:absolute", "z-index:60", "min-width:190px", "background:#fff", "color:#333",
+  "border:1px solid #d8dbe0", "border-radius:6px", "padding:4px",
+  "box-shadow:0 6px 20px rgba(0,0,0,0.16)", "font-size:12px", "line-height:1.5",
+].join(";");
+
+function popupAppend(host: HTMLDivElement, item: PopupItem, view: EditorView): void {
+  if (item.divider) {
+    const div = document.createElement("div");
+    div.setAttribute("style", "height:1px;background:#eceef1;margin:3px 6px");
+    host.appendChild(div);
+    return;
+  }
+  if (item.header) {
+    const h = document.createElement("div");
+    h.setAttribute("style", "padding:3px 8px;font-size:10px;color:#98a0ab;letter-spacing:.4px");
+    h.textContent = item.label ?? "";
+    host.appendChild(h);
+    return;
+  }
+  const el = document.createElement("div");
+  el.setAttribute("style", "padding:5px 9px;border-radius:4px;cursor:pointer;white-space:nowrap");
+  el.textContent = item.label ?? "";
+  if (item.title) el.title = item.title;
+  el.addEventListener("mouseenter", () => { el.style.background = "#eef2f7"; });
+  el.addEventListener("mouseleave", () => { el.style.background = ""; });
+  el.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeEditorPopup();
+    item.action?.();
+    view.focus();
+  });
+  host.appendChild(el);
+}
+
+function popupAt(view: EditorView, x: number, y: number, build: (host: HTMLDivElement) => void): void {
+  closeEditorPopup();
+  const host = document.createElement("div");
+  host.className = "nf-editor-menu";
+  host.setAttribute("style", POPUP_STYLE);
+  build(host);
+  if (!view.dom.style.position) view.dom.style.position = "relative";
+  view.dom.appendChild(host);
+
+  const close = () => {
+    host.remove();
+    document.removeEventListener("mousedown", onDown, true);
+    window.removeEventListener("keydown", onKey);
+    view.scrollDOM.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onScroll);
+  };
+  const onDown = (e: MouseEvent) => { if (!host.contains(e.target as Node)) close(); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { close(); view.focus(); } };
+  const onScroll = () => close();
+  document.addEventListener("mousedown", onDown, true);
+  window.addEventListener("keydown", onKey);
+  view.scrollDOM.addEventListener("scroll", onScroll);
+  window.addEventListener("resize", onScroll);
+  popupClose = close;
+
+  const hostRect = view.dom.getBoundingClientRect();
+  const w = host.offsetWidth || 200;
+  const h = host.offsetHeight || 120;
+  const left = Math.max(0, Math.min(x - hostRect.left, Math.max(0, hostRect.width - w - 4)));
+  const top = Math.max(0, Math.min(y - hostRect.top, Math.max(0, hostRect.height - h - 4)));
+  host.style.left = left + "px";
+  host.style.top = top + "px";
+}
+
+/** 网格选择器（Word 风格 8×8）：悬停选区域，点击插入 */
+function buildGridPicker(view: EditorView, host: HTMLDivElement): void {
+  const MAX = 8;
+  const label = document.createElement("div");
+  label.setAttribute("style", "padding:2px 6px 6px;font-size:11px;color:#667;text-align:center");
+  label.textContent = "选择行列（最多 8×8）";
+  const grid = document.createElement("div");
+  grid.setAttribute("style", "display:grid;grid-template-columns:repeat(8,17px);gap:2px;padding:4px 6px 6px");
+  const cells: HTMLDivElement[] = [];
+  for (let i = 0; i < MAX * MAX; i++) {
+    const r = Math.floor(i / MAX) + 1;
+    const c = (i % MAX) + 1;
+    const cell = document.createElement("div");
+    cell.setAttribute("style", "width:15px;height:15px;border:1px solid #d0d3d8;border-radius:2px;background:#fff;cursor:pointer");
+    cell.addEventListener("mouseenter", () => {
+      label.textContent = r + " 行 × " + c + " 列";
+      cells.forEach((el, k) => {
+        const on = Math.floor(k / MAX) < r && (k % MAX) < c;
+        el.style.background = on ? "#cfe0ff" : "#fff";
+        el.style.borderColor = on ? "#7aa7e8" : "#d0d3d8";
+      });
+    });
+    cell.addEventListener("click", (e) => {
+      e.preventDefault();
+      const rr = r, cc = c;
+      closeEditorPopup();
+      insertTableAt(view, rr, cc);
+      view.focus();
+    });
+    grid.appendChild(cell);
+    cells.push(cell);
+  }
+  host.appendChild(grid);
+  host.appendChild(label);
+  grid.addEventListener("mouseleave", () => {
+    label.textContent = "选择行列（最多 8×8）";
+    cells.forEach(el => { el.style.background = "#fff"; el.style.borderColor = "#d0d3d8"; });
+  });
+}
+
+/** 编辑器右键菜单：表格内 → 行列操作；表格外 → 插入表格（网格选择） */
+export function tableContextMenuHandler(view: EditorView, event: MouseEvent): boolean {
+  const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (pos == null) return false;
+  if (insideCodeBlock(view.state, pos)) return false;
+
+  const t = findTableAt(view.state, pos);
+  const x = event.clientX;
+  const y = event.clientY;
+  event.preventDefault();
+
+  popupAt(view, x, y, (host) => {
+    if (!t) {
+      popupAppend(host, { header: "插入" }, view);
+      const open = document.createElement("div");
+      open.setAttribute("style", "padding:5px 9px;border-radius:4px;cursor:pointer;white-space:nowrap");
+      open.textContent = "▦ 插入表格…";
+      open.addEventListener("mouseenter", () => { open.style.background = "#eef2f7"; });
+      open.addEventListener("mouseleave", () => { open.style.background = ""; });
+      open.addEventListener("click", (e) => {
+        e.preventDefault();
+        host.textContent = "";
+        buildGridPicker(view, host);
+      });
+      host.appendChild(open);
+      return;
+    }
+    popupAppend(host, { header: "表格" }, view);
+    const rows: Array<[string, string, () => void]> = [
+      ["⬆ 上方插入行", "Alt+↑", () => insertRow(view, "above")],
+      ["⬇ 下方插入行", "Alt+↓", () => insertRow(view, "below")],
+      ["⬅ 左侧插入列", "Alt+←", () => insertCol(view, "left")],
+      ["➡ 右侧插入列", "Alt+→", () => insertCol(view, "right")],
+      ["⇔ 对齐整张表格", "Alt+Shift+F", () => formatTableAt(view)],
+      ["↕ 切换当前列对齐", "Alt+Shift+A", () => cycleColumnAlign(view)],
+    ];
+    for (const it of rows) popupAppend(host, { label: it[0], title: it[1], action: it[2] }, view);
+    popupAppend(host, { divider: true }, view);
+    popupAppend(host, { label: "🗑 删除当前行", title: "Alt+Shift+↑", action: () => deleteRow(view), disabled: !t.canDeleteRow }, view);
+    popupAppend(host, { label: "🗑 删除当前列", title: "Alt+Shift+←", action: () => deleteCol(view), disabled: !t.canDeleteCol }, view);
+  });
+  return true;
+}
