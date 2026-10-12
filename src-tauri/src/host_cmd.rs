@@ -3,10 +3,14 @@
 //! 兼容层把 `os.platform()` 与 `child_process.execFile("git", …)` 映射到这里。
 //! 目的：① Windows 上不再向插件谎报 linux；② 让依赖 git 的插件（如 vault-force-sync）
 //! 在沙箱里可用，同时把执行面收窄到「只跑 git、只在 vault 目录、拒危险 flag」。
+//!
+//! 注意：本命令是 `async` + `spawn_blocking`——同步命令会占住 async worker，
+//! git 一旦挂起（push 等凭据/网络）就会把 IPC 全部堵死，表现为应用假死。
 
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 #[derive(Serialize)]
 pub struct HostOs {
@@ -50,9 +54,14 @@ const FORBIDDEN: [&str; 6] = [
     "--config-env",
 ];
 
-/// 受限执行：可执行文件固定 `git`，cwd 固定为 vault 根。
+const GIT_TIMEOUT_SECS: u64 = 120;
+
+/// 受限执行：可执行文件固定 `git`，cwd 固定为 vault 根，带超时（挂起的 git 会被 kill）。
 #[tauri::command]
-pub fn run_git(vault_root: String, args: Vec<String>) -> Result<GitResult, String> {
+pub async fn run_git(
+    vault_root: String,
+    args: Vec<String>,
+) -> Result<GitResult, String> {
     for a in &args {
         if a.contains('\0') {
             return Err("参数包含非法字符".into());
@@ -68,8 +77,15 @@ pub fn run_git(vault_root: String, args: Vec<String>) -> Result<GitResult, Strin
     }
     // 规范化，确保工作目录落在 vault 之内
     let root = root.canonicalize().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || run_git_blocking(&root, &args))
+        .await
+        .map_err(|e| format!("任务执行失败：{e}"))?
+}
+
+fn run_git_blocking(root: &PathBuf, args: &[String]) -> Result<GitResult, String> {
     let mut cmd = Command::new("git");
-    cmd.args(&args).current_dir(&root);
+    cmd.args(args).current_dir(root);
     // 从 GUI 进程 spawn 控制台程序（git.exe）会弹出一个黑框；CREATE_NO_WINDOW 抑制它。
     #[cfg(windows)]
     {
@@ -77,13 +93,47 @@ pub fn run_git(vault_root: String, args: Vec<String>) -> Result<GitResult, Strin
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let out = cmd
-        .output()
-        .map_err(|e| format!("执行 git 失败：{e}"))?;
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("执行 git 失败：{e}"))?;
+    let mut out_pipe = child.stdout.take().expect("stdout");
+    let mut err_pipe = child.stderr.take().expect("stderr");
+    let t_out = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut s = String::new();
+        let _ = out_pipe.read_to_string(&mut s);
+        s
+    });
+    let t_err = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut s = String::new();
+        let _ = err_pipe.read_to_string(&mut s);
+        s
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(GIT_TIMEOUT_SECS);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break Some(st),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("git 执行超时（>{GIT_TIMEOUT_SECS}s），已终止"));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => return Err(format!("等待 git 失败：{e}")),
+        }
+    };
+
+    let stdout = t_out.join().unwrap_or_default();
+    let stderr = t_err.join().unwrap_or_default();
     Ok(GitResult {
-        status: out.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+        status: status.and_then(|s| s.code()).unwrap_or(-1),
+        stdout,
+        stderr,
     })
 }
 
@@ -101,14 +151,14 @@ mod tests {
     #[test]
     fn run_git_rejects_dangerous_flags() {
         for bad in ["--git-dir=/tmp/x", "--work-tree", "--exec-path=/x", "-cuser.x=1", "--upload-pack=/bin/sh"] {
-            let r = run_git(".".into(), vec![bad.into()]);
+            let r = tauri::async_runtime::block_on(run_git(".".into(), vec![bad.into()]));
             assert!(r.is_err(), "should reject: {bad}");
         }
     }
 
     #[test]
     fn run_git_rejects_nul_and_missing_dir() {
-        assert!(run_git(".".into(), vec!["status\0".into()]).is_err());
-        assert!(run_git("/definitely/not/here/xyz".into(), vec!["status".into()]).is_err());
+        assert!(tauri::async_runtime::block_on(run_git(".".into(), vec!["status\0".into()])).is_err());
+        assert!(tauri::async_runtime::block_on(run_git("/definitely/not/here/xyz".into(), vec!["status".into()])).is_err());
     }
 }

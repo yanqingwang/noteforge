@@ -108,40 +108,46 @@ fn open_vault(path: &str, state: tauri::State<'_, AppState>) -> Result<Vec<FileE
 }
 
 #[tauri::command]
-fn read_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<NoteInfo, String> {
-    state.with_vault(|vault| {
-        let content = vault.read_note(note_path).map_err(|e| e.to_string())?;
-        let text = String::from_utf8_lossy(&content).to_string();
-        let meta = nf_markdown::parse_to_meta(note_path, &content);
-        let html = nf_render::render_html(&text);
-        let frontmatter_json = serde_json::to_string(&meta.frontmatter.fields).unwrap_or_default();
-        let word_count = text.split_whitespace().count();
+async fn read_note(note_path: String, app: tauri::AppHandle) -> Result<NoteInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.with_vault(|vault| {
+            let content = vault.read_note(&note_path).map_err(|e| e.to_string())?;
+            let text = String::from_utf8_lossy(&content).to_string();
+            let meta = nf_markdown::parse_to_meta(&note_path, &content);
+            let html = nf_render::render_html(&text);
+            let frontmatter_json = serde_json::to_string(&meta.frontmatter.fields).unwrap_or_default();
+            let word_count = text.split_whitespace().count();
 
-        Ok(NoteInfo {
-            path: note_path.to_string(),
-            content: text,
-            html,
-            frontmatter: frontmatter_json,
-            links: meta.links_out.iter().map(|l| LinkInfo {
-                target: l.target.clone(),
-                display: l.display.clone(),
-                subpath: l.subpath.clone(),
-            }).collect(),
-            tags: meta.tags_inline.iter().map(|t| t.tag.clone()).collect(),
-            word_count,
+            Ok(NoteInfo {
+                path: note_path,
+                content: text,
+                html,
+                frontmatter: frontmatter_json,
+                links: meta.links_out.iter().map(|l| LinkInfo {
+                    target: l.target.clone(),
+                    display: l.display.clone(),
+                    subpath: l.subpath.clone(),
+                }).collect(),
+                tags: meta.tags_inline.iter().map(|t| t.tag.clone()).collect(),
+                word_count,
+            })
         })
-    })
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 #[tauri::command]
-fn write_note(note_path: &str, content: &str, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault(|vault| {
-        vault.write_note(note_path, content.as_bytes()).map_err(|e| e.to_string())
-    })?;
-    // Invalidate tree cache (size/modified changed)
-    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
-    tc.clear();
-    Ok(())
+async fn write_note(note_path: String, content: String, app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.with_vault(|vault| {
+            vault.write_note(&note_path, content.as_bytes()).map_err(|e| e.to_string())
+        })?;
+        // Invalidate tree cache (size/modified changed)
+        let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+        tc.clear();
+        Ok(())
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 #[tauri::command]
@@ -165,19 +171,22 @@ fn delete_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<(),
 }
 
 #[tauri::command]
-fn get_file_tree(state: tauri::State<'_, AppState>) -> Result<Vec<FileEntry>, String> {
-    let tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
-    if !tc.is_empty() {
-        return Ok(tc.clone());
-    }
-    drop(tc);
-    // Cold cache: rebuild
-    state.with_vault(|vault| {
-        let tree = vault.file_tree().map_err(|e| e.to_string())?;
-        let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
-        *tc = tree.clone();
-        Ok(tree)
-    })
+async fn get_file_tree(app: tauri::AppHandle) -> Result<Vec<FileEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+        if !tc.is_empty() {
+            return Ok(tc.clone());
+        }
+        drop(tc);
+        // Cold cache: rebuild
+        state.with_vault(|vault| {
+            let tree = vault.file_tree().map_err(|e| e.to_string())?;
+            let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+            *tc = tree.clone();
+            Ok(tree)
+        })
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 #[tauri::command]
@@ -271,48 +280,60 @@ pub struct FileStamp {
 }
 
 #[tauri::command]
-fn read_file(path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
-    state.with_vault(|vault| {
-        vault.read_note(path).map_err(|e| e.to_string())
-            .map(|content| String::from_utf8_lossy(&content).to_string())
-    })
+async fn read_file(path: String, app: tauri::AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.with_vault(|vault| {
+            vault.read_note(&path).map_err(|e| e.to_string())
+                .map(|content| String::from_utf8_lossy(&content).to_string())
+        })
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 /// 返回文件的修改时间与大小（前端用于检测本地磁盘的外部变更）
 #[tauri::command]
-fn stat_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<FileStamp, String> {
-    let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    let vault = vault.as_ref().ok_or_else(|| "No vault open".to_string())?;
-    let abs = vault.root().join(note_path);
-    let meta = std::fs::metadata(&abs).map_err(|e| e.to_string())?;
-    let mtime_ms = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    Ok(FileStamp { mtime_ms, size: meta.len() })
+async fn stat_note(note_path: String, app: tauri::AppHandle) -> Result<FileStamp, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let vault = state.vault.lock().map_err(|e| e.to_string())?;
+        let vault = vault.as_ref().ok_or_else(|| "No vault open".to_string())?;
+        let abs = vault.root().join(&note_path);
+        let meta = std::fs::metadata(&abs).map_err(|e| e.to_string())?;
+        let mtime_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        Ok(FileStamp { mtime_ms, size: meta.len() })
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 /// Read a file and return it as a data URL (base64-encoded).
 #[tauri::command]
-fn read_file_data(path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
-    state.with_vault(|vault| {
-        let data = vault.read_note(path).map_err(|e| e.to_string())?;
-        let mime = if path.ends_with(".png") { "image/png" }
-            else if path.ends_with(".jpg") || path.ends_with(".jpeg") { "image/jpeg" }
-            else if path.ends_with(".gif") { "image/gif" }
-            else if path.ends_with(".svg") { "image/svg+xml" }
-            else if path.ends_with(".webp") { "image/webp" }
-            else { "application/octet-stream" };
-        Ok(format!("data:{};base64,{}", mime, base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data)))
-    })
+async fn read_file_data(path: String, app: tauri::AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.with_vault(|vault| {
+            let data = vault.read_note(&path).map_err(|e| e.to_string())?;
+            let mime = if path.ends_with(".png") { "image/png" }
+                else if path.ends_with(".jpg") || path.ends_with(".jpeg") { "image/jpeg" }
+                else if path.ends_with(".gif") { "image/gif" }
+                else if path.ends_with(".svg") { "image/svg+xml" }
+                else if path.ends_with(".webp") { "image/webp" }
+                else { "application/octet-stream" };
+            Ok(format!("data:{};base64,{}", mime, base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data)))
+        })
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 /// Write arbitrary binary data (e.g. pasted images) inside the vault.
 #[tauri::command]
-fn write_attachment(path: &str, data: Vec<u8>, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.with_vault(|vault| vault.write_note(path, &data).map_err(|e| e.to_string()))
+async fn write_attachment(path: String, data: Vec<u8>, app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.with_vault(|vault| vault.write_note(&path, &data).map_err(|e| e.to_string()))
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
 }
 
 #[tauri::command]

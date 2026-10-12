@@ -46,8 +46,13 @@ pub fn scan_local(vault_root: &Path, ignore: &IgnoreRules) -> Result<Vec<LocalFi
         if !meta.is_file() {
             continue;
         }
+        // 统一使用 / 分隔符：同步状态与远端快照跨平台一致（Windows 上 strip_prefix 产生 \）。
         let rel = match entry.path().strip_prefix(vault_root) {
-            Ok(p) => p.to_string_lossy().to_string(),
+            Ok(p) => p
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/"),
             Err(_) => continue,
         };
         if rel.is_empty() || ignore.ignored(&rel) {

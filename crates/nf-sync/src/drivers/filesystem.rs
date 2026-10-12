@@ -86,8 +86,13 @@ impl FileApi for FsDriver {
                 Ok(m) => m,
                 Err(_) => continue,
             };
+            // 统一使用 / 分隔符，与 snapshot::scan_local 及远端快照键保持一致。
             let rel = match entry.path().strip_prefix(&self.root) {
-                Ok(p) => p.to_string_lossy().to_string(),
+                Ok(p) => p
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/"),
                 Err(_) => continue,
             };
             if rel.is_empty() {
