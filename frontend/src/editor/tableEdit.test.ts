@@ -2,13 +2,13 @@
  * Markdown 表格编辑测试（jsdom）：
  * 表格识别、行列增删（表头/对齐行/数据行同步）、单元格导航、工具条渲染。
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { GFM } from "@lezer/markdown";
 import { nfExtensions } from "./extensions";
-import { findTableAt, insertRow, deleteRow, insertCol, deleteCol, tableNavigate,
+import { findTableAt, insertRow, deleteRow, insertCol, deleteCol, tableNavigate, tableEnter,
          columnAlignAt, setColumnAlign, cycleColumnAlign } from "./tableEdit";
 
 const TABLE = [
@@ -188,6 +188,39 @@ describe("tableNavigate（Tab / Shift-Tab 单元格导航）", () => {
     view.destroy();
   });
 
+  it("导航进入新格时选中整格内容（直接输入即覆盖）", () => {
+    const view = makeView(TABLE);
+    place(view, "| 列A | 列B |", 0, 0);
+    tableNavigate(view, 1);
+    const sel = view.state.selection.main;
+    expect(view.state.sliceDoc(sel.from, sel.to)).toBe("列B");
+    view.destroy();
+  });
+
+  it("格中部 Tab 前进到下一格（原实现卡在同一格）", () => {
+    const view = makeView(TABLE);
+    const line = view.state.doc.line(1);        // | 列A | 列B |
+    const a = line.text.indexOf("列A");
+    view.dispatch({ selection: { anchor: line.from + a + 1 } }); // 列A 中部
+    expect(tableNavigate(view, 1)).toBe(true);
+    const sel = view.state.selection.main;
+    expect(view.state.sliceDoc(sel.from, sel.to)).toBe("列B");
+    view.destroy();
+  });
+
+  it("Shift+Tab 后退到上一格（原实现卡在同一格）", () => {
+    const view = makeView(TABLE);
+    place(view, "| 1 | 2 |", 0, 2);             // 数据行1 col0 末尾
+    expect(tableNavigate(view, -1)).toBe(true);
+    const sel = view.state.selection.main;
+    expect(view.state.doc.lineAt(sel.head).number).toBe(1);
+    expect(view.state.sliceDoc(sel.from, sel.to)).toBe("列B");
+    // 再退一格 → 列A
+    expect(tableNavigate(view, -1)).toBe(true);
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("列A");
+    view.destroy();
+  });
+
   it("末格再 Tab 自动新增一行并进入新格", () => {
     const view = makeView(TABLE);
     place(view, "| 3 | 4 |", 1, 3);
@@ -203,6 +236,104 @@ describe("tableNavigate（Tab / Shift-Tab 单元格导航）", () => {
     const view = makeView("普通段落");
     view.dispatch({ selection: { anchor: 2 } });
     expect(tableNavigate(view, 1)).toBe(false);
+    view.destroy();
+  });
+});
+
+describe("tableEnter（Enter 行为）", () => {
+  it("非末行 Enter：移到下一行同列并选中内容", () => {
+    const view = makeView(TABLE);
+    place(view, "| 1 | 2 |", 0, 2);             // 数据行1 col0
+    expect(tableEnter(view)).toBe(true);
+    const sel = view.state.selection.main;
+    expect(view.state.doc.lineAt(sel.head).number).toBe(4);
+    expect(view.state.sliceDoc(sel.from, sel.to)).toBe("3");
+    view.destroy();
+  });
+
+  it("对齐行下方 Enter：跳过对齐行落到下一数据行", () => {
+    const view = makeView(TABLE);
+    place(view, "| --- | --- |", 0, 1);
+    expect(tableEnter(view)).toBe(true);
+    const sel = view.state.selection.main;
+    expect(view.state.doc.lineAt(sel.head).number).toBe(3);
+    view.destroy();
+  });
+
+  it("末行 Enter：新建行并进入同列", () => {
+    const view = makeView(TABLE);
+    place(view, "| 3 | 4 |", 1, 3);             // 末行 col1
+    expect(tableEnter(view)).toBe(true);
+    const lines = view.state.doc.toString().split("\n");
+    expect(lines).toHaveLength(5);
+    expect(lines[4]).toBe("|  |  |");
+    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(5);
+    const t = findTableAt(view.state, view.state.selection.main.head)!;
+    expect(t.colIndex).toBe(1);                  // 同列
+    view.destroy();
+  });
+
+  it("有选区时不接管（交回默认替换）", () => {
+    const view = makeView(TABLE);
+    const line = view.state.doc.line(3);
+    view.dispatch({ selection: { anchor: line.from + 2, head: line.from + 3 } });
+    expect(tableEnter(view)).toBe(false);
+    view.destroy();
+  });
+});
+
+describe("自动对齐（输入暂停 / 离开表格）", () => {
+  it("输入停顿 350ms 后整表自动对齐，光标保留", () => {
+    vi.useFakeTimers();
+    try {
+      const view = makeView(TABLE);
+      const line = view.state.doc.line(3);      // | 1 | 2 |
+      const p = line.text.indexOf("1");
+      const insert = "很长很长";
+      // 模拟真实输入：文本变化 + 光标落在输入点之后
+      view.dispatch({
+        changes: { from: line.from + p, to: line.from + p + 1, insert },
+        selection: { anchor: line.from + p + insert.length },
+      });
+      expect(view.state.doc.toString()).toContain("| 很长很长 | 2 |"); // 尚未对齐
+      vi.advanceTimersByTime(400);
+      const lines = view.state.doc.toString().split("\n");
+      expect(lines[2]).toBe("| 很长很长 | 2   |");
+      expect(lines[0]).toBe("| 列A   | 列B  |");
+      expect(lines[1]).toBe("| ---- | --- |");
+      // 光标仍停在输入的单元格内（按 行/列/格内偏移 映射，不被吸到表尾）
+      expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(3);
+      expect(view.state.sliceDoc(view.state.selection.main.head - 2, view.state.selection.main.head)).toBe("很长");
+      view.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("光标移出表格时立即对齐", async () => {
+    const view = makeView("段落\n\n" + TABLE);
+    const t = findTableAt(view.state, 10)!;
+    view.dispatch({ selection: { anchor: t.from + 2 } });    // 进入表格
+    view.dispatch({ selection: { anchor: 1 } });             // 移出 → 排队对齐
+    await new Promise<void>(r => queueMicrotask(r));         // 等延后一拍的 dispatch
+    const lines = view.state.doc.toString().split("\n");
+    expect(lines[2]).toBe("| 列A  | 列B  |");
+    expect(lines[4]).toBe("| 1   | 2   |");
+    view.destroy();
+  });
+});
+
+describe("表格工具条稳定性（DOM 一次构建）", () => {
+  it("光标在单元格间移动时按钮 DOM 不重建", () => {
+    const view = makeView(TABLE);
+    place(view, "| 1 | 2 |", 0, 2);
+    const b1 = [...view.dom.querySelectorAll(".nf-table-btn")] as HTMLButtonElement[];
+    place(view, "| 3 | 4 |", 1, 3);
+    const b2 = [...view.dom.querySelectorAll(".nf-table-btn")] as HTMLButtonElement[];
+    expect(b1.length).toBe(b2.length);
+    expect(b2.length).toBeGreaterThan(0);
+    expect(b1[0]).toBe(b2[0]);
+    expect(b1[b1.length - 1]).toBe(b2[b2.length - 1]);
     view.destroy();
   });
 });

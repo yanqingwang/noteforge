@@ -209,6 +209,7 @@ const EditorPane = memo(function EditorPane({
   }, []);
 
   // ── 模式切换：reconfigure live 装饰与行号 ──
+  const prevModeRef = useRef(mode);
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -219,7 +220,13 @@ const EditorPane = memo(function EditorPane({
         theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
       })),
     });
-  }, [mode, theme, vaultConfig, resolveImageSrc]);
+    // 模式真正变化时把焦点交还编辑器（点工具栏按钮后可直接继续输入）；
+    // theme/vaultConfig 热更新路径不抢焦点。
+    if (mode !== prevModeRef.current) {
+      prevModeRef.current = mode;
+      if (!showHtml) view.focus();
+    }
+  }, [mode, theme, vaultConfig, resolveImageSrc, showHtml]);
 
   // ── 外部内容变化（文件切换 / 缓存加载）→ 全文替换 ──
   useEffect(() => {
@@ -385,7 +392,7 @@ const EditorPane = memo(function EditorPane({
           <div ref={previewRef} style={{
             width: effectiveMode === "split" ? "50%" : "100%",
             borderLeft: effectiveMode === "split" ? "1px solid #ddd" : "none",
-            overflowY: "auto", padding: 16
+            overflowY: "auto", padding: 16, scrollbarGutter: "stable"
           }} className="markdown-body"
             dangerouslySetInnerHTML={{ __html: previewHtml }} />
         )}
@@ -403,7 +410,8 @@ const EditorPane = memo(function EditorPane({
         .markdown-body a[data-note]:hover { background: #b6e0ff; text-decoration: underline; }
         .cm-editor { height: 100%; overflow: hidden; }
         .cm-editor.cm-focused { outline: none; }
-        .cm-scroller { overflow: auto !important; }
+        /* scrollbar-gutter: stable —— 滚动条出现/消失不再引起内容横向跳动 */
+        .cm-scroller { overflow: auto !important; scrollbar-gutter: stable; }
       `}</style>
     </div>
   );

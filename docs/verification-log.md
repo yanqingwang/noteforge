@@ -28,3 +28,34 @@
 - Profiles: 11 (6 old + 5 new)
 - 架构: M0-M6 全覆盖，深度各异
 - UI: Slint 桌面 GUI + CLI 双模式
+
+---
+
+# 验证日志 - 2026-10-19 表格编辑体验 + 界面稳定性（Zed 式）
+
+## 本轮改动
+
+**表格编辑（对标 Obsidian Advanced Tables）**
+1. 修复导航卡死 bug：光标在单元格中部时 Tab/Shift+Tab 原会反复选中当前格（`head < c.to` / `head > c.from` 边界缺陷），改为严格取 `from > head` / `to < head`
+2. 导航进入新格时自动选中整格内容，直接输入即覆盖
+3. Enter 改为「移到下一行同列」（末行才新建行），不再每敲一次就插行
+4. 自动对齐：输入停顿 350ms 整表对齐；光标移出表格时补一次对齐；IME 组合输入期间顺延（中文输入不打断）
+5. 光标保留修复：整表替换的 mapPos 会把格内光标吸到表尾，改为按「行/列/格内偏移」显式映射到新文本同格同偏移
+6. update 阶段禁止 dispatch（CM6 硬约束）：离开表格的对齐用 microtask 延后一拍，并校验文档代际防止位置失效
+
+**界面稳定性（参考 Zed：无不必要 DOM 抖动、面板行为可预期）**
+7. 表格工具条 DOM 一次构建：原来每次光标移动重建 9 个按钮，现 update 只同步 disabled/对齐文案/显隐
+8. 即输即显模式下光标行保留表格外观（单元格内边距 + 管道淡化），不再整行裸源码，视觉连续
+9. 侧栏 / 右侧 dock 拖拽调宽（pointer capture 增量拖动），宽度持久化 localStorage（180–520 / 240–640）
+10. scrollbar-gutter: stable：编辑器与预览面板滚动条出现/消失不再引起内容横向跳动
+11. 模式切换后编辑器重新聚焦（theme/vaultConfig 热更新不抢焦点）
+12. 修复 viewMenu 直接 setViewMode 导致 HTML 文件下模式切换不生效的问题
+
+## 验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 前端全量测试 | ✅ 328 passed（新增/改写 16 个表格用例：导航修复、Enter 行为、自动对齐、DOM 一次构建） |
+| tsc + vite build | ✅ built in 1.18s（lucide-react 需先 npm install，属环境问题非代码问题） |
+| Tauri 桌面启动 | ✅ cargo build -p noteforge 10s，窗口正常渲染（截屏验证：文件树/编辑器/模式按钮完好） |
+| 已知限制 | 无 xdotool/ydotool，Wayland 下无法脚本化注入键鼠，表格交互靠单测覆盖（51 个表格用例） |

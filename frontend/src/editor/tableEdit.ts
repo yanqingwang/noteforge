@@ -10,6 +10,7 @@
  * 表格识别：连续含 `|` 的行构成一块，且第二行必须是对齐行（仅 - : | 空格）。
  */
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
+import type { ViewUpdate } from "@codemirror/view";
 import { EditorSelection, Prec } from "@codemirror/state";
 import type { EditorState, Extension } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
@@ -180,8 +181,17 @@ function delimSample(state: EditorState, delimRow: Row): string {
   return text.includes("-") ? text : "---";
 }
 
-function focusCell(view: EditorView, cell: Cell) {
-  view.dispatch({ selection: EditorSelection.single(cell.to), scrollIntoView: true });
+/**
+ * 聚焦单元格。select=true 时选中整格内容（Advanced Tables 行为：
+ * Tab/Enter 进入新格后直接输入即可覆盖），空格退化为光标。
+ */
+function focusCell(view: EditorView, cell: Cell, select = false) {
+  view.dispatch({
+    selection: select && cell.to > cell.from
+      ? EditorSelection.range(cell.from, cell.to)
+      : EditorSelection.single(cell.to),
+    scrollIntoView: true,
+  });
 }
 
 /** 在当前行上方 / 下方插入空行 */
@@ -363,18 +373,20 @@ export function tableNavigate(view: EditorView, dir: 1 | -1): boolean {
   const head = view.state.selection.main.head;
 
   if (dir === 1) {
+    // 严格取「起点在光标之后」的格：光标在格中部时 Tab 也能前进到下一格
     for (const c of cells) {
-      if (head < c.to) {
-        focusCell(view, c);
+      if (c.from > head) {
+        focusCell(view, c, true);
         return true;
       }
     }
     // 末格再 Tab → 新增一行并进入新行首格
     return insertRow(view, "below");
   }
+  // 严格取「终点在光标之前」的格：否则会反复选中当前格（原实现卡死的根因）
   for (let i = cells.length - 1; i >= 0; i--) {
-    if (head > cells[i].from) {
-      focusCell(view, cells[i]);
+    if (cells[i].to < head) {
+      focusCell(view, cells[i], true);
       return true;
     }
   }
@@ -406,7 +418,17 @@ function padCell(s: string, w: number, a: "left" | "center" | "right"): string {
  */
 export function formatTableAt(view: EditorView): boolean {
   const t = findTableAt(view.state, view.state.selection.main.head);
-  if (!t) return false;
+  return t ? formatTableInfo(view, t) : false;
+}
+
+/** 对齐指定的表格区间（光标可以不在表内；离开表格时自动对齐用） */
+export function formatTableSpan(view: EditorView, from: number): boolean {
+  const pos = Math.min(Math.max(from, 0), Math.max(0, view.state.doc.length - 1));
+  const t = findTableAt(view.state, pos);
+  return t ? formatTableInfo(view, t) : false;
+}
+
+function formatTableInfo(view: EditorView, t: TableInfo): boolean {
   const rows = t.rows;
   if (rows.length < 2 || !rows[1].delim) return false;
   const state = view.state;
@@ -447,10 +469,31 @@ export function formatTableAt(view: EditorView): boolean {
   const oldText = state.sliceDoc(t.from, t.to);
   if (newText === oldText) return false;
 
+  // 光标保留：按「行 / 列 / 格内偏移」直接映射到新文本同格同偏移。
+  // 不能用 mapPos —— 整表是一次大替换，格内位置会被吸到替换区间末尾。
   const head = state.selection.main.head;
+  const headLineNo = state.doc.lineAt(head).number;
+  let headRow = rows.findIndex(r => r.number === headLineNo);
+  if (headRow < 0) headRow = 0;
+  const srcRow = rows[headRow];
+  let srcCol = 0;
+  for (let i = 0; i < srcRow.cells.length; i++) {
+    srcCol = i;
+    if (head <= srcRow.cells[i].to) break;
+  }
+  const srcCell = srcRow.cells[srcCol];
+  const srcLen = srcCell ? state.sliceDoc(srcCell.from, srcCell.to).length : 0;
+  const srcOff = srcCell ? Math.max(0, Math.min(head - srcCell.from, srcLen)) : 0;
+  // 新行内格子起始偏移：| + 空格，格间以 " | " 分隔
+  let cellStart = 2;
+  for (let i = 0; i < srcCol; i++) cellStart += widths[i] + 3;
+  const newLineStart = t.from + lines.slice(0, headRow).reduce((s, l) => s + l.length + 1, 0);
+  const anchor = Math.max(0, Math.min(
+    newLineStart + cellStart + Math.min(srcOff, widths[srcCol]),
+    state.doc.length - (t.to - t.from) + newText.length,
+  ));
+
   const changes = { from: t.from, to: t.to, insert: newText };
-  const newDocLen = state.doc.length - (t.to - t.from) + newText.length;
-  const anchor = Math.max(0, Math.min(state.changes(changes).mapPos(head, 1), newDocLen));
   view.dispatch({ changes, selection: EditorSelection.single(anchor), scrollIntoView: true });
   return true;
 }
@@ -462,6 +505,37 @@ export function tableNewRow(view: EditorView): boolean {
   return insertRow(view, "below");
 }
 
+/**
+ * Enter：移到下一行同列（像 Excel）；已是最后一行时新建行。
+ * 有选区时不接管（让默认行为替换选区文本）。返回 false 交回默认换行。
+ */
+export function tableEnter(view: EditorView): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const t = findTableAt(view.state, sel.head);
+  if (!t) return false;
+  const last = t.rows.length - 1;
+  const col = Math.min(t.colIndex, t.colCount - 1);
+  if (t.rowIndex >= last) {
+    // 最后一行 → 新建行并进入同列
+    if (!insertRow(view, "below")) return false;
+    const t2 = findTableAt(view.state, view.state.selection.main.head);
+    if (t2) {
+      const row = t2.rows[t2.rowIndex];
+      const cell = row.cells[Math.min(col, row.cells.length - 1)];
+      if (cell) focusCell(view, cell);
+    }
+    return true;
+  }
+  // 下一数据行（跳过对齐行）
+  let next = t.rowIndex + 1;
+  if (t.rows[next].delim) next += 1;
+  const row = t.rows[next];
+  const cell = row.cells[Math.min(col, row.cells.length - 1)];
+  if (cell) focusCell(view, cell, true);
+  return true;
+}
+
 // ── 工具条（鼠标操作）────────────────────────────────────────────────
 
 /**
@@ -469,12 +543,17 @@ export function tableNewRow(view: EditorView): boolean {
  * 不用 decoration 承载：CM6 禁止插件提供块级装饰（RangeError: Block
  * decorations may not be specified via plugins），故由 ViewPlugin 直接把浮层
  * 挂到 view.dom 上，按 coordsAtPos 定位到当前表格上方。
+ *
+ * 稳定性：按钮 DOM 只在构造时创建一次，update 只改 disabled/文案/显隐 ——
+ * 光标每次移动不再重建 9 个按钮（避免 GC 抖动与悬停态丢失）。
  */
 class TableFloater {
   private el: HTMLDivElement;
   private disposers: (() => void)[] = [];
 
   private view: EditorView;
+  /** 按钮与文案更新函数（update 时刷新 disabled / 对齐标签） */
+  private syncs: Array<(t: TableInfo | null, view: EditorView) => void> = [];
 
   constructor(view: EditorView) {
     this.view = view;
@@ -489,6 +568,24 @@ class TableFloater {
     // 浮层用 position:absolute 挂在 view.dom 上，确保它是定位父级
     if (!view.dom.style.position) view.dom.style.position = "relative";
     view.dom.appendChild(el);
+
+    const btn = (label: string, title: string, run: (view: EditorView) => void) => {
+      el.appendChild(this.makeButton(label, title, run));
+    };
+    const sep = () => el.appendChild(this.sep());
+
+    btn("＋行↑", "在表格上方插入一行（Alt+↑）", (v) => insertRow(v, "above"));
+    btn("＋行↓", "在表格下方插入一行（Alt+↓）", (v) => insertRow(v, "below"));
+    btn("－行", "删除当前行（Alt+Shift+↑ / ↓）", (v) => deleteRow(v));
+    sep();
+    btn("＋列←", "在左侧插入一列（Alt+←）", (v) => insertCol(v, "left"));
+    btn("＋列→", "在右侧插入一列（Alt+→）", (v) => insertCol(v, "right"));
+    btn("－列", "删除当前列（Alt+Shift+← / →）", (v) => deleteCol(v));
+    sep();
+    btn(`对齐:${ALIGN_LABEL.left}`, "切换当前列对齐：左 → 中 → 右（Alt+Shift+A；也可 Alt+Shift+L / C / R 直接指定）",
+      (v) => cycleColumnAlign(v));
+    sep();
+    btn("⇔", "对齐整张表格：列宽按最宽单元格（Alt+Shift+F）", (v) => formatTableAt(v));
 
     const onScroll = () => this.schedulePosition(view);
     view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
@@ -533,23 +630,33 @@ class TableFloater {
     this.el.style.top = `${Math.max(0, coords.top - host.top - h - 4)}px`;
   }
 
-  private makeButton(label: string, title: string, run: () => void, disabled: boolean): HTMLButtonElement {
+  private makeButton(label: string, title: string, run: (view: EditorView) => void): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
     b.title = title;
     b.className = "nf-table-btn";
-    b.disabled = disabled;
     b.setAttribute("style", [
       "font-size:11px", "padding:0 6px", "border:1px solid transparent", "border-radius:3px",
-      "background:transparent", `color:${disabled ? "#bbb" : "#444"}`, `cursor:${disabled ? "default" : "pointer"}`,
+      "background:transparent", "color:#444", "cursor:pointer",
     ].join(";"));
     b.addEventListener("mousedown", (e) => e.preventDefault());
     b.addEventListener("click", (e) => {
       e.preventDefault();
       if (b.disabled) return;
-      run();
-      this.view.focus();
+      const view = this.view;
+      run(view);
+      // 动作可能改文档 → 立即按新状态刷新全部按钮（禁用态/对齐标签）
+      this.update(view);
+      view.focus();
+    });
+    // 状态同步器：update 时按当前表格信息刷新该按钮
+    this.syncs.push((t, view) => {
+      if (label === "－行") b.disabled = !t || !t.canDeleteRow;
+      else if (label === "－列") b.disabled = !t || !t.canDeleteCol;
+      else if (label.startsWith("对齐")) b.textContent = `对齐:${ALIGN_LABEL[columnAlignAt(view)]}`;
+      if (b.disabled) { b.style.color = "#bbb"; b.style.cursor = "default"; }
+      else { b.style.color = "#444"; b.style.cursor = "pointer"; }
     });
     return b;
   }
@@ -569,26 +676,8 @@ class TableFloater {
       return;
     }
     this.el.dataset.active = "1";
-    this.el.textContent = "";
-    this.el.append(
-      this.makeButton("＋行↑", "在表格上方插入一行（Alt+↑）", () => insertRow(view, "above"), false),
-      this.makeButton("＋行↓", "在表格下方插入一行（Alt+↓）", () => insertRow(view, "below"), false),
-      this.makeButton("－行", "删除当前行（Alt+Shift+↑ / ↓）", () => deleteRow(view), !t.canDeleteRow),
-      this.sep(),
-      this.makeButton("＋列←", "在左侧插入一列（Alt+←）", () => insertCol(view, "left"), false),
-      this.makeButton("＋列→", "在右侧插入一列（Alt+→）", () => insertCol(view, "right"), false),
-      this.makeButton("－列", "删除当前列（Alt+Shift+← / →）", () => deleteCol(view), !t.canDeleteCol),
-      this.sep(),
-      this.makeButton(
-        `对齐:${ALIGN_LABEL[columnAlignAt(view)]}`,
-        "切换当前列对齐：左 → 中 → 右（Alt+Shift+A；也可 Alt+Shift+L / C / R 直接指定）",
-        () => cycleColumnAlign(view),
-        false,
-      ),
-      this.sep(),
-      this.makeButton("⇔", "对齐整张表格：列宽按最宽单元格（Alt+Shift+F）", () => formatTableAt(view), false),
-    );
-
+    this.el.style.display = "flex";
+    for (const sync of this.syncs) sync(t, view);
     this.schedulePosition(view);
   }
 
@@ -614,16 +703,84 @@ const tableToolbarPlugin = ViewPlugin.fromClass(
   },
 );
 
+/** 输入暂停后自动对齐的延时（ms） */
+const AUTO_FORMAT_MS = 350;
+
+/**
+ * 自动对齐（Advanced Tables 招牌体验）：
+ *  - 在表格内输入并停顿 AUTO_FORMAT_MS → 整表对齐（光标经 mapPos 保留）；
+ *  - 光标离开刚编辑过的表格 → 立即对齐一次；
+ *  - IME 组合输入期间不触发（中文输入不打断），组合结束后下一条更新会重新安排；
+ *  - formatTableInfo 幂等（无变化不 dispatch），不会自触发死循环。
+ */
+const tableAutoFormatPlugin = ViewPlugin.fromClass(
+  class {
+    private timer: ReturnType<typeof setTimeout> | undefined;
+    private dead = false;
+    /** 光标最近所在表格区间（离开时对其补一次对齐） */
+    private prevTable: { from: number; to: number } | null = null;
+
+    update(u: ViewUpdate) {
+      const view = u.view;
+      const sel = view.state.selection.main;
+
+      if (u.docChanged) {
+        // 记录当前表格；仅空光标（单点）时安排自动对齐
+        const t = sel.empty ? findTableAt(view.state, sel.head) : null;
+        this.prevTable = t ? { from: t.from, to: t.to } : null;
+        if (t && !view.composing) this.schedule(view);
+        return;
+      }
+      if (u.selectionSet || u.focusChanged) {
+        const now = sel.empty ? findTableAt(view.state, sel.head) : null;
+        const was = this.prevTable;
+        this.prevTable = now ? { from: now.from, to: now.to } : null;
+        // 光标移出之前的表格 → 补一次对齐（未对齐才有实际改动）。
+        // 不能在 update 阶段 dispatch（CM6 禁止），用 microtask 延后一拍；
+        // 期间文档再变化则放弃（位置已失效）。
+        if (was && sel.empty && !(sel.head >= was.from && sel.head <= was.to)) {
+          this.clearTimer();
+          const doc = view.state.doc;
+          queueMicrotask(() => {
+            if (this.dead || view.state.doc !== doc) return;
+            try { formatTableSpan(view, was.from); } catch { /* 视图销毁等竞态 */ }
+          });
+        }
+      }
+    }
+
+    private schedule(view: EditorView) {
+      this.clearTimer();
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        if (this.dead) return;
+        if (view.composing) { this.schedule(view); return; } // IME 进行中顺延
+        try { formatTableAt(view); } catch { /* 视图销毁等竞态 */ }
+      }, AUTO_FORMAT_MS);
+    }
+
+    private clearTimer() {
+      if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
+    }
+
+    destroy() {
+      this.dead = true;
+      this.clearTimer();
+    }
+  },
+);
+
 /** 表格编辑扩展：悬浮工具条（鼠标）+ 快捷键（Prec.highest 压过 indentWithTab / 默认键位） */
 export function tableEditing(): Extension {
   return [
     tableToolbarPlugin,
+    tableAutoFormatPlugin,
     Prec.highest(
       keymap.of([
         // Tab 导航前先对齐整表（Advanced Tables 行为）；再按新文档重新定位单元格
         { key: "Tab", run: (v: EditorView) => { formatTableAt(v); return tableNavigate(v, 1); } },
         { key: "Shift-Tab", run: (v: EditorView) => { formatTableAt(v); return tableNavigate(v, -1); } },
-        { key: "Enter", run: (v: EditorView) => tableNewRow(v) },
+        { key: "Enter", run: (v: EditorView) => tableEnter(v) },
         { key: "Alt-Shift-f", run: (v: EditorView) => formatTableAt(v) },
         { key: "Alt-ArrowUp", run: (v: EditorView) => insertRow(v, "above") },
         { key: "Alt-ArrowDown", run: (v: EditorView) => insertRow(v, "below") },

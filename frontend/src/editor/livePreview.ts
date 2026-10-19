@@ -174,10 +174,10 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 
 /**
  * 表格渲染（对标 Obsidian 编辑视图）：
- *  - 非光标行：渲染成表格外观（表头加粗浅底、竖线淡化成网格线、行间横线），
- *    单元格文字即文档原文，所以可以直接在单元格里改数据；
- *  - 光标所在行：回显源码管道符，方便改结构；
- *  - 对齐行（| --- | --- |）：默认渲染成一条横线，光标落上去才显示三条短线。
+ *  - 所有行（含光标行）都渲染成表格外观：表头加粗浅底、单元格内边距、
+ *    竖线淡化成网格线 —— 光标行不再是突兀的裸源码，视觉连续；
+ *  - 光标行只保留样式类，不隐藏任何语法（单元格文字即文档原文，可直接改数据）；
+ *  - 非光标行的对齐行（| --- |）渲染成一条横线，光标落上去才显示三条短线。
  *
  * 全程不改文档结构，只用 line/mark/replace(同行内) 装饰，避免块级装饰
  * 触发 CM6 的 "Block decorations may not be specified via plugins"。
@@ -193,23 +193,25 @@ function decorateTable(
   const lastLine = state.doc.lineAt(node.to).number;
 
   for (let l = firstLine; l <= lastLine; l++) {
-    if (focusLines.has(l)) continue;              // 光标行回显源码
     const line = state.doc.line(l);
     const cells = tableCells(line.text);
     if (!cells) continue;
     const isDelim = isDelimRow(line.text);
+    const focused = focusLines.has(l);
 
-    // 行装饰：表头 / 中间行 / 末行，拼出表格边框
+    // 行装饰：表头 / 中间行 / 末行，拼出表格边框（光标行也保留，视觉连续）
     const cls = isDelim
       ? "lp-trow lp-trow-delim"
       : `lp-trow${l === firstLine ? " lp-trow-head" : ""}${l === lastLine ? " lp-trow-last" : ""}`;
     add(line.from, line.from, Decoration.line({ class: cls }));
 
-    // 对齐行：把 --- 藏掉，交给 CSS 的 border 画横线
+    // 对齐行：非光标行把 --- 藏掉，交给 CSS 的 border 画横线
     if (isDelim) {
-      for (const seg of cells) {
-        if (line.text.slice(seg.start, seg.end).includes("-")) {
-          add(line.from + seg.start, line.from + seg.end, Decoration.replace({}));
+      if (!focused) {
+        for (const seg of cells) {
+          if (line.text.slice(seg.start, seg.end).includes("-")) {
+            add(line.from + seg.start, line.from + seg.end, Decoration.replace({}));
+          }
         }
       }
       // 淡化的竖线（保留在文本里，不做替换，列宽不会塌）
@@ -219,7 +221,8 @@ function decorateTable(
       continue;
     }
 
-    // 数据/表头行：单元格内容加内边距，竖线淡化成网格线
+    // 数据/表头行：单元格内容加内边距，竖线淡化成网格线（光标行同样处理，
+    // 管道符可见但淡化 —— 既能源码级改结构，又不破坏表格观感）
     for (const seg of cells) {
       add(line.from + seg.start, line.from + seg.end, Decoration.mark({ class: "lp-tcell" }));
     }

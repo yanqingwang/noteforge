@@ -53,6 +53,11 @@ function App() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  // 面板宽度可拖拽并持久化（Zed 式可调面板：拖拽只改宽度，不触发布局重排之外的状态）
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    clampWidth(parseInt(localStorage.getItem("nf-sidebar-w") || "", 10) || 260, 180, 520));
+  const [rightDockWidth, setRightDockWidth] = useState(() =>
+    clampWidth(parseInt(localStorage.getItem("nf-rightdock-w") || "", 10) || 380, 240, 640));
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginSettingsOpen, setPluginSettingsOpen] = useState(false);
@@ -468,10 +473,10 @@ function App() {
     { divider: true as const },
     { label: theme === "dark" ? "☀ 切换亮色主题" : "🌙 切换暗色主题", action: () => setTheme(t => t === "dark" ? "light" : "dark") },
     { divider: true as const },
-    { label: "源码模式", action: () => setViewMode("source") },
-    { label: "分栏模式", action: () => setViewMode("split") },
-    { label: "即输即显", action: () => setViewMode("live") },
-    { label: "预览模式", action: () => setViewMode("preview") },
+    { label: "源码模式", action: () => handleSetMode("source") },
+    { label: "分栏模式", action: () => handleSetMode("split") },
+    { label: "即输即显", action: () => handleSetMode("live") },
+    { label: "预览模式", action: () => handleSetMode("preview") },
     { divider: true as const },
     { label: "快速切换器", shortcut: "Ctrl+O", action: () => setShowQuickSwitcher(true) },
     { label: "命令面板", shortcut: "Ctrl+P", action: () => setShowCommandPalette(true) },
@@ -575,6 +580,9 @@ function App() {
         [data-nf-dark="true"] .markdown-body pre { background: #252526; }
         [data-nf-dark="true"] .markdown-body blockquote { color: #a0a0a0; border-color: #3c3c3c; }
         [data-nf-dark="true"] .markdown-body table th, [data-nf-dark="true"] .markdown-body table td { border-color: #444; }
+        .nf-drag { transition: background .15s; }
+        .nf-drag:hover, .nf-drag.dragging { background: #7aa7e8 !important; }
+        [data-nf-dark="true"] .nf-drag:hover, [data-nf-dark="true"] .nf-drag.dragging { background: #2a5d8f !important; }
       `}</style>
       {/* ── 菜单栏 ── */}
       <div style={{ display: "flex", alignItems: "center", height: 32, background: "#f5f5f5",
@@ -633,7 +641,8 @@ function App() {
           <button style={railBtn} title="设置" onClick={() => setSettingsOpen(true)}><Icon as={Settings} size={17} /></button>
         </div>
         {sidebarVisible && files.length > 0 && (
-          <div className="nf-sidebar" style={{ width: 260, minWidth: 200, background: theme === "dark" ? "#252526" : "#fafafa", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column" }}>
+          <>
+          <div className="nf-sidebar" style={{ width: sidebarWidth, minWidth: 180, flexShrink: 0, background: theme === "dark" ? "#252526" : "#fafafa", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ display: "flex", borderBottom: "1px solid #eee" }}>
               <button onClick={() => setSidebarMode("files")}
                 style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -655,6 +664,10 @@ function App() {
                   onFsChange={() => void refreshTree()} onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
               : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
           </div>
+          <DragHandle side="left"
+            onResize={(dx) => setSidebarWidth(w => clampWidth(w + dx, 180, 520))}
+            onEnd={() => { setSidebarWidth(w => { localStorage.setItem("nf-sidebar-w", String(w)); return w; }); }} />
+          </>
         )}
         {/* 中间主区：flex:1 表示左右侧栏显隐时自动伸缩，所有内容视图（编辑器/Bases/主区插件）都在这里 */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
@@ -730,8 +743,13 @@ function App() {
 
         {/* 右侧栏（Obsidian right sidebar 语义）：插件 dock 视图挂这里，参与 flex 布局不覆盖内容 */}
         {rightDockVisible && (
+          <DragHandle side="right"
+            onResize={(dx) => setRightDockWidth(w => clampWidth(w - dx, 240, 640))}
+            onEnd={() => { setRightDockWidth(w => { localStorage.setItem("nf-rightdock-w", String(w)); return w; }); }} />
+        )}
+        {rightDockVisible && (
           <div ref={rightDockRef} className="nf-right-sidebar" style={{
-            width: 380, flexShrink: 0, maxWidth: "46vw",
+            width: rightDockWidth, flexShrink: 0, overflow: "hidden",
             background: theme === "dark" ? "#252526" : "#fafafa",
             borderLeft: "1px solid #e0e0e0",
             display: "flex", flexDirection: "column",
@@ -794,6 +812,49 @@ function findActivePath(node: any): string | null {
   if (node?.tabs && node.tabs.length > 0) return node.tabs[node.activeIndex]?.view?.path || null;
   if (node?.children) return findActivePath(node.children[0]);
   return null;
+}
+
+function clampWidth(v: number, min: number, max: number): number {
+  if (!Number.isFinite(v)) return min;
+  return Math.min(max, Math.max(min, v));
+}
+
+/** 面板宽度拖拽手柄：pointer capture 增量拖动，松手时持久化 */
+function DragHandle({ side, onResize, onEnd }: {
+  side: "left" | "right";
+  onResize: (dx: number) => void;
+  onEnd: () => void;
+}) {
+  const dragging = useRef(false);
+  const last = useRef(0);
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragging.current = true;
+    last.current = e.clientX;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    e.currentTarget.classList.add("dragging");
+  };
+  const move = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    onResize(e.clientX - last.current);
+    last.current = e.clientX;
+  };
+  const up = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    e.currentTarget.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    onEnd();
+  };
+  return (
+    <div className={`nf-drag nf-drag-${side}`} onPointerDown={down} onPointerMove={move}
+      onPointerUp={up} onPointerCancel={up}
+      style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: "transparent",
+        marginLeft: side === "right" ? -5 : 0, marginRight: side === "left" ? -5 : 0, zIndex: 5 }} />
+  );
 }
 
 function ImageViewer({ filePath }: { filePath: string }) {

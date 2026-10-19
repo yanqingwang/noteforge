@@ -69,15 +69,18 @@ describe("live 模式表格渲染", () => {
     view.destroy();
   });
 
-  it("光标落在数据行时该行回显源码，其余行保持表格外观", () => {
+  it("光标落在数据行时该行保留表格外观（单元格内边距 + 管道淡化），不再整行裸源码", () => {
     const view = makeView(TABLE);
     const dataLine = view.state.doc.line(3);
     view.dispatch({ selection: { anchor: dataLine.from + 4 } });
+    // 光标行也有表格行装饰 —— 4 行全是渲染态
     const rows = document.querySelectorAll(".lp-trow");
-    // 光标行不再有表格行装饰 → 少一行
-    expect(rows.length).toBe(3);
-    const text = document.querySelectorAll(".cm-line")[2]?.textContent ?? "";
-    expect(text).toContain("| 微信云托管 |");
+    expect(rows.length).toBe(4);
+    // 光标行文本保持原样（源码仍可直接编辑），管道符只是被淡化而非移除
+    const lineEl = document.querySelectorAll(".cm-line")[2]!;
+    expect(lineEl.textContent).toContain("| 微信云托管 |");
+    expect(lineEl.querySelector(".lp-tsep")).toBeTruthy();
+    expect(lineEl.querySelector(".lp-tcell")).toBeTruthy();
     view.destroy();
   });
 
