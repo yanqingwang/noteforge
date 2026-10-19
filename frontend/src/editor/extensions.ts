@@ -327,6 +327,40 @@ function makeWikilinkSource(getFiles: () => string[]) {
   };
 }
 
+// ── #tag 自动补全（对标 Obsidian 标签补全）────────────────────────────
+// 触发条件：光标前是 `#` + 至少一个标签字符，且 `#` 的前一个字符是行首/空白/标点。
+// 排除：`[[note#标题]]`（# 前是词字符或 [）、`## 标题`（# 前是 #）、URL 锚点。
+
+/** 标签字符集：ascii 词字符 + 中文 + 嵌套分隔符 `/` 与连字符 */
+const TAG_CHARS = "\\w\\u4e00-\\u9fff/-";
+const TAG_TRIGGER_RE = new RegExp(`#([${TAG_CHARS}]+)$`);
+const TAG_VALID_RE = new RegExp(`^[${TAG_CHARS}]*$`);
+
+export function makeTagSource(getTags: () => string[]) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const m = context.matchBefore(TAG_TRIGGER_RE);
+    if (!m) return null;
+    const hashPos = m.from;
+    if (hashPos > 0) {
+      const prev = context.state.sliceDoc(hashPos - 1, hashPos);
+      // # 前面是词字符/括号/# → 不是标签起始（标题记号、wikilink 锚点、URL）
+      if (/[\w\[\]#]/.test(prev)) return null;
+    }
+    const filter = m.text.slice(1).toLowerCase();
+    const options = getTags()
+      .filter(t => t.toLowerCase().includes(filter))
+      .slice(0, 30)
+      .map(t => ({
+        label: `#${t}`,
+        type: "keyword",
+        // from 在 # 之后，apply 只替换标签名部分；尾随空格便于继续输入
+        apply: `${t} `,
+      }));
+    if (!options.length) return null;
+    return { from: hashPos + 1, options, validFor: TAG_VALID_RE };
+  };
+}
+
 // ── 主题 ────────────────────────────────────────────────────────────
 
 const lpThemeStyles = (dark: boolean) => ({
@@ -440,6 +474,8 @@ export interface EditorExtOptions {
   lineNumbers: boolean;
   /** wikilink 补全文件列表 */
   getFiles: () => string[];
+  /** #tag 补全标签列表（全库已有标签，不含 `#`） */
+  getTags?: () => string[];
   /** 亮/暗主题 */
   theme?: "light" | "dark";
   /** 追加 keymap（Ctrl+S 等，优先级更高） */
@@ -459,7 +495,7 @@ export function nfExtensions(opts: EditorExtOptions): Extension[] {
     themeFor(opts.theme ?? "light"),
     ...(opts.live ? [livePreview({ resolveLink: opts.resolveLink, resolveImageSrc: opts.resolveImageSrc })] : []),
     tableEditing(),
-    autocompletion({ override: [makeWikilinkSource(opts.getFiles)] }),
+    autocompletion({ override: [makeWikilinkSource(opts.getFiles), makeTagSource(opts.getTags ?? (() => []))] }),
     closeBrackets(),
     EditorView.domEventHandlers({
       paste: ((view: EditorView, e: ClipboardEvent) => {

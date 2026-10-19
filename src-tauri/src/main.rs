@@ -311,6 +311,70 @@ fn get_graph(state: tauri::State<'_, AppState>) -> Result<GraphData, String> {
     })
 }
 
+#[derive(Serialize, Deserialize)]
+struct TagInfo {
+    /// 标签名（不含 `#`，保留嵌套写法如 `a/b`）
+    tag: String,
+    /// 出现的笔记数
+    count: usize,
+    /// 包含该标签的笔记路径（排序去重）
+    files: Vec<String>,
+}
+
+/// 全库标签索引：合并行内 `#tag` 与 frontmatter `tags:`，供标签面板与编辑器补全用。
+/// 大 vault（数千笔记）全量扫描较重，走 spawn_blocking 不阻塞 IPC 线程。
+#[tauri::command]
+async fn list_tags(app: tauri::AppHandle) -> Result<Vec<TagInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let tree = {
+            let tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+            if !tc.is_empty() {
+                tc.clone()
+            } else {
+                drop(tc);
+                state.with_vault(|vault| {
+                    let t = vault.file_tree().map_err(|e| e.to_string())?;
+                    let mut tc = state.tree_cache.lock().map_err(|e| e.to_string())?;
+                    *tc = t.clone();
+                    Ok::<_, String>(t)
+                })?
+            }
+        };
+        let mut map: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+        state.with_vault(|vault| {
+            for entry in &tree {
+                if entry.is_dir || !entry.path.ends_with(".md") { continue; }
+                if let Ok(content) = vault.read_note(&entry.path) {
+                    let meta = nf_markdown::parse_to_meta(&entry.path, &content);
+                    let mut seen = std::collections::BTreeSet::new();
+                    for t in meta.frontmatter.tags() {
+                        seen.insert(t);
+                    }
+                    for t in &meta.tags_inline {
+                        seen.insert(t.tag.clone());
+                    }
+                    for tag in seen {
+                        map.entry(tag).or_default().push(entry.path.clone());
+                    }
+                }
+            }
+            Ok::<_, String>(())
+        })?;
+        let mut tags: Vec<TagInfo> = map
+            .into_iter()
+            .map(|(tag, mut files)| {
+                files.sort();
+                files.dedup();
+                TagInfo { count: files.len(), files, tag }
+            })
+            .collect();
+        // 按引用次数降序，次数相同按名称（标签面板更常用的排前面）
+        tags.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.tag.cmp(&b.tag)));
+        Ok(tags)
+    }).await.map_err(|e| format!("任务执行失败: {e}"))?
+}
+
 #[tauri::command]
 fn render_note(note_path: &str, state: tauri::State<'_, AppState>) -> Result<String, String> {
     state.with_vault(|vault| {
@@ -461,6 +525,7 @@ fn main() {
             read_note,
             search_notes,
             get_graph,
+            list_tags,
             list_profiles,
             generate_vault,
             get_file_tree,

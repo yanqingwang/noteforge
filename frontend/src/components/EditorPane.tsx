@@ -15,8 +15,16 @@ import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
 import HtmlViewer, { resolveVaultPath } from "./HtmlViewer";
 import { resolveWikilink } from "../editor/wikilink";
+import { findAnchorPos } from "../editor/anchor";
 
 type ViewMode = "source" | "preview" | "split" | "live" | "html";
+
+/** 待跳转锚点（[[note#标题]] / [[note#^block-id]] 打开后由 App 下发） */
+export interface PendingAnchor {
+  path: string;
+  anchor: string;
+  nonce: number;
+}
 
 interface EditorPaneProps {
   content: string;
@@ -39,6 +47,12 @@ interface EditorPaneProps {
   vaultConfig?: any;
   /** vault 绝对路径（asset 渲染模式需要） */
   vaultPath?: string;
+  /** 全库标签（#tag 自动补全数据源） */
+  tags?: { tag: string }[];
+  /** 打开文件后待跳转的锚点 */
+  pendingAnchor?: PendingAnchor | null;
+  /** 锚点跳转完成（或未找到）后的回调 */
+  onAnchorConsumed?: () => void;
 }
 
 export type { ViewMode };
@@ -47,6 +61,7 @@ const AUTO_SAVE_MS = 2000;
 
 const EditorPane = memo(function EditorPane({
   content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light", htmlFile = null, vaultConfig = null, vaultPath = "",
+  tags = [], pendingAnchor = null, onAnchorConsumed,
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -69,6 +84,10 @@ const EditorPane = memo(function EditorPane({
   cbRef.current = { content, activeFile, onContentChange, onNavigate, onStatus, files, onOutline, theme, vaultConfig, vaultPath };
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // 标签列表热更新（tagIndex 变化不重建 EditorView）
+  const tagsRef = useRef(tags);
+  tagsRef.current = tags;
+  const getTags = useCallback(() => tagsRef.current.map(t => t.tag), []);
 
   // wikilink 解析（live 装饰与预览共用）：判断链接目标是否存在
   const resolveLink = useCallback((target: string) =>
@@ -164,6 +183,7 @@ const EditorPane = memo(function EditorPane({
           // 可重组部分：live 装饰（含主题/快捷键/补全）
           liveComp.current.of(nfExtensions({
             live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
+            getTags,
             theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
           })),
           EditorView.updateListener.of((u) => {
@@ -217,6 +237,7 @@ const EditorPane = memo(function EditorPane({
     view.dispatch({
       effects: liveComp.current.reconfigure(nfExtensions({
         live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
+        getTags,
         theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
       })),
     });
@@ -263,6 +284,28 @@ const EditorPane = memo(function EditorPane({
     dirtyRef.current = false;
     if (saveTimer.current) clearTimeout(saveTimer.current);
   }, [content, activeFile]);
+
+  // ── 锚点跳转：[[note#标题]] / [[note#^block-id]] 打开后滚动定位 ──
+  // 声明在「外部内容变化」effect 之后 —— 同一提交内先把文档替换好，再来定位。
+  useEffect(() => {
+    if (!pendingAnchor || pendingAnchor.path !== activeFile) return;
+    const view = viewRef.current;
+    if (!view) return;
+    // 内容尚未加载进编辑器（异步 read 途中）时等下一轮
+    const docStr = view.state.doc.toString();
+    if (docStr !== content) return;
+    const pos = findAnchorPos(docStr, pendingAnchor.anchor);
+    if (pos !== null) {
+      view.dispatch({
+        selection: { anchor: pos },
+        effects: EditorView.scrollIntoView(pos, { y: "center" }),
+      });
+      view.focus();
+    } else {
+      cbRef.current.onStatus?.(`⚠ 未找到锚点: ${pendingAnchor.anchor}`);
+    }
+    onAnchorConsumed?.();
+  }, [pendingAnchor, content, activeFile, onAnchorConsumed]);
 
   // ── wikilink / data-note 点击跳转（文档级委托，live 装饰与预览共用） ──
   useEffect(() => {

@@ -59,3 +59,32 @@
 | tsc + vite build | ✅ built in 1.18s（lucide-react 需先 npm install，属环境问题非代码问题） |
 | Tauri 桌面启动 | ✅ cargo build -p noteforge 10s，窗口正常渲染（截屏验证：文件树/编辑器/模式按钮完好） |
 | 已知限制 | 无 xdotool/ydotool，Wayland 下无法脚本化注入键鼠，表格交互靠单测覆盖（51 个表格用例） |
+
+---
+
+# 验证日志 - 2026-10-19（二）标签体系 + 块引用锚点 + 切换器排序
+
+## 本轮改动
+
+**标签体系（对标 Obsidian 标签面板 + 标签补全）**
+1. 后端新增 `list_tags` 命令：全库扫描 .md，合并行内 `#tag` 与 frontmatter `tags:`，按引用次数降序返回 `{tag, count, files}`；大 vault（数千笔记）走 `spawn_blocking` 不阻塞 IPC 线程
+2. 编辑器 `#tag` 自动补全（CM6 completion source，与 wikilink 补全并列）：`#`+字符触发，子串匹配全库标签（含嵌套 `a/b`），apply 带尾随空格；前置字符校验排除 `[[链接#锚点]]`、`## 标题`、URL 锚点
+3. 侧栏新增「标签」页签（TagPanel）：按引用数排序、搜索过滤、点击展开文件列表跳转、手动刷新；打开 vault 立即建索引，保存后 3s 防抖重建
+
+**块引用 / 标题锚点跳转**
+4. 新增纯函数 `findAnchorPos`：`^block-id` 定位行尾标记所在行，标题按 ATX 文本完全匹配（忽略大小写与闭合 `#`）
+5. `[[笔记#标题]]` / `[[笔记#^block-id]]` 打开文件后滚动定位（编辑器居中）；同笔记 `[[#标题]]` 直接跳转；找不到时状态栏提示不盲跳
+
+**快速切换器 / 命令面板排序**
+6. 新增 `scoreMatch` / `rankCandidates` 工具：basename 精确 > 前缀 > 路径前缀 > 子串 > 跳字；最近使用加权（localStorage `nf-recent-files` / `nf-recent-commands` 各 30 条，同分时 recent 决胜但不能逆转匹配质量差距）；空查询时快速切换器按最近打开排序（Obsidian 行为）
+7. 曾考虑拼音首字母匹配：无词库时多音字错误率高，决定不支持（已在 matchScore.ts 注释记录）
+
+## 验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 前端全量测试 | ✅ 376 passed（+26：anchor 6、tagCompletion 7、matchScore 9、TagPanel 4） |
+| tsc + vite build | ✅ built in 2.20s |
+| Rust 编译 | ✅ cargo build -p noteforge（async list_tags 显式 touch 后 7.16s 全量编译通过） |
+| Tauri 桌面启动 | ✅ /home/wang/wk/wk（2930 笔记）打开正常，侧栏三页签（文件/大纲/标签）渲染，打开笔记与表格渲染无回归（spectacle 截屏） |
+| 已知限制 | Wayland 无 xdotool/ydotool/wtype，无法脚本化点击「标签」页签；面板交互由 4 个组件级单测覆盖 |

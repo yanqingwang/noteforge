@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { isRenderableFile } from "./FileTree";
 import { Icon } from "./Icon";
 import { FileText, Globe } from "lucide-react";
+import { rankCandidates } from "../utils/matchScore";
+import { getRecent } from "../utils/recent";
 
 interface QuickSwitcherProps {
   /** 完整文件树（含目录）；仅列出可打开的 .md/.html 文件 */
@@ -26,12 +28,12 @@ export default function QuickSwitcher({ files, onSelect, onClose, extraExts = []
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // 只列可打开文件（排除目录与附件），类 Obsidian 快速切换
-  const results = files.filter(f =>
-    !f.is_dir &&
-    isRenderableFile(f.path, extraExts) &&
-    f.path.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 20);
+  // 只列可打开文件（排除目录与附件），类 Obsidian 快速切换；
+  // 排序：文件名前缀 > 路径前缀 > 子串 > 跳字，最近打开加权
+  const openable = files.filter(f => !f.is_dir && isRenderableFile(f.path, extraExts));
+  const results = query.trim()
+    ? rankCandidates(openable, query, f => f.path, getRecent("nf-recent-files"), 20)
+    : rankCandidates(openable, "", f => f.path, getRecent("nf-recent-files"), 20);
 
   const open = (p: string) => { onClose(); onSelect(p); };
 

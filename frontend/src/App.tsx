@@ -17,6 +17,8 @@ import OutlinePanel from "./components/OutlinePanel";
 import { pluginManager } from "./plugins/PluginManager";
 import QuickSwitcher from "./components/QuickSwitcher";
 import CommandPalette from "./components/CommandPalette";
+import TagPanel, { type TagInfo } from "./components/TagPanel";
+import { pushRecent } from "./utils/recent";
 import DropdownMenu, { type MenuItem } from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
 import { appVersion } from "./version";
@@ -24,7 +26,7 @@ import type { OutlineItem } from "./editor/bridge";
 import { Icon } from "./components/Icon";
 import {
   FolderOpen, FilePlus2, Save, ArrowLeft, Search, Command, PanelLeft,
-  Puzzle, Blocks, Settings, Info, Database, Image as ImageIcon, Pin, X, Folder, List,
+  Puzzle, Blocks, Settings, Info, Database, Image as ImageIcon, Pin, X, Folder, List, Hash,
 } from "lucide-react";
 
 export interface FileEntry { path: string; is_dir: boolean; size: number; modified: number; }
@@ -81,8 +83,13 @@ function App() {
   const [rightDockVisible, setRightDockVisible] = useState(false);
   const rightDockRef = useRef<HTMLDivElement | null>(null);
   // ── M6：大纲 / 主题 / 定时同步 ──
-  const [sidebarMode, setSidebarMode] = useState<"files" | "outline">("files");
+  const [sidebarMode, setSidebarMode] = useState<"files" | "outline" | "tags">("files");
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
+  // 全库标签索引（标签面板 + 编辑器 #tag 补全共用）
+  const [tagIndex, setTagIndex] = useState<TagInfo[]>([]);
+  const tagRefreshTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // [[note#标题]] / [[note#^block-id]] 打开后待跳转的锚点
+  const [pendingAnchor, setPendingAnchor] = useState<{ path: string; anchor: string; nonce: number } | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("nf-theme") === "dark" ? "dark" : "light");
   // 插件的内置命令（editor:save-file / editor:toggle-source 等）要回调宿主动作。
@@ -162,6 +169,20 @@ function App() {
     }
   }, [initialized]);
 
+  // 全库标签索引：立即重建（打开 vault / 手动刷新）
+  const refreshTags = useCallback(() => {
+    invoke<TagInfo[]>("list_tags").then(setTagIndex).catch(() => setTagIndex([]));
+  }, []);
+  // 保存后标签可能变化：防抖重建，避免每次击键都全库扫描
+  const scheduleRefreshTags = useCallback(() => {
+    if (tagRefreshTimer.current) clearTimeout(tagRefreshTimer.current);
+    tagRefreshTimer.current = setTimeout(() => {
+      invoke<TagInfo[]>("list_tags").then(setTagIndex).catch(() => {});
+    }, 3000);
+  }, []);
+  // 锚点跳转完成回调（稳定引用，避免 EditorPane 无谓重渲染）
+  const consumeAnchor = useCallback(() => setPendingAnchor(null), []);
+
   const openVault = useCallback(async (path: string) => {
     try {
       dispatch({ type: 'SET_STATUS', text: '正在打开...' } as any);
@@ -191,11 +212,20 @@ function App() {
         setRightDockVisible: (v: boolean) => setRightDockVisible(v),
       }).catch((e) => console.warn("[plugin] 加载失败", e));
       dispatch({ type: 'SET_STATUS', text: `已打开: ${path} (${tree.filter(f => !f.is_dir).length} 文件)` } as any);
+      refreshTags();
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `打开失败: ${e}` } as any); }
-  }, []);
+  }, [refreshTags]);
 
   const readNote = useCallback(async (notePath: string) => {
     if (!vaultPath) { dispatch({ type: 'SET_STATUS', text: '没有打开 Vault' } as any); return; }
+    // 同笔记锚点跳转：[[#标题]] / [[#^block-id]]（无文件目标）
+    {
+      const parts0 = splitWikilink(notePath);
+      if (!parts0.target && parts0.subpath && activeFileRef.current) {
+        setPendingAnchor({ path: activeFileRef.current, anchor: parts0.subpath, nonce: Date.now() });
+        return;
+      }
+    }
     // 统一 wikilink 解析：完整路径 → 路径后缀 → 文件名（忽略大小写）→ 唯一模糊；
     // 别名/锚点不参与匹配，歧义时不再盲跳到某个文件。
     const hasExt = /\.(md|markdown|html?)$/i.test(notePath);
@@ -264,6 +294,9 @@ function App() {
       const c = contentCache[resolved];
       dispatch({ type: 'OPEN_FILE', path: resolved, content: c.content, html: c.html } as any);
       obsidianRuntime.notifyFileOpen(resolved);
+      pushRecent("nf-recent-files", resolved);
+      const sub = splitWikilink(notePath).subpath;
+      if (sub) setPendingAnchor({ path: resolved, anchor: sub, nonce: Date.now() });
       return;
     }
     try {
@@ -272,6 +305,9 @@ function App() {
       setContentCache(c => ({ ...c, [resolved]: { content: note.content, html: note.html } }));
       dispatch({ type: 'OPEN_FILE', path: resolved, content: note.content, html: note.html } as any);
       obsidianRuntime.notifyFileOpen(resolved);
+      pushRecent("nf-recent-files", resolved);
+      const sub = splitWikilink(notePath).subpath;
+      if (sub) setPendingAnchor({ path: resolved, anchor: sub, nonce: Date.now() });
     } catch (e: any) { dispatch({ type: 'SET_STATUS', text: `读取失败: ${e}` } as any); }
   }, [vaultPath, contentCache, files]);
 
@@ -391,8 +427,9 @@ function App() {
       await invoke("write_note", { notePath: activeFile, content: cache?.content ?? editorBridge.latestDoc ?? "" });
       dispatch({ type: 'SET_STATUS', text: `已保存: ${activeFile}` } as any);
       void scheduleWatchSync();
+      scheduleRefreshTags();
     } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
-  }, [vaultPath, activeFile, cache, scheduleWatchSync]);
+  }, [vaultPath, activeFile, cache, scheduleWatchSync, scheduleRefreshTags]);
 
   // ── 全局快捷键：Ctrl+O 快速切换 / Ctrl+P 命令面板 / Ctrl+S 保存 / Ctrl+N 新建 ──
   // （与菜单标注及 Obsidian 习惯一致；编辑器已处理的按键让其自行 preventDefault）
@@ -658,11 +695,21 @@ function App() {
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
                 <Icon as={List} size={14} /> 大纲
               </button>
+              <button onClick={() => setSidebarMode("tags")}
+                style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  background: sidebarMode === "tags" ? (theme === "dark" ? "#333" : "#fff") : "transparent",
+                  color: theme === "dark" ? "#ccc" : "#555",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                <Icon as={Hash} size={14} /> 标签
+              </button>
             </div>
             {sidebarMode === "files"
               ? <FileTree key={vaultPath} files={files} activeFile={activeFile || ""} onSelect={readNote} vaultPath={vaultPath} extraExts={pluginExts}
                   onFsChange={() => void refreshTree()} onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)} />
-              : <OutlinePanel items={outlineItems} dark={theme === "dark"} />}
+              : sidebarMode === "outline"
+              ? <OutlinePanel items={outlineItems} dark={theme === "dark"} />
+              : <TagPanel tags={tagIndex} dark={theme === "dark"} activeFile={activeFile || ""}
+                  onSelect={readNote} onRefresh={refreshTags} />}
           </div>
           <DragHandle side="left"
             onResize={(dx) => setSidebarWidth(w => clampWidth(w + dx, 180, 520))}
@@ -710,7 +757,14 @@ function App() {
             htmlFile={htmlActive ? activeFile : null}
             vaultConfig={vaultConfig} vaultPath={vaultPath}
             mode={paneMode} onSetMode={handleSetMode}
-            onStatus={(msg) => dispatch({ type: 'SET_STATUS', text: msg } as any)}
+            tags={tagIndex}
+            pendingAnchor={pendingAnchor}
+            onAnchorConsumed={consumeAnchor}
+            onStatus={(msg) => {
+              dispatch({ type: 'SET_STATUS', text: msg } as any);
+              // 编辑器自动保存/桥接保存成功后，防抖重建标签索引
+              if (msg.includes("已保存")) scheduleRefreshTags();
+            }}
             onContentChange={(newContent) => {
               if (!activeFile) return;
               // 防抖 250ms：降低 render_markdown 乱序回写压力（编辑器侧另有 echo 守卫兜底）
