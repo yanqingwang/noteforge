@@ -12,7 +12,7 @@ makepkg -d -f
 已构建好的包可直接安装：
 
 ```bash
-sudo pacman -U noteforge-0.1.0-3-x86_64.pkg.tar.zst
+sudo pacman -U noteforge-0.4.0-1-x86_64.pkg.tar.zst
 ```
 
 ## 安装内容

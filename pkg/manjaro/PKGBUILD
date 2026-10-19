@@ -3,8 +3,8 @@
 # PKGBUILD for NoteForge - local-first knowledge management application
 
 pkgname=noteforge
-pkgver=0.3.2
-pkgrel=11
+pkgver=0.4.0
+pkgrel=1
 pkgdesc="NoteForge - local-first Markdown knowledge management application (Rust)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/yanqingwang/noteforge"
