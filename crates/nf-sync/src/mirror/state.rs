@@ -29,6 +29,14 @@ pub struct StateEntry {
     /// Remote etag at last sync.
     pub remote_etag: Option<String>,
     pub synced_at: i64,
+    /// Lazy-attachment placeholder: the remote identity is known but the
+    /// bytes were intentionally not downloaded yet (yanc lazy sync).
+    #[serde(default)]
+    pub lazy: bool,
+    /// A `merge` conflict could not be resolved and both sides were kept
+    /// (safe-hold). Cleared as soon as either side changes again.
+    #[serde(default)]
+    pub conflicted: bool,
 }
 
 impl SyncState {
@@ -73,8 +81,38 @@ impl SyncState {
                 local_size,
                 remote_etag,
                 synced_at: chrono::Utc::now().timestamp(),
+                lazy: false,
+                conflicted: false,
             },
         );
+    }
+
+    /// Record a lazy placeholder: only the remote identity is known.
+    pub fn upsert_lazy(&mut self, path: &str, remote_etag: Option<String>) {
+        self.files.insert(
+            path.to_string(),
+            StateEntry {
+                local_hash: String::new(),
+                local_mtime: 0,
+                local_size: 0,
+                remote_etag,
+                synced_at: chrono::Utc::now().timestamp(),
+                lazy: true,
+                conflicted: false,
+            },
+        );
+    }
+
+    /// Flag a file whose merge ended in a safe-hold (both sides kept).
+    pub fn mark_conflicted(&mut self, path: &str) {
+        if let Some(e) = self.files.get_mut(path) {
+            e.conflicted = true;
+        }
+    }
+
+    /// Was this path recorded as a lazy placeholder?
+    pub fn is_lazy(&self, path: &str) -> bool {
+        self.files.get(path).map(|e| e.lazy).unwrap_or(false)
     }
 
     pub fn remove(&mut self, path: &str) {

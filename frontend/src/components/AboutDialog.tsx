@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { appVersion } from "../version";
+import { NotebookPen } from "lucide-react";
 
 interface AboutDialogProps {
   open: boolean;
@@ -38,7 +39,9 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
         background: "white", borderRadius: 12, padding: 32, minWidth: 360, maxWidth: 420,
         boxShadow: "0 8px 32px rgba(0,0,0,0.2)", textAlign: "center",
       }}>
-        <div style={{ fontSize: 48, marginBottom: 8 }}>📝</div>
+        <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
+          <NotebookPen size={48} strokeWidth={1.5} color="#3B5BDB" />
+        </div>
         <h2 style={{ margin: "0 0 4px", fontSize: 22 }}>NoteForge</h2>
         <p style={{ color: "#666", fontSize: 14, margin: "0 0 16px" }}>
           本地优先 Markdown 知识管理桌面应用

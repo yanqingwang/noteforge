@@ -1,111 +1,111 @@
 {
-  "generatedAt": "2026-10-08T14:29:45.147Z",
+  "generatedAt": "2026-10-19T06:15:44.132Z",
   "sampleGeneratedAt": "2026-10-07T08:51:27.194Z",
-  "total": 123,
+  "total": 121,
   "summary": {
-    "passed": 77,
-    "viewError": 18,
-    "settingsError": 3,
-    "loadOnly": 4,
-    "failed": 21,
-    "artifactMissing": 0
+    "passed": 71,
+    "viewError": 19,
+    "loadOnly": 2,
+    "artifactMissing": 0,
+    "failed": 26
   },
   "missingApi": {
     "MarkdownPreviewRenderer": 1
   },
   "usedApi": {
-    "AbstractInputSuggest": 116,
-    "App": 116,
-    "BasesEntry": 116,
-    "BasesEntryGroup": 116,
-    "BasesQueryResult": 116,
-    "BasesView": 116,
-    "BasesViewConfig": 116,
-    "ButtonComponent": 116,
-    "CodeMirror": 116,
-    "ColorComponent": 116,
-    "Component": 116,
-    "ConfirmationModal": 116,
-    "DropdownComponent": 116,
-    "Editor": 116,
-    "EditorSuggest": 116,
-    "Events": 116,
-    "ExtraButtonComponent": 116,
-    "FileSystemAdapter": 116,
-    "FuzzySuggestModal": 116,
-    "ItemView": 116,
-    "Keymap": 116,
-    "MarkdownRenderChild": 116,
-    "MarkdownRenderer": 116,
-    "MarkdownView": 116,
-    "Menu": 116,
-    "MenuItem": 116,
-    "Modal": 116,
-    "Notice": 116,
-    "Platform": 116,
-    "Plugin": 116,
-    "PluginSettingTab": 116,
-    "QueryController": 116,
-    "Scope": 116,
-    "SearchComponent": 116,
-    "SecretComponent": 116,
-    "Setting": 116,
-    "SettingGroup": 116,
-    "SettingPage": 116,
-    "SliderComponent": 116,
-    "SuggestModal": 116,
-    "TAbstractFile": 116,
-    "TFile": 116,
-    "TFolder": 116,
-    "TextAreaComponent": 116,
-    "TextComponent": 116,
-    "TextFileView": 116,
-    "ToggleComponent": 116,
-    "Value": 116,
-    "ValueComponent": 116,
-    "View": 116,
-    "WorkspaceLeaf": 116,
-    "WorkspaceSplit": 116,
-    "addIcon": 116,
-    "arrayBufferToBase64": 116,
-    "base64ToArrayBuffer": 116,
-    "debounce": 116,
-    "escapeRegExp": 116,
-    "getAllTags": 116,
-    "getFrontMatterInfo": 116,
-    "getIconIds": 116,
-    "getLinkpath": 116,
-    "htmlToMarkdown": 116,
-    "markdownToHtml": 116,
-    "moment": 116,
-    "normalizePath": 116,
-    "parseFrontMatterAliases": 116,
-    "parseFrontMatterEntry": 116,
-    "parseFrontMatterTags": 116,
-    "parseLinktext": 116,
-    "parsePropertyId": 116,
-    "parseYaml": 116,
-    "prepareFuzzySearch": 116,
-    "prepareSimpleSearch": 116,
-    "request": 116,
-    "requestUrl": 116,
-    "requireApiVersion": 116,
-    "sanitizeHTML": 116,
-    "sanitizeHTMLToDom": 116,
-    "setIcon": 116,
-    "stringifyYaml": 116,
-    "getLanguage": 18,
-    "setTooltip": 5,
+    "AbstractInputSuggest": 109,
+    "App": 109,
+    "BasesEntry": 109,
+    "BasesEntryGroup": 109,
+    "BasesQueryResult": 109,
+    "BasesView": 109,
+    "BasesViewConfig": 109,
+    "ButtonComponent": 109,
+    "CodeMirror": 109,
+    "ColorComponent": 109,
+    "Component": 109,
+    "ConfirmationModal": 109,
+    "DropdownComponent": 109,
+    "Editor": 109,
+    "EditorSuggest": 109,
+    "Events": 109,
+    "ExtraButtonComponent": 109,
+    "FileSystemAdapter": 109,
+    "FuzzySuggestModal": 109,
+    "ItemView": 109,
+    "Keymap": 109,
+    "MarkdownRenderChild": 109,
+    "MarkdownRenderer": 109,
+    "MarkdownView": 109,
+    "Menu": 109,
+    "MenuItem": 109,
+    "Modal": 109,
+    "Notice": 109,
+    "Platform": 109,
+    "Plugin": 109,
+    "PluginSettingTab": 109,
+    "QueryController": 109,
+    "Scope": 109,
+    "SearchComponent": 109,
+    "SecretComponent": 109,
+    "Setting": 109,
+    "SettingGroup": 109,
+    "SettingPage": 109,
+    "SliderComponent": 109,
+    "SuggestModal": 109,
+    "TAbstractFile": 109,
+    "TFile": 109,
+    "TFolder": 109,
+    "TextAreaComponent": 109,
+    "TextComponent": 109,
+    "TextFileView": 109,
+    "ToggleComponent": 109,
+    "Value": 109,
+    "ValueComponent": 109,
+    "View": 109,
+    "WorkspaceLeaf": 109,
+    "WorkspaceSplit": 109,
+    "addIcon": 109,
+    "arrayBufferToBase64": 109,
+    "base64ToArrayBuffer": 109,
+    "debounce": 109,
+    "escapeRegExp": 109,
+    "getAllTags": 109,
+    "getFrontMatterInfo": 109,
+    "getIconIds": 109,
+    "getLinkpath": 109,
+    "htmlToMarkdown": 109,
+    "markdownToHtml": 109,
+    "moment": 109,
+    "normalizePath": 109,
+    "parseFrontMatterAliases": 109,
+    "parseFrontMatterEntry": 109,
+    "parseFrontMatterTags": 109,
+    "parseLinktext": 109,
+    "parsePropertyId": 109,
+    "parseYaml": 109,
+    "prepareFuzzySearch": 109,
+    "prepareSimpleSearch": 109,
+    "request": 109,
+    "requestUrl": 109,
+    "requireApiVersion": 109,
+    "sanitizeHTML": 109,
+    "sanitizeHTMLToDom": 109,
+    "setIcon": 109,
+    "stringifyYaml": 109,
+    "getLanguage": 17,
+    "FileView": 5,
+    "getIcon": 5,
     "EditableFileView": 5,
-    "FileView": 4,
-    "getIcon": 4,
+    "setTooltip": 5,
+    "Workspace": 4,
     "loadMermaid": 4,
+    "BaseComponent": 3,
+    "HoverPopover": 3,
     "Vault": 3,
-    "Workspace": 3,
     "apiVersion": 3,
     "loadMathJax": 3,
     "AudioView": 2,
-    "BaseComponent": 2,
     "BooleanValue": 2,
     "DateValue": 2,
     "DisplayValueComponent": 2,
@@ -117,7 +117,6 @@
     "EmptyView": 2,
     "FileManager": 2,
     "FileValue": 2,
-    "HoverPopover": 2,
     "HtmlValue": 2,
     "IconValue": 2,
     "ImageValue": 2,
@@ -152,30 +151,32 @@
   },
   "topErrors": {},
   "cmModules": {
-    "@codemirror/view": 63,
-    "@codemirror/state": 52,
-    "@codemirror/language": 15,
+    "@codemirror/view": 71,
+    "@codemirror/state": 64,
+    "@codemirror/language": 25,
     "@codemirror/commands": 5,
-    "@lezer/highlight": 3,
-    "@lezer/common": 3,
+    "@lezer/highlight": 4,
+    "@lezer/common": 4,
+    "@codemirror/search": 4,
     "@codemirror/autocomplete": 3,
-    "@codemirror/search": 2,
     "@lezer/lr": 1,
+    "@codemirror/lint": 1,
     "@emotion/is-prop-valid": 1
   },
   "unresolvedRequires": {
+    "node:http": 1,
     "esprima": 1,
     "@emotion/is-prop-valid": 1,
-    "process": 1,
+    "http": 1,
     "jquery": 1
   },
   "results": [
     {
       "id": "obsidian-excalidraw-plugin",
       "name": "Excalidraw",
-      "category": "本地/自装",
-      "downloads": 0,
-      "repo": "(local)",
+      "category": "图谱白板",
+      "downloads": 8353437,
+      "repo": "zsviczian/obsidian-excalidraw-plugin",
       "status": "pass",
       "phase": null,
       "error": null,
@@ -209,9 +210,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 4987722,
-      "manifestVersion": "2.28.1",
-      "ref": "cache",
+      "bytes": 5061540,
+      "manifestVersion": "2.29.0",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -302,9 +303,10 @@
         "getIcon×37",
         "addIcon×3",
         "getLanguage×1",
+        "requireApiVersion×1",
         "setIcon×1"
       ],
-      "ms": 6641,
+      "ms": 48663,
       "asyncErrors": [
         "sleep is not defined"
       ]
@@ -317,7 +319,7 @@
       "repo": "silentvoid13/Templater",
       "status": "fail-onload",
       "phase": "onload",
-      "error": "noteforge 沙箱不支持 child_process",
+      "error": "Cannot read properties of undefined (reading 'appendChild')",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -332,10 +334,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 453498,
+      "bytes": 454294,
       "manifestVersion": "3.0.0",
-      "ref": "cache",
-      "errorStack": "Error: noteforge 沙箱不支持 child_process |     at Object.get (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:623:10) |     at new bn (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:18:8518) |     at new kn (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:19:728) |     at new jn (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:19:1263) |     at new Wt (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:20:74685)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'appendChild') |     at le (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:15:33) |     at ea.registerCodeMirrorMode (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:60:30643) |     at ea.setup (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:60:29565) |     at ta.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/templater-obsidian/main.js:60:32274) |     at async testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -419,7 +421,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 784
+      "ms": 23582
     },
     {
       "id": "dataview",
@@ -451,7 +453,7 @@
       "apiErrors": {},
       "bytes": 2377634,
       "manifestVersion": "0.5.68",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 27,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -538,7 +540,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 970
+      "ms": 24856
     },
     {
       "id": "obsidian-tasks-plugin",
@@ -571,10 +573,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 935515,
-      "manifestVersion": "8.4.0",
-      "ref": "cache",
-      "settingRows": 58,
+      "bytes": 1051096,
+      "manifestVersion": "8.6.0",
+      "ref": "ghfast.top/releases/latest",
+      "settingRows": 45,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -659,12 +661,12 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "sanitizeHTMLToDom×20",
+        "sanitizeHTMLToDom×7",
         "debounce×2",
         "getLanguage×1",
         "moment×1"
       ],
-      "ms": 1064
+      "ms": 34608
     },
     {
       "id": "table-editor-obsidian",
@@ -720,7 +722,7 @@
       "apiErrors": {},
       "bytes": 272036,
       "manifestVersion": "0.23.2",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -807,7 +809,7 @@
       "topApi": [
         "addIcon×19"
       ],
-      "ms": 1029
+      "ms": 19932
     },
     {
       "id": "obsidian-git",
@@ -918,12 +920,14 @@
           "tags": []
         }
       },
-      "unresolvedRequires": [],
+      "unresolvedRequires": [
+        "node:http"
+      ],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 774737,
-      "manifestVersion": "2.41.1",
-      "ref": "cache",
+      "bytes": 813552,
+      "manifestVersion": "2.42.0",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "git-read-only-file-view: Cannot read properties of null (reading 'titleEl')"
       ],
@@ -1014,7 +1018,7 @@
         "setIcon×11",
         "debounce×2"
       ],
-      "ms": 1528
+      "ms": 17618
     },
     {
       "id": "calendar",
@@ -1042,7 +1046,7 @@
       "apiErrors": {},
       "bytes": 489435,
       "manifestVersion": "1.5.10",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "calendar: Cannot destructure property 'vault' of 'window.app' as it is undefined."
       ],
@@ -1133,7 +1137,7 @@
         "moment×2",
         "debounce×1"
       ],
-      "ms": 964,
+      "ms": 9368,
       "asyncErrors": [
         "Cannot destructure property 'vault' of 'window.app' as it is undefined."
       ]
@@ -1168,7 +1172,7 @@
       "apiErrors": {},
       "bytes": 154561,
       "manifestVersion": "1.0.9",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingTabErrors": [
         "渲染后设置页为空（containerEl 子元素=1, 行=0, containerEl 文本长度=0, contentEl 文本长度=0）"
       ],
@@ -1255,7 +1259,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1670
+      "ms": 22427
     },
     {
       "id": "obsidian-kanban",
@@ -1285,8 +1289,8 @@
       "apiErrors": {},
       "bytes": 990749,
       "manifestVersion": "2.0.51",
-      "ref": "cache",
-      "errorStack": "TypeError: Cannot convert undefined or null to object |     at Object.getPrototypeOf (<anonymous>) |     at RB (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-kanban/main.js:69:7258) |     at wf.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-kanban/main.js:69:8197) |     at async testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:5) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot convert undefined or null to object |     at Object.getPrototypeOf (<anonymous>) |     at RB (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-kanban/main.js:69:7258) |     at wf.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-kanban/main.js:69:8197) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |     at async testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -1370,19 +1374,19 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 822
+      "ms": 31225
     },
     {
       "id": "copilot",
       "name": "Copilot",
-      "category": "本地/自装",
-      "downloads": 0,
-      "repo": "(local)",
+      "category": "AI 智能体",
+      "downloads": 2347881,
+      "repo": "logancyang/obsidian-copilot",
       "status": "pass-view-error",
       "phase": null,
       "error": null,
-      "commands": 21,
-      "views": 5,
+      "commands": 23,
+      "views": 6,
       "settingTabs": 1,
       "editorExtensions": 3,
       "postProcessors": 0,
@@ -1396,6 +1400,8 @@
         "@codemirror/view"
       ],
       "commandIds": [
+        "copilot:turn-diff-next-change",
+        "copilot:turn-diff-previous-change",
         "copilot:publish-file-to-symposium",
         "copilot:count-word-and-tokens-selection",
         "copilot:count-total-vault-tokens",
@@ -1428,14 +1434,15 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 4946972,
-      "manifestVersion": "4.0.13",
-      "ref": "cache",
+      "bytes": 4963930,
+      "manifestVersion": "4.0.15",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "copilot-chat-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
         "obsidian-copilot-apply-view: Cannot read properties of undefined (reading 'empty')",
         "copilot-relevant-notes-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
-        "copilot-agent-chat-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        "copilot-agent-chat-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+        "copilot-turn-diff-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
       ],
       "settingRows": 1,
       "accessedApi": [
@@ -1525,7 +1532,7 @@
         "requestUrl×2",
         "addIcon×1"
       ],
-      "ms": 8550
+      "ms": 27122
     },
     {
       "id": "realclaudian",
@@ -1547,10 +1554,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1887692,
-      "manifestVersion": "2.3.13",
-      "ref": "cache",
-      "errorStack": "    at JSON.parse (<anonymous>) |     at Ze (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/realclaudian/main.js:3:918) |     at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/realclaudian/main.js:70:4148) |     at Module.evaluatePlugin (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:537:129)",
+      "bytes": 2379048,
+      "manifestVersion": "2.3.24",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "    at JSON.parse (<anonymous>) |     at Pt (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/realclaudian/main.js:3:929) |     at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/realclaudian/main.js:80:4060) |     at Module.evaluatePlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:546:129)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -1633,7 +1640,7 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "ms": 824
+      "ms": 23117
     },
     {
       "id": "remotely-save",
@@ -1655,7 +1662,7 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "ms": 90759
+      "ms": 90356
     },
     {
       "id": "obsidian-icon-folder",
@@ -1683,8 +1690,8 @@
       "apiErrors": {},
       "bytes": 1003749,
       "manifestVersion": "2.14.7",
-      "ref": "cache",
-      "errorStack": "TypeError: Cannot read properties of undefined (reading 'map') |     at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-icon-folder/main.js:601:56) |     at Generator.next (<anonymous>) |     at fulfilled (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-icon-folder/main.js:35:58)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'map') |     at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-icon-folder/main.js:601:56) |     at Generator.next (<anonymous>) |     at fulfilled (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-icon-folder/main.js:35:58) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -1770,7 +1777,7 @@
       "topApi": [
         "getIconIds×1"
       ],
-      "ms": 787
+      "ms": 21642
     },
     {
       "id": "quickadd",
@@ -1800,9 +1807,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1119211,
-      "manifestVersion": "2.31.0",
-      "ref": "cache",
+      "bytes": 1125548,
+      "manifestVersion": "2.32.1",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -1887,7 +1894,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 943
+      "ms": 26877
     },
     {
       "id": "editing-toolbar",
@@ -2014,9 +2021,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1710345,
-      "manifestVersion": "4.1.7",
-      "ref": "cache",
+      "bytes": 1719057,
+      "manifestVersion": "4.1.10",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 112,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -2106,7 +2113,7 @@
         "requireApiVersion×3",
         "debounce×1"
       ],
-      "ms": 1330
+      "ms": 16074
     },
     {
       "id": "omnisearch",
@@ -2114,6 +2121,28 @@
       "category": "其他",
       "downloads": 1966306,
       "repo": "scambier/obsidian-omnisearch",
+      "status": "fail-harness",
+      "phase": "isolate",
+      "error": "子进程异常：spawnSync /opt/homebrew/Cellar/node/26.12.0/bin/node ETIMEDOUT",
+      "commands": 0,
+      "views": 0,
+      "settingTabs": 0,
+      "editorExtensions": 0,
+      "postProcessors": 0,
+      "cmModulesUsed": [],
+      "commandIds": [],
+      "viewShells": {},
+      "unresolvedRequires": [],
+      "unsupportedApi": {},
+      "apiErrors": {},
+      "ms": 612650
+    },
+    {
+      "id": "tasknotes",
+      "name": "TaskNotes",
+      "category": "任务待办",
+      "downloads": 1936475,
+      "repo": "callumalpass/tasknotes",
       "status": "fail-harness",
       "phase": "harness",
       "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
@@ -2128,202 +2157,7 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "ms": 90746
-    },
-    {
-      "id": "tasknotes",
-      "name": "TaskNotes",
-      "category": "任务待办",
-      "downloads": 1936475,
-      "repo": "callumalpass/tasknotes",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 39,
-      "views": 4,
-      "settingTabs": 1,
-      "editorExtensions": 4,
-      "postProcessors": 1,
-      "cmModulesUsed": [
-        "@codemirror/autocomplete",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/view",
-        "@codemirror/view",
-        "@codemirror/view"
-      ],
-      "commandIds": [
-        "tasknotes:open-calendar-view",
-        "tasknotes:open-advanced-calendar-view",
-        "tasknotes:open-tasks-view",
-        "tasknotes:open-agenda-view",
-        "tasknotes:open-pomodoro-view",
-        "tasknotes:open-kanban-view",
-        "tasknotes:update-default-base-files",
-        "tasknotes:open-pomodoro-stats",
-        "tasknotes:open-statistics",
-        "tasknotes:create-new-task",
-        "tasknotes:convert-current-note-to-task",
-        "tasknotes:convert-to-tasknote",
-        "tasknotes:batch-convert-all-tasks",
-        "tasknotes:insert-tasknote-link",
-        "tasknotes:create-inline-task",
-        "tasknotes:quick-actions-current-task",
-        "tasknotes:quick-actions-task-under-cursor",
-        "tasknotes:edit-current-task",
-        "tasknotes:cycle-current-task-status",
-        "tasknotes:cycle-current-task-priority",
-        "tasknotes:add-project-to-current-task",
-        "tasknotes:add-subtask-to-current-note",
-        "tasknotes:go-to-today",
-        "tasknotes:start-pomodoro",
-        "tasknotes:stop-pomodoro",
-        "tasknotes:pause-pomodoro",
-        "tasknotes:refresh-cache",
-        "tasknotes:export-all-tasks-ics",
-        "tasknotes:sync-all-tasks-google-calendar",
-        "tasknotes:sync-current-task-google-calendar",
-        "tasknotes:view-release-notes",
-        "tasknotes:start-time-tracking-current-task",
-        "tasknotes:stop-time-tracking-current-task",
-        "tasknotes:stop-active-time-tracking",
-        "tasknotes:start-time-tracking-with-selector",
-        "tasknotes:edit-time-entries",
-        "tasknotes:create-or-open-task",
-        "tasknotes:create-or-open-task-with-time-tracking",
-        "tasknotes:rollover-overdue-scheduled-tasks"
-      ],
-      "viewShells": {
-        "tasknotes-pomodoro-view": {
-          "children": 1,
-          "textLen": 64,
-          "tags": [
-            "svg",
-            "input"
-          ]
-        },
-        "tasknotes-pomodoro-stats-view": {
-          "children": 1,
-          "textLen": 118,
-          "tags": []
-        },
-        "tasknotes-stats-view": {
-          "children": 1,
-          "textLen": 195,
-          "tags": [
-            "input"
-          ]
-        },
-        "tasknotes-release-notes": {
-          "children": 1,
-          "textLen": 7943,
-          "tags": []
-        }
-      },
-      "unresolvedRequires": [],
-      "unsupportedApi": {},
-      "apiErrors": {},
-      "bytes": 4544257,
-      "manifestVersion": "4.13.8",
-      "ref": "cache",
-      "settingRows": 37,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLanguage",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "setTooltip",
-        "stringifyYaml"
-      ],
-      "topApi": [
-        "normalizePath×18",
-        "requireApiVersion×10",
-        "stringifyYaml×7",
-        "getLanguage×1",
-        "addIcon×1",
-        "requestUrl×1",
-        "setIcon×1",
-        "setTooltip×1"
-      ],
-      "ms": 2002
+      "ms": 111313
     },
     {
       "id": "obsidian-minimal-settings",
@@ -2399,7 +2233,7 @@
       "apiErrors": {},
       "bytes": 26403,
       "manifestVersion": "9.0.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 33,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -2484,7 +2318,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 923
+      "ms": 11186
     },
     {
       "id": "obsidian-importer",
@@ -2492,113 +2326,21 @@
       "category": "其他",
       "downloads": 1763043,
       "repo": "obsidianmd/obsidian-importer",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 1,
+      "status": "fail-harness",
+      "phase": "harness",
+      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
+      "commands": 0,
       "views": 0,
-      "settingTabs": 1,
+      "settingTabs": 0,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [],
-      "commandIds": [
-        "obsidian-importer:open-modal"
-      ],
+      "commandIds": [],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 5048382,
-      "manifestVersion": "3.1.13",
-      "ref": "cache",
-      "settingRows": 1,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLanguage",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [
-        "getLanguage×1"
-      ],
-      "ms": 1117
+      "ms": 104440
     },
     {
       "id": "obsidian-outliner",
@@ -2606,120 +2348,21 @@
       "category": "导航大纲",
       "downloads": 1437330,
       "repo": "vslinko/obsidian-outliner",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 7,
+      "status": "fail-harness",
+      "phase": "harness",
+      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
+      "commands": 0,
       "views": 0,
-      "settingTabs": 1,
-      "editorExtensions": 11,
+      "settingTabs": 0,
+      "editorExtensions": 0,
       "postProcessors": 0,
-      "cmModulesUsed": [
-        "@codemirror/view",
-        "@codemirror/language",
-        "@codemirror/state"
-      ],
-      "commandIds": [
-        "obsidian-outliner:system-info",
-        "obsidian-outliner:move-list-item-up",
-        "obsidian-outliner:move-list-item-down",
-        "obsidian-outliner:indent-list",
-        "obsidian-outliner:outdent-list",
-        "obsidian-outliner:fold",
-        "obsidian-outliner:unfold"
-      ],
+      "cmModulesUsed": [],
+      "commandIds": [],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 475201,
-      "manifestVersion": "4.10.2",
-      "ref": "cache",
-      "settingRows": 10,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 937
+      "ms": 109080
     },
     {
       "id": "homepage",
@@ -2747,7 +2390,7 @@
       "apiErrors": {},
       "bytes": 59450,
       "manifestVersion": "4.5.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -2835,7 +2478,7 @@
       "topApi": [
         "getLanguage×1"
       ],
-      "ms": 887
+      "ms": 17010
     },
     {
       "id": "smart-connections",
@@ -2862,8 +2505,8 @@
       "apiErrors": {},
       "bytes": 1526647,
       "manifestVersion": "4.7.2",
-      "ref": "cache",
-      "errorStack": "TypeError: Cannot read properties of undefined (reading 'replace') |     at new SmartPluginSettingsTab (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:32884:27) |     at new ScEarlySettingsTab (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:38900:5) |     at SmartConnectionsPlugin.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:39468:24) |     at testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:28) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'replace') |     at new SmartPluginSettingsTab (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:32884:27) |     at new ScEarlySettingsTab (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:38900:5) |     at SmartConnectionsPlugin.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-connections/main.js:39468:24) |     at testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:28) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -2949,7 +2592,7 @@
       "topApi": [
         "addIcon×11"
       ],
-      "ms": 941
+      "ms": 14925
     },
     {
       "id": "recent-files-obsidian",
@@ -2975,7 +2618,7 @@
       "apiErrors": {},
       "bytes": 54453,
       "manifestVersion": "1.7.10",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "recent-files: s.getEnabledFeatures(...).contains is not a function"
       ],
@@ -3065,7 +2708,7 @@
       "topApi": [
         "addIcon×1"
       ],
-      "ms": 988
+      "ms": 17037
     },
     {
       "id": "obsidian-linter",
@@ -3102,10 +2745,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 904949,
-      "manifestVersion": "1.33.0",
-      "ref": "cache",
-      "settingRows": 164,
+      "bytes": 998462,
+      "manifestVersion": "1.34.2",
+      "ref": "ghfast.top/releases/latest",
+      "settingRows": 169,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -3190,12 +2833,12 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "sanitizeHTMLToDom×17",
+        "sanitizeHTMLToDom×19",
         "addIcon×5",
         "getLanguage×3",
         "debounce×1"
       ],
-      "ms": 1223
+      "ms": 21445
     },
     {
       "id": "tag-wrangler",
@@ -3219,7 +2862,7 @@
       "apiErrors": {},
       "bytes": 133501,
       "manifestVersion": "0.6.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -3358,7 +3001,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 864
+      "ms": 18490
     },
     {
       "id": "obsidian42-brat",
@@ -3400,7 +3043,7 @@
       "apiErrors": {},
       "bytes": 138873,
       "manifestVersion": "2.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 16,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -3490,7 +3133,7 @@
         "requireApiVersion×2",
         "addIcon×1"
       ],
-      "ms": 928
+      "ms": 18618
     },
     {
       "id": "obsidian-livesync",
@@ -3549,7 +3192,7 @@
         },
         "log-log": {
           "children": 1,
-          "textLen": 21,
+          "textLen": 31,
           "tags": [
             "input"
           ]
@@ -3566,9 +3209,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 4078609,
-      "manifestVersion": "1.0.35",
-      "ref": "cache",
+      "bytes": 4141838,
+      "manifestVersion": "1.0.38",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -3657,7 +3300,7 @@
         "debounce×1",
         "getLanguage×1"
       ],
-      "ms": 1633,
+      "ms": 30295,
       "asyncErrors": [
         "Local database is not ready yet."
       ]
@@ -3726,7 +3369,7 @@
       "apiErrors": {},
       "bytes": 387080,
       "manifestVersion": "7.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 128,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -3814,7 +3457,7 @@
         "addIcon×25",
         "requireApiVersion×2"
       ],
-      "ms": 988,
+      "ms": 23421,
       "asyncErrors": [
         "Method computeFileMetadataAsync does not exist on target",
         "Cannot read properties of undefined (reading 'file-properties')",
@@ -3845,8 +3488,8 @@
       "apiErrors": {},
       "bytes": 1088807,
       "manifestVersion": "0.40.31",
-      "ref": "cache",
-      "errorStack": "TypeError: this.component.load is not a function |     at n.onOpen (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:87830) |     at n.onOpen (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:138235) |     at n.open (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:9803:8) |     at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:138211) |     at Workspace.onLayoutReady (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:14738:3)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: this.component.load is not a function |     at n.onOpen (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:87830) |     at n.onOpen (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:138235) |     at n.open (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:4225:8) |     at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/pdf-plus/main.js:49:138211) |     at Workspace.onLayoutReady (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:9303:3)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -3933,7 +3576,7 @@
       "topApi": [
         "requireApiVersion×2"
       ],
-      "ms": 878
+      "ms": 26723
     },
     {
       "id": "periodic-notes",
@@ -3970,7 +3613,7 @@
       "apiErrors": {},
       "bytes": 153320,
       "manifestVersion": "0.0.17",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4060,7 +3703,7 @@
         "addIcon×5",
         "setIcon×2"
       ],
-      "ms": 924
+      "ms": 31787
     },
     {
       "id": "obsidian-advanced-uri",
@@ -4095,9 +3738,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 134901,
-      "manifestVersion": "2.2.0",
-      "ref": "cache",
+      "bytes": 135019,
+      "manifestVersion": "2.2.1",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 14,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4182,7 +3825,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1056
+      "ms": 24004
     },
     {
       "id": "better-word-count",
@@ -4210,7 +3853,7 @@
       "apiErrors": {},
       "bytes": 2655549,
       "manifestVersion": "0.10.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 5,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4297,7 +3940,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 988
+      "ms": 24252
     },
     {
       "id": "various-complements",
@@ -4321,8 +3964,8 @@
       "apiErrors": {},
       "bytes": 364431,
       "manifestVersion": "11.4.2",
-      "ref": "cache",
-      "errorStack": "TypeError: Cannot read properties of undefined (reading 'filter') |     at _AutoCompleteSuggest.registerHotkeys (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:8124:21) |     at _AutoCompleteSuggest.updateSettings (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:8097:10) |     at async _AutoCompleteSuggest.new (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:7813:5) |     at async VariousComponents.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:10856:22) |     at async testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:5)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'filter') |     at _AutoCompleteSuggest.registerHotkeys (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:8124:21) |     at _AutoCompleteSuggest.updateSettings (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:8097:10) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |     at async _AutoCompleteSuggest.new (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:7813:5) |     at async VariousComponents.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/various-complements/main.js:10856:22)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -4408,7 +4051,7 @@
       "topApi": [
         "debounce×3"
       ],
-      "ms": 833
+      "ms": 20795
     },
     {
       "id": "image-converter",
@@ -4437,7 +4080,7 @@
       "apiErrors": {},
       "bytes": 2746745,
       "manifestVersion": "1.4.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 20,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4527,7 +4170,7 @@
         "setTooltip×8",
         "debounce×2"
       ],
-      "ms": 1026
+      "ms": 43749
     },
     {
       "id": "obsidian-hider",
@@ -4554,7 +4197,7 @@
       "apiErrors": {},
       "bytes": 4306,
       "manifestVersion": "1.7.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 15,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4639,7 +4282,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 902
+      "ms": 18030
     },
     {
       "id": "obsidian-full-calendar",
@@ -4669,7 +4312,7 @@
       "apiErrors": {},
       "bytes": 2505691,
       "manifestVersion": "0.10.7",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "full-calendar-view: Cannot read properties of undefined (reading 'empty')",
         "full-calendar-sidebar-view: Cannot read properties of undefined (reading 'empty')"
@@ -4758,7 +4401,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 971
+      "ms": 43862
     },
     {
       "id": "folder-notes",
@@ -4798,7 +4441,7 @@
       "apiErrors": {},
       "bytes": 331705,
       "manifestVersion": "1.8.26",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 17,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -4885,7 +4528,7 @@
       "topApi": [
         "requireApiVersion×1"
       ],
-      "ms": 940
+      "ms": 20623
     },
     {
       "id": "media-extended",
@@ -5027,9 +4670,9 @@
         "MarkdownPreviewRenderer": 1
       },
       "apiErrors": {},
-      "bytes": 2913827,
-      "manifestVersion": "4.2.7",
-      "ref": "cache",
+      "bytes": 2914637,
+      "manifestVersion": "4.2.9",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "mx-file: 键 \"Shift\" 已注册（重复注册会互相覆盖）",
         "mx-url: 键 \"Shift\" 已注册（重复注册会互相覆盖）",
@@ -5128,10 +4771,9 @@
         "debounce×8",
         "addIcon×6"
       ],
-      "ms": 1592,
+      "ms": 34760,
       "asyncErrors": [
         "sleep is not defined",
-        "this.workspace.getViewFactory is not a function",
         "Cannot read properties of undefined (reading 'suggests')",
         "noteforge 未提供模块 \"@electron/remote\" 的导出 \"app\""
       ]
@@ -5162,7 +4804,7 @@
       "apiErrors": {},
       "bytes": 67309,
       "manifestVersion": "1.5.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 8,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -5247,7 +4889,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 860
+      "ms": 15786
     },
     {
       "id": "oz-image-plugin",
@@ -5288,7 +4930,7 @@
       "apiErrors": {},
       "bytes": 155627,
       "manifestVersion": "2.2.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 8,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -5378,7 +5020,7 @@
         "loadMathJax×1",
         "loadMermaid×1"
       ],
-      "ms": 923
+      "ms": 18086
     },
     {
       "id": "excalibrain",
@@ -5402,7 +5044,7 @@
       "apiErrors": {},
       "bytes": 316751,
       "manifestVersion": "0.2.19",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 46,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -5487,7 +5129,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1349
+      "ms": 19175
     },
     {
       "id": "better-export-pdf",
@@ -5513,7 +5155,7 @@
       "apiErrors": {},
       "bytes": 517897,
       "manifestVersion": "2.0.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 17,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -5598,7 +5240,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 974
+      "ms": 21868
     },
     {
       "id": "mermaid-tools",
@@ -5624,7 +5266,7 @@
       "apiErrors": {},
       "bytes": 91975,
       "manifestVersion": "1.4.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "mermaid-toolbar-view: Cannot read properties of undefined (reading 'addClass')"
       ],
@@ -5717,7 +5359,7 @@
         "addIcon×1",
         "loadMermaid×1"
       ],
-      "ms": 1098
+      "ms": 17483
     },
     {
       "id": "obsidian-quiet-outline",
@@ -5751,9 +5393,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 623041,
-      "manifestVersion": "0.5.20",
-      "ref": "cache",
+      "bytes": 624758,
+      "manifestVersion": "0.5.21",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "quiet-outline: 键 \"G\" 已注册（重复注册会互相覆盖）"
       ],
@@ -5845,7 +5487,7 @@
         "debounce×3",
         "getLanguage×1"
       ],
-      "ms": 965,
+      "ms": 19945,
       "asyncErrors": [
         "this.app.workspace.getActiveFileView is not a function",
         "键 \"G\" 已注册（重复注册会互相覆盖）"
@@ -5857,13 +5499,13 @@
       "category": "日历日记",
       "downloads": 339655,
       "repo": "uphy/obsidian-reminder",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 9,
-      "views": 1,
-      "settingTabs": 1,
-      "editorExtensions": 3,
+      "status": "fail-construct",
+      "phase": "construct",
+      "error": "P(...).day(...).format is not a function",
+      "commands": 0,
+      "views": 0,
+      "settingTabs": 0,
+      "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [
         "@codemirror/state",
@@ -5875,115 +5517,15 @@
         "@codemirror/state",
         "@codemirror/view"
       ],
-      "commandIds": [
-        "obsidian-reminder-plugin:scan-reminders",
-        "obsidian-reminder-plugin:show-reminders",
-        "obsidian-reminder-plugin:convert-reminder-time-format",
-        "obsidian-reminder-plugin:show-date-chooser",
-        "obsidian-reminder-plugin:toggle-checklist-status",
-        "obsidian-reminder-plugin:set-date-display-format",
-        "obsidian-reminder-plugin:pause-notifications",
-        "obsidian-reminder-plugin:resume-notifications",
-        "obsidian-reminder-plugin:mute-all-reminders"
-      ],
-      "viewShells": {
-        "reminder-list": {
-          "children": 1,
-          "textLen": 0,
-          "tags": []
-        }
-      },
+      "commandIds": [],
+      "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 301646,
-      "manifestVersion": "1.4.3",
-      "ref": "cache",
-      "settingRows": 12,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 1138
+      "bytes": 240555,
+      "manifestVersion": "1.5.1",
+      "ref": "ghfast.top/releases/latest",
+      "ms": 18739
     },
     {
       "id": "obsidian-charts",
@@ -6012,7 +5554,7 @@
       "apiErrors": {},
       "bytes": 373070,
       "manifestVersion": "3.9.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 12,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6099,7 +5641,7 @@
       "topApi": [
         "addIcon×1"
       ],
-      "ms": 1030
+      "ms": 15000
     },
     {
       "id": "file-explorer-note-count",
@@ -6123,7 +5665,7 @@
       "apiErrors": {},
       "bytes": 33596,
       "manifestVersion": "1.2.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 3,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6210,7 +5752,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 961
+      "ms": 12366
     },
     {
       "id": "colored-text",
@@ -6243,7 +5785,7 @@
       "apiErrors": {},
       "bytes": 1091846,
       "manifestVersion": "1.3.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 3,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6330,7 +5872,7 @@
       "topApi": [
         "setIcon×1"
       ],
-      "ms": 1058
+      "ms": 16666
     },
     {
       "id": "code-styler",
@@ -6365,7 +5907,7 @@
       "apiErrors": {},
       "bytes": 1114519,
       "manifestVersion": "1.1.7",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6450,7 +5992,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1073
+      "ms": 10585
     },
     {
       "id": "obsidian-enhancing-mindmap",
@@ -6486,7 +6028,7 @@
       "apiErrors": {},
       "bytes": 1232114,
       "manifestVersion": "0.2.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 6,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6571,7 +6113,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1064
+      "ms": 10989
     },
     {
       "id": "colored-tags",
@@ -6595,9 +6137,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 179199,
-      "manifestVersion": "7.0.1",
-      "ref": "cache",
+      "bytes": 180486,
+      "manifestVersion": "7.0.2",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -6681,7 +6223,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 938,
+      "ms": 12158,
       "asyncErrors": [
         "metadataCache.getTags is not a function"
       ]
@@ -6757,7 +6299,7 @@
       "apiErrors": {},
       "bytes": 972720,
       "manifestVersion": "3.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 28,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6846,7 +6388,7 @@
         "debounce×2",
         "normalizePath×2"
       ],
-      "ms": 992
+      "ms": 14752
     },
     {
       "id": "find-unlinked-files",
@@ -6881,7 +6423,7 @@
       "apiErrors": {},
       "bytes": 46278,
       "manifestVersion": "1.11.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 37,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -6966,7 +6508,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1034
+      "ms": 17361
     },
     {
       "id": "obsidian-file-color",
@@ -6990,7 +6532,7 @@
       "apiErrors": {},
       "bytes": 999730,
       "manifestVersion": "1.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -7077,7 +6619,7 @@
       "topApi": [
         "debounce×2"
       ],
-      "ms": 1058,
+      "ms": 14042,
       "asyncErrors": [
         "Cannot read properties of undefined (reading 'settings')"
       ]
@@ -7108,8 +6650,8 @@
       "apiErrors": {},
       "bytes": 172982,
       "manifestVersion": "0.14.0",
-      "ref": "cache",
-      "errorStack": "TypeError: Cannot read properties of undefined (reading 'body') |     at SuperchargedLinks.initModalObservers (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1614:35) |     at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1500:18) |     at Workspace.onLayoutReady (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:14738:3) |     at SuperchargedLinks.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1498:28) |     at async testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:5)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'body') |     at SuperchargedLinks.initModalObservers (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1614:35) |     at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1500:18) |     at Workspace.onLayoutReady (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:9303:3) |     at SuperchargedLinks.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/supercharged-links-obsidian/main.js:1498:28) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -7195,7 +6737,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 867
+      "ms": 6663
     },
     {
       "id": "drawio-obsidian",
@@ -7232,9 +6774,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 8233644,
+      "bytes": 8233626,
       "manifestVersion": "1.5.4",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -7322,7 +6864,7 @@
       "topApi": [
         "addIcon×2"
       ],
-      "ms": 1264,
+      "ms": 24665,
       "asyncErrors": [
         "Cannot read properties of null (reading 'style')"
       ]
@@ -7352,7 +6894,7 @@
       "apiErrors": {},
       "bytes": 80959,
       "manifestVersion": "3.1.6",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 10,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -7440,7 +6982,7 @@
         "addIcon×6",
         "sanitizeHTMLToDom×5"
       ],
-      "ms": 945
+      "ms": 24891
     },
     {
       "id": "nutstore-sync",
@@ -7472,7 +7014,7 @@
       "apiErrors": {},
       "bytes": 5898155,
       "manifestVersion": "1.5.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "nutstore-sync-chatbox: this.rootEl.onWindowMigrated is not a function"
       ],
@@ -7565,7 +7107,7 @@
         "normalizePath×1",
         "moment×1"
       ],
-      "ms": 1368
+      "ms": 23220
     },
     {
       "id": "google-calendar",
@@ -7575,7 +7117,7 @@
       "repo": "yukigasai/obsidian-google-calendar",
       "status": "fail-harness",
       "phase": "isolate",
-      "error": "子进程异常：spawnSync /usr/bin/node ETIMEDOUT",
+      "error": "子进程异常：spawnSync /opt/homebrew/Cellar/node/26.12.0/bin/node ETIMEDOUT",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -7587,7 +7129,7 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "ms": 180044
+      "ms": 180006
     },
     {
       "id": "novel-word-count",
@@ -7632,7 +7174,7 @@
       "apiErrors": {},
       "bytes": 84094,
       "manifestVersion": "5.0.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 10,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -7721,7 +7263,7 @@
         "parseFrontMatterAliases×5",
         "debounce×3"
       ],
-      "ms": 962
+      "ms": 21455
     },
     {
       "id": "calendarium",
@@ -7729,9 +7271,9 @@
       "category": "日历日记",
       "downloads": 195733,
       "repo": "javalent/calendarium",
-      "status": "fail-load",
-      "phase": "evaluate",
-      "error": "Cannot read properties of undefined (reading 'add')",
+      "status": "fail-onload",
+      "phase": "onload",
+      "error": "(intermediate value).load is not a function",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -7745,7 +7287,16 @@
         "@codemirror/language",
         "@codemirror/state",
         "@codemirror/view",
-        "@codemirror/autocomplete"
+        "@codemirror/autocomplete",
+        "@codemirror/language",
+        "@codemirror/view",
+        "@codemirror/autocomplete",
+        "@codemirror/search",
+        "@codemirror/lint",
+        "@codemirror/view",
+        "@codemirror/language",
+        "@codemirror/view",
+        "@codemirror/language"
       ],
       "commandIds": [],
       "viewShells": {},
@@ -7754,8 +7305,8 @@
       "apiErrors": {},
       "bytes": 1057130,
       "manifestVersion": "2.1.0",
-      "ref": "cache",
-      "errorStack": "    at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/calendarium/main.js:419:135019) |     at Module.evaluatePlugin (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:537:129) |     at testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:378:19) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: (intermediate value).load is not a function |     at _h.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/calendarium/main.js:448:31843) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |     at async testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:5) |     at async main (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -7838,7 +7389,10 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "ms": 925
+      "topApi": [
+        "addIcon×3"
+      ],
+      "ms": 15556
     },
     {
       "id": "google-drive-sync",
@@ -7862,7 +7416,7 @@
       "apiErrors": {},
       "bytes": 32083,
       "manifestVersion": "3.1.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 6,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -7949,7 +7503,7 @@
       "topApi": [
         "debounce×1"
       ],
-      "ms": 928
+      "ms": 19235
     },
     {
       "id": "todoist-sync-plugin",
@@ -7982,7 +7536,7 @@
       "apiErrors": {},
       "bytes": 768842,
       "manifestVersion": "2.6.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -8069,7 +7623,7 @@
       "topApi": [
         "setIcon×7"
       ],
-      "ms": 1062
+      "ms": 23643
     },
     {
       "id": "heatmap-calendar",
@@ -8093,7 +7647,7 @@
       "apiErrors": {},
       "bytes": 15945,
       "manifestVersion": "0.7.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -8180,7 +7734,7 @@
       "topApi": [
         "setIcon×1"
       ],
-      "ms": 979
+      "ms": 23640
     },
     {
       "id": "obsidian-task-progress-bar",
@@ -8188,21 +7742,191 @@
       "category": "任务待办",
       "downloads": 171167,
       "repo": "taskgenius/taskgenius-plugin",
-      "status": "fail-harness",
-      "phase": "harness",
-      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
-      "commands": 0,
-      "views": 0,
-      "settingTabs": 0,
+      "status": "pass-view-error",
+      "phase": null,
+      "error": null,
+      "commands": 8,
+      "views": 6,
+      "settingTabs": 1,
       "editorExtensions": 0,
       "postProcessors": 0,
-      "cmModulesUsed": [],
-      "commandIds": [],
-      "viewShells": {},
-      "unresolvedRequires": [],
+      "cmModulesUsed": [
+        "@codemirror/view",
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/state",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/language",
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/language",
+        "@codemirror/search",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/state",
+        "@codemirror/state",
+        "@codemirror/state",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@codemirror/view",
+        "@codemirror/view",
+        "@codemirror/view",
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view"
+      ],
+      "commandIds": [
+        "obsidian-task-progress-bar:quick-capture",
+        "obsidian-task-progress-bar:minimal-quick-capture",
+        "obsidian-task-progress-bar:quick-file-create",
+        "obsidian-task-progress-bar:toggle-task-filter",
+        "obsidian-task-progress-bar:open-task-genius-view",
+        "obsidian-task-progress-bar:open-timeline-sidebar-view",
+        "obsidian-task-progress-bar:open-task-genius-setup",
+        "obsidian-task-progress-bar:open-task-genius-changelog"
+      ],
+      "viewShells": {
+        "task-genius-changelog": {
+          "children": 0,
+          "textLen": 0,
+          "tags": []
+        },
+        "tg-timeline-sidebar-view": {
+          "children": 3,
+          "textLen": 98,
+          "tags": []
+        }
+      },
+      "unresolvedRequires": [
+        "http"
+      ],
       "unsupportedApi": {},
       "apiErrors": {},
-      "ms": 90885
+      "bytes": 4098223,
+      "manifestVersion": "9.13.1",
+      "ref": "ghfast.top/releases/latest",
+      "viewErrors": [
+        "task-genius-onboarding: this.skipButton.buttonEl.toggleVisibility is not a function",
+        "fluent-task-genius-view: Cannot read properties of undefined (reading 'setText')",
+        "task-genius-view: this.sidebarComponent.load is not a function",
+        "task-genius-specific-view: Cannot read properties of undefined (reading 'containerEl')"
+      ],
+      "settingRows": 162,
+      "accessedApi": [
+        "AbstractInputSuggest",
+        "App",
+        "BasesEntry",
+        "BasesEntryGroup",
+        "BasesQueryResult",
+        "BasesView",
+        "BasesViewConfig",
+        "ButtonComponent",
+        "CodeMirror",
+        "ColorComponent",
+        "Component",
+        "ConfirmationModal",
+        "DropdownComponent",
+        "Editor",
+        "EditorSuggest",
+        "Events",
+        "ExtraButtonComponent",
+        "FileSystemAdapter",
+        "FuzzySuggestModal",
+        "HoverPopover",
+        "ItemView",
+        "Keymap",
+        "MarkdownRenderChild",
+        "MarkdownRenderer",
+        "MarkdownView",
+        "Menu",
+        "MenuItem",
+        "Modal",
+        "Notice",
+        "Platform",
+        "Plugin",
+        "PluginSettingTab",
+        "QueryController",
+        "Scope",
+        "SearchComponent",
+        "SecretComponent",
+        "Setting",
+        "SettingGroup",
+        "SettingPage",
+        "SliderComponent",
+        "SuggestModal",
+        "TAbstractFile",
+        "TFile",
+        "TFolder",
+        "TextAreaComponent",
+        "TextComponent",
+        "TextFileView",
+        "ToggleComponent",
+        "Value",
+        "ValueComponent",
+        "View",
+        "Workspace",
+        "WorkspaceLeaf",
+        "WorkspaceSplit",
+        "addIcon",
+        "arrayBufferToBase64",
+        "base64ToArrayBuffer",
+        "debounce",
+        "escapeRegExp",
+        "getAllTags",
+        "getFrontMatterInfo",
+        "getIconIds",
+        "getLinkpath",
+        "htmlToMarkdown",
+        "markdownToHtml",
+        "moment",
+        "normalizePath",
+        "parseFrontMatterAliases",
+        "parseFrontMatterEntry",
+        "parseFrontMatterTags",
+        "parseLinktext",
+        "parsePropertyId",
+        "parseYaml",
+        "prepareFuzzySearch",
+        "prepareSimpleSearch",
+        "request",
+        "requestUrl",
+        "requireApiVersion",
+        "sanitizeHTML",
+        "sanitizeHTMLToDom",
+        "setIcon",
+        "setTooltip",
+        "stringifyYaml"
+      ],
+      "topApi": [
+        "setIcon×173",
+        "debounce×13",
+        "addIcon×6",
+        "setTooltip×2",
+        "moment×1",
+        "requireApiVersion×1"
+      ],
+      "ms": 30107,
+      "asyncErrors": [
+        "Cannot convert undefined or null to object"
+      ]
     },
     {
       "id": "mousewheel-image-zoom",
@@ -8226,7 +7950,7 @@
       "apiErrors": {},
       "bytes": 53247,
       "manifestVersion": "1.0.24",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -8311,7 +8035,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 902
+      "ms": 23611
     },
     {
       "id": "quick-explorer",
@@ -8342,7 +8066,7 @@
       "apiErrors": {},
       "bytes": 56465,
       "manifestVersion": "0.2.21",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -8481,7 +8205,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 890
+      "ms": 17052
     },
     {
       "id": "obsidian-paste-image-rename",
@@ -8492,7 +8216,7 @@
       "status": "pass",
       "phase": null,
       "error": null,
-      "commands": 2,
+      "commands": 3,
       "views": 0,
       "settingTabs": 1,
       "editorExtensions": 0,
@@ -8500,16 +8224,17 @@
       "cmModulesUsed": [],
       "commandIds": [
         "obsidian-paste-image-rename:batch-rename-embeded-files",
-        "obsidian-paste-image-rename:batch-rename-all-images"
+        "obsidian-paste-image-rename:batch-rename-all-images",
+        "obsidian-paste-image-rename:convert-markdown-image-links"
       ],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 33076,
-      "manifestVersion": "1.6.1",
-      "ref": "cache",
-      "settingRows": 8,
+      "bytes": 232756,
+      "manifestVersion": "1.7.2",
+      "ref": "ghfast.top/releases/latest",
+      "settingRows": 12,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -8592,8 +8317,10 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "topApi": [],
-      "ms": 896
+      "topApi": [
+        "requireApiVersion×1"
+      ],
+      "ms": 27221
     },
     {
       "id": "obsidian-local-images-plus",
@@ -8615,10 +8342,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1683617,
-      "manifestVersion": "0.16.8",
-      "ref": "cache",
-      "errorStack": "    at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-local-images-plus/main.js:94:29) |     at Module.evaluatePlugin (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:537:129) |     at testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:378:19) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "bytes": 2010589,
+      "manifestVersion": "0.17.1",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "    at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-local-images-plus/main.js:94:29) |     at Module.evaluatePlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:546:129) |     at testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:378:19) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -8701,7 +8428,7 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "ms": 801
+      "ms": 27867
     },
     {
       "id": "fast-note-sync",
@@ -8736,7 +8463,7 @@
       "apiErrors": {},
       "bytes": 1420871,
       "manifestVersion": "2.4.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "fns-sync-log-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
       ],
@@ -8828,7 +8555,7 @@
         "addIcon×7",
         "normalizePath×2"
       ],
-      "ms": 1050
+      "ms": 27388
     },
     {
       "id": "canvas-mindmap",
@@ -8864,7 +8591,7 @@
       "apiErrors": {},
       "bytes": 36404,
       "manifestVersion": "1.0.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "cm-changelog-view: Cannot read properties of undefined (reading 'setText')"
       ],
@@ -8957,7 +8684,7 @@
         "setIcon×2",
         "setTooltip×2"
       ],
-      "ms": 1026,
+      "ms": 21448,
       "asyncErrors": [
         "Cannot read properties of undefined (reading 'setText')"
       ]
@@ -8987,7 +8714,7 @@
       "apiErrors": {},
       "bytes": 22496,
       "manifestVersion": "1.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 5,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -9072,7 +8799,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 995
+      "ms": 12308
     },
     {
       "id": "consistent-attachments-and-links",
@@ -9099,9 +8826,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 476319,
-      "manifestVersion": "5.1.0",
-      "ref": "cache",
+      "bytes": 471209,
+      "manifestVersion": "5.2.0",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -9188,7 +8915,7 @@
       "topApi": [
         "getLanguage×1"
       ],
-      "ms": 991
+      "ms": 16383
     },
     {
       "id": "obsidian-rollover-daily-todos",
@@ -9215,7 +8942,7 @@
       "apiErrors": {},
       "bytes": 118212,
       "manifestVersion": "1.2.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingTabErrors": [
         "渲染后设置页为空（containerEl 子元素=1, 行=0, containerEl 文本长度=0, contentEl 文本长度=0）"
       ],
@@ -9302,7 +9029,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1511,
+      "ms": 16043,
       "asyncErrors": [
         "Cannot destructure property 'template' of 'main.getDailyNoteSettings(...)' as it is undefined."
       ]
@@ -9313,122 +9040,21 @@
       "category": "AI 智能体",
       "downloads": 146372,
       "repo": "bramses/chatgpt-md",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 11,
+      "status": "fail-harness",
+      "phase": "isolate",
+      "error": "子进程异常：spawnSync /opt/homebrew/Cellar/node/26.12.0/bin/node ETIMEDOUT",
+      "commands": 0,
       "views": 0,
-      "settingTabs": 1,
+      "settingTabs": 0,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [],
-      "commandIds": [
-        "chatgpt-md:call-chatgpt-api",
-        "chatgpt-md:select-model-command",
-        "chatgpt-md:add-hr",
-        "chatgpt-md:add-comment-block",
-        "chatgpt-md:stop-streaming",
-        "chatgpt-md:infer-title",
-        "chatgpt-md:move-to-chat",
-        "chatgpt-md:choose-chat-template",
-        "chatgpt-md:clear-chat",
-        "chatgpt-md:choose-agent",
-        "chatgpt-md:create-agent"
-      ],
+      "commandIds": [],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1453940,
-      "manifestVersion": "3.3.1",
-      "ref": "cache",
-      "settingRows": 64,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [
-        "requestUrl×2"
-      ],
-      "ms": 1088
+      "ms": 926334
     },
     {
       "id": "journals",
@@ -9476,7 +9102,7 @@
       "apiErrors": {},
       "bytes": 2143097,
       "manifestVersion": "3.5.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "journal-view:b9f3a1c2-0d4e-4f6a-8b1c-2d3e4f5a6b7c: this.injector.resolve(...).workspace.requestSaveLayout is not a function"
       ],
@@ -9571,7 +9197,7 @@
         "moment×3",
         "getLanguage×1"
       ],
-      "ms": 1283,
+      "ms": 27348,
       "asyncErrors": [
         "e.clone is not a function",
         "xY(...).startOf is not a function"
@@ -9602,7 +9228,7 @@
       "apiErrors": {},
       "bytes": 1079749,
       "manifestVersion": "0.7.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 5,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -9690,7 +9316,7 @@
         "Plugin×1",
         "PluginSettingTab×1"
       ],
-      "ms": 901
+      "ms": 20012
     },
     {
       "id": "obsidian-mindmap-nextgen",
@@ -9699,8 +9325,8 @@
       "downloads": 126958,
       "repo": "james-tindal/obsidian-mindmap-nextgen",
       "status": "fail-harness",
-      "phase": "harness",
-      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
+      "phase": "isolate",
+      "error": "子进程异常：spawnSync /opt/homebrew/Cellar/node/26.12.0/bin/node ETIMEDOUT",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -9712,7 +9338,7 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "ms": 90812
+      "ms": 403261
     },
     {
       "id": "obsidian-markdown-formatting-assistant-plugin",
@@ -9793,7 +9419,7 @@
       "apiErrors": {},
       "bytes": 285524,
       "manifestVersion": "0.10.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 13,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -9881,7 +9507,7 @@
         "addIcon×79",
         "debounce×1"
       ],
-      "ms": 1102
+      "ms": 20898
     },
     {
       "id": "auto-note-mover",
@@ -9908,7 +9534,7 @@
       "apiErrors": {},
       "bytes": 86681,
       "manifestVersion": "1.2.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 9,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -9993,7 +9619,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 948
+      "ms": 17701
     },
     {
       "id": "calendar-bases",
@@ -10001,9 +9627,9 @@
       "category": "日历日记",
       "downloads": 120805,
       "repo": "edrickleong/obsidian-calendar-bases",
-      "status": "load-only",
-      "phase": null,
-      "error": null,
+      "status": "fail-harness",
+      "phase": "isolate",
+      "error": "子进程异常：spawnSync /opt/homebrew/Cellar/node/26.12.0/bin/node ETIMEDOUT",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -10015,93 +9641,7 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 431480,
-      "manifestVersion": "0.2.8",
-      "ref": "cache",
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 979
+      "ms": 930249
     },
     {
       "id": "simple-canvasearch",
@@ -10109,110 +9649,21 @@
       "category": "图谱白板",
       "downloads": 114385,
       "repo": "ddalexb/obsidian-simple-canvasearch",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 1,
+      "status": "fail-harness",
+      "phase": "harness",
+      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
+      "commands": 0,
       "views": 0,
-      "settingTabs": 1,
+      "settingTabs": 0,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [],
-      "commandIds": [
-        "simple-canvasearch:open-canvasearch-modal"
-      ],
+      "commandIds": [],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 6559,
-      "manifestVersion": "1.0.2",
-      "ref": "cache",
-      "settingRows": 1,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 887
+      "ms": 112755
     },
     {
       "id": "actions-uri",
@@ -10236,7 +9687,7 @@
       "apiErrors": {},
       "bytes": 225672,
       "manifestVersion": "1.9.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -10324,7 +9775,7 @@
         "normalizePath×57",
         "debounce×1"
       ],
-      "ms": 948
+      "ms": 45083
     },
     {
       "id": "local-gpt",
@@ -10332,116 +9783,21 @@
       "category": "AI 智能体",
       "downloads": 100035,
       "repo": "pfrankov/obsidian-local-gpt",
-      "status": "load-only",
-      "phase": null,
-      "error": null,
+      "status": "fail-harness",
+      "phase": "harness",
+      "error": "插件超时（90s 未完成，可能卡在网络或死循环）",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
       "editorExtensions": 0,
       "postProcessors": 0,
-      "cmModulesUsed": [
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/view",
-        "@codemirror/view",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/state",
-        "@codemirror/view"
-      ],
+      "cmModulesUsed": [],
       "commandIds": [],
       "viewShells": {},
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 3035243,
-      "manifestVersion": "4.3.4",
-      "ref": "cache",
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 928
+      "ms": 136947
     },
     {
       "id": "obsidian-shellcommands",
@@ -10462,15 +9818,13 @@
       ],
       "commandIds": [],
       "viewShells": {},
-      "unresolvedRequires": [
-        "process"
-      ],
+      "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
       "bytes": 3211185,
       "manifestVersion": "0.22.0",
-      "ref": "cache",
-      "errorStack": "TypeError: this.reserved_ids.contains is not a function |     at IDGenerator.isIDReserved (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:286:34) |     at IDGenerator.generateID (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:272:62) |     at CustomVariableModel.getDefaultConfiguration (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:14278:34) |     at EnsureCustomVariablesHaveAllFields (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:17069:68) |     at RunMigrations (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:16878:9)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: this.reserved_ids.contains is not a function |     at IDGenerator.isIDReserved (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:286:34) |     at IDGenerator.generateID (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:272:62) |     at CustomVariableModel.getDefaultConfiguration (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:14278:34) |     at EnsureCustomVariablesHaveAllFields (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:17069:68) |     at RunMigrations (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/obsidian-shellcommands/main.js:16878:9)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -10556,7 +9910,7 @@
       "topApi": [
         "getIconIds×1"
       ],
-      "ms": 928
+      "ms": 49622
     },
     {
       "id": "obsidian-chartsview-plugin",
@@ -10584,7 +9938,7 @@
       "apiErrors": {},
       "bytes": 3348401,
       "manifestVersion": "1.2.8",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -10670,7 +10024,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1372
+      "ms": 24932
     },
     {
       "id": "tldraw",
@@ -10695,7 +10049,7 @@
       "bytes": 4893386,
       "manifestVersion": "1.31.0",
       "ref": "ghfast.top/releases/latest",
-      "errorStack": "TypeError: Cannot read properties of undefined (reading 'createComment') |     at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:133738:24) |     at P.createEl (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:129:8) |     at P.createDiv (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:136:16) |     at createMain (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:133736:22) |     at TldrawPlugin.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:140700:21)",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'createComment') |     at eval (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:133738:24) |     at P.createEl (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:118:8) |     at P.createDiv (file:///Users/ross/Documents/WK/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:125:16) |     at createMain (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:133736:22) |     at TldrawPlugin.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/tldraw/main.js:140700:21)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -10785,7 +10139,7 @@
         "addIcon×2",
         "getIcon×1"
       ],
-      "ms": 75528
+      "ms": 32219
     },
     {
       "id": "tasks-calendar-wrapper",
@@ -10796,14 +10150,15 @@
       "status": "pass-view-error",
       "phase": null,
       "error": null,
-      "commands": 1,
+      "commands": 2,
       "views": 1,
       "settingTabs": 1,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [],
       "commandIds": [
-        "tasks-calendar-wrapper:open-tasks-timeline-view"
+        "tasks-calendar-wrapper:open-tasks-timeline-view",
+        "tasks-calendar-wrapper:show-whats-new"
       ],
       "viewShells": {},
       "unresolvedRequires": [
@@ -10811,13 +10166,13 @@
       ],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1362215,
-      "manifestVersion": "0.3.4",
-      "ref": "cache",
+      "bytes": 1375639,
+      "manifestVersion": "0.3.7",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "tasks_timeline_view: Cannot read properties of undefined (reading 'empty')"
       ],
-      "settingRows": 36,
+      "settingRows": 40,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -10901,9 +10256,10 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "moment×3"
+        "moment×2",
+        "debounce×1"
       ],
-      "ms": 1007
+      "ms": 23302
     },
     {
       "id": "task-board",
@@ -10941,7 +10297,7 @@
       "apiErrors": {},
       "bytes": 1107109,
       "manifestVersion": "1.10.11",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "task-board-view: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
       ],
@@ -11033,7 +10389,7 @@
         "sanitizeHTMLToDom×6",
         "getLanguage×1"
       ],
-      "ms": 979,
+      "ms": 34551,
       "asyncErrors": [
         "createSvg is not defined"
       ]
@@ -11063,7 +10419,7 @@
       "apiErrors": {},
       "bytes": 430527,
       "manifestVersion": "0.4.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingTabErrors": [
         "渲染后设置页为空（containerEl 子元素=0, 行=0, containerEl 文本长度=0, contentEl 文本长度=0）"
       ],
@@ -11152,7 +10508,7 @@
       "topApi": [
         "addIcon×3"
       ],
-      "ms": 1549
+      "ms": 21544
     },
     {
       "id": "smart-second-brain",
@@ -11160,27 +10516,69 @@
       "category": "AI 智能体",
       "downloads": 70174,
       "repo": "s2b-dev/smart-second-brain",
-      "status": "fail-onload",
-      "phase": "onload",
-      "error": "this.unload is not a function",
-      "commands": 0,
-      "views": 0,
-      "settingTabs": 0,
-      "editorExtensions": 0,
-      "postProcessors": 0,
+      "status": "pass",
+      "phase": null,
+      "error": null,
+      "commands": 8,
+      "views": 5,
+      "settingTabs": 1,
+      "editorExtensions": 4,
+      "postProcessors": 1,
       "cmModulesUsed": [
         "@codemirror/state",
         "@codemirror/view"
       ],
-      "commandIds": [],
-      "viewShells": {},
+      "commandIds": [
+        "smart-second-brain:open-chat",
+        "smart-second-brain:new-chat",
+        "smart-second-brain:search-notes",
+        "smart-second-brain:open-smart-graph",
+        "smart-second-brain:open-onboarding",
+        "smart-second-brain:show-release-notes",
+        "smart-second-brain:next-pending-change",
+        "smart-second-brain:previous-pending-change"
+      ],
+      "viewShells": {
+        "smart-second-brain-chat": {
+          "children": 1,
+          "textLen": 163,
+          "tags": [
+            "input",
+            "svg"
+          ]
+        },
+        "smart-second-brain-graph": {
+          "children": 1,
+          "textLen": 14,
+          "tags": []
+        },
+        "smart-second-brain-onboarding": {
+          "children": 1,
+          "textLen": 1095,
+          "tags": [
+            "svg"
+          ]
+        },
+        "smart-second-brain-release-notes": {
+          "children": 1,
+          "textLen": 26205,
+          "tags": [
+            "svg"
+          ]
+        },
+        "smart-second-brain-widget": {
+          "children": 2,
+          "textLen": 0,
+          "tags": []
+        }
+      },
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
       "bytes": 6339062,
       "manifestVersion": "2.3.0",
-      "ref": "cache",
-      "errorStack": "TypeError: this.unload is not a function |     at UGt.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-second-brain/main.js:6234:17223) |     at async testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:5) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -11266,9 +10664,16 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "getLanguage×1"
+        "setIcon×32",
+        "normalizePath×4",
+        "debounce×2",
+        "getLanguage×1",
+        "requestUrl×1"
       ],
-      "ms": 1102
+      "ms": 23520,
+      "asyncErrors": [
+        "Cannot read properties of undefined (reading 'addEventListener')"
+      ]
     },
     {
       "id": "ai-providers",
@@ -11290,9 +10695,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 360334,
-      "manifestVersion": "1.12.1",
-      "ref": "cache",
+      "bytes": 364004,
+      "manifestVersion": "1.13.0",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -11377,10 +10782,10 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "addIcon×20",
+        "addIcon×21",
         "sanitizeHTMLToDom×1"
       ],
-      "ms": 903
+      "ms": 24914
     },
     {
       "id": "taskchute-plus",
@@ -11388,12 +10793,12 @@
       "category": "任务待办",
       "downloads": 59894,
       "repo": "hiroyaiizuka/taskchute-for-obsidian",
-      "status": "fail-load",
-      "phase": "evaluate",
-      "error": "Class extends value undefined is not a constructor or null",
-      "commands": 0,
-      "views": 0,
-      "settingTabs": 0,
+      "status": "pass-view-error",
+      "phase": null,
+      "error": null,
+      "commands": 7,
+      "views": 2,
+      "settingTabs": 1,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [
@@ -11403,17 +10808,38 @@
         "@codemirror/language",
         "@codemirror/autocomplete",
         "@lezer/common",
+        "@lezer/highlight",
+        "@lezer/common",
+        "@codemirror/language",
+        "@codemirror/view",
         "@lezer/highlight"
       ],
-      "commandIds": [],
-      "viewShells": {},
+      "commandIds": [
+        "taskchute-plus:open-taskchute-view",
+        "taskchute-plus:taskchute-settings",
+        "taskchute-plus:show-today-tasks",
+        "taskchute-plus:reorganize-idle-tasks",
+        "taskchute-plus:duplicate-selected-task",
+        "taskchute-plus:delete-selected-task",
+        "taskchute-plus:reset-selected-task"
+      ],
+      "viewShells": {
+        "taskchute-project-board": {
+          "children": 0,
+          "textLen": 0,
+          "tags": []
+        }
+      },
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
       "bytes": 1622260,
       "manifestVersion": "2.2.16",
-      "ref": "cache",
-      "errorStack": "    at eval (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/taskchute-plus/main.js:4054:1897) |     at Module.evaluatePlugin (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:537:129) |     at testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:378:19) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "viewErrors": [
+        "taskchute-view: [TaskChuteView] content container not initialised"
+      ],
+      "settingRows": 31,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -11475,6 +10901,7 @@
         "getAllTags",
         "getFrontMatterInfo",
         "getIconIds",
+        "getLanguage",
         "getLinkpath",
         "htmlToMarkdown",
         "markdownToHtml",
@@ -11496,7 +10923,11 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "ms": 850
+      "topApi": [
+        "normalizePath×16",
+        "getLanguage×2"
+      ],
+      "ms": 16447
     },
     {
       "id": "karpathywiki",
@@ -11539,7 +10970,7 @@
       "apiErrors": {},
       "bytes": 4583585,
       "manifestVersion": "1.28.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 34,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -11624,7 +11055,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1226
+      "ms": 21774
     },
     {
       "id": "colored-tags-wrangler",
@@ -11650,7 +11081,7 @@
       "apiErrors": {},
       "bytes": 331462,
       "manifestVersion": "0.19.4",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 18,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -11737,7 +11168,7 @@
       "topApi": [
         "debounce×3"
       ],
-      "ms": 1016
+      "ms": 22941
     },
     {
       "id": "typing-assistant",
@@ -11795,7 +11226,7 @@
       "apiErrors": {},
       "bytes": 158182,
       "manifestVersion": "0.3.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 35,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -11884,7 +11315,7 @@
         "setIcon×31",
         "debounce×1"
       ],
-      "ms": 995
+      "ms": 22906
     },
     {
       "id": "OA-file-hider",
@@ -11910,7 +11341,7 @@
       "apiErrors": {},
       "bytes": 7489,
       "manifestVersion": "1.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 2,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -11995,7 +11426,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 867
+      "ms": 13867
     },
     {
       "id": "fileorganizer2000",
@@ -12031,9 +11462,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 1927629,
-      "manifestVersion": "3.6.36",
-      "ref": "cache",
+      "bytes": 1934597,
+      "manifestVersion": "3.6.38",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "fo2k.assistant.sidebar2: Cannot read properties of undefined (reading 'addClass')",
         "fo2k.dashboard: Minified React error #299; visit https://reactjs.org/docs/error-decoder.html?invariant=299 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
@@ -12124,7 +11555,7 @@
       "topApi": [
         "normalizePath×1"
       ],
-      "ms": 1111
+      "ms": 42324
     },
     {
       "id": "auto-template-trigger",
@@ -12148,7 +11579,7 @@
       "apiErrors": {},
       "bytes": 72469,
       "manifestVersion": "1.3.2",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 4,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -12233,7 +11664,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 891
+      "ms": 21369
     },
     {
       "id": "smart-connections-visualizer",
@@ -12265,7 +11696,7 @@
       "apiErrors": {},
       "bytes": 809377,
       "manifestVersion": "1.0.27",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -12349,7 +11780,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1099
+      "ms": 22626
     },
     {
       "id": "social-archiver",
@@ -12422,9 +11853,9 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 4342422,
-      "manifestVersion": "4.9.1",
-      "ref": "cache",
+      "bytes": 4367240,
+      "manifestVersion": "4.10.6",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "social-archiver-author-detail: this.leaf.getRoot is not a function"
       ],
@@ -12518,7 +11949,7 @@
         "getLanguage×2",
         "requestUrl×1"
       ],
-      "ms": 1736
+      "ms": 25514
     },
     {
       "id": "obsidian-hotkeys-for-templates",
@@ -12542,7 +11973,7 @@
       "apiErrors": {},
       "bytes": 384747,
       "manifestVersion": "1.4.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -12630,7 +12061,7 @@
         "Plugin×1",
         "PluginSettingTab×1"
       ],
-      "ms": 904
+      "ms": 14889
     },
     {
       "id": "smart-templates",
@@ -12638,9 +12069,9 @@
       "category": "模板自动化",
       "downloads": 23775,
       "repo": "brianpetro/obsidian-smart-templates",
-      "status": "fail-load",
-      "phase": "evaluate",
-      "error": "Cannot use import statement outside a module",
+      "status": "fail-onload",
+      "phase": "onload",
+      "error": "Cannot read properties of undefined (reading 'replace')",
       "commands": 0,
       "views": 0,
       "settingTabs": 0,
@@ -12652,10 +12083,10 @@
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 4109,
+      "bytes": 1481887,
       "manifestVersion": "2.3.0",
-      "ref": "cache",
-      "errorStack": "    at new Function (<anonymous>) |     at Module.evaluatePlugin (file:///home/wang/wk/code/noteforge/frontend/dist-harness/obsidian-shim.mjs:537:3) |     at testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:378:19) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "TypeError: Cannot read properties of undefined (reading 'replace') |     at new SmartPluginSettingsTab (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-templates/main.js:32879:27) |     at new SmartTemplatesSettingTab (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-templates/main.js:38721:32) |     at SmartTemplatesPlugin.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/smart-templates/main.js:38829:24) |     at testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:28) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -12738,7 +12169,10 @@
         "setIcon",
         "stringifyYaml"
       ],
-      "ms": 806
+      "topApi": [
+        "addIcon×11"
+      ],
+      "ms": 14735
     },
     {
       "id": "obsidian-plugin-prettier",
@@ -12765,7 +12199,7 @@
       "apiErrors": {},
       "bytes": 1167342,
       "manifestVersion": "0.1.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 2,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -12850,7 +12284,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1051
+      "ms": 18734
     },
     {
       "id": "dataview-serializer",
@@ -12874,16 +12308,16 @@
       "viewShells": {
         "dataview-serializer-whats-new": {
           "children": 1,
-          "textLen": 703,
+          "textLen": 570,
           "tags": []
         }
       },
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 161531,
-      "manifestVersion": "3.4.0",
-      "ref": "cache",
+      "bytes": 167557,
+      "manifestVersion": "3.5.1",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -12969,7 +12403,7 @@
       "topApi": [
         "debounce×2"
       ],
-      "ms": 1053
+      "ms": 20662
     },
     {
       "id": "statusbar-organizer",
@@ -12993,8 +12427,8 @@
       "apiErrors": {},
       "bytes": 27019,
       "manifestVersion": "2.1.5",
-      "ref": "cache",
-      "errorStack": "ReferenceError: electronWindow is not defined |     at monitorFullscreen (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/statusbar-organizer/main.js:145:3) |     at StatusBarOrganizer.onload (nf-plugin:///home/wang/wk/code/noteforge/frontend/scripts/compat/.cache/plugins/statusbar-organizer/main.js:686:5) |     at async testPlugin (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:421:5) |     at async main (file:///home/wang/wk/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
+      "ref": "ghfast.top/releases/latest",
+      "errorStack": "ReferenceError: electronWindow is not defined |     at monitorFullscreen (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/statusbar-organizer/main.js:145:3) |     at StatusBarOrganizer.onload (nf-plugin:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/.cache/plugins/statusbar-organizer/main.js:686:5) |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |     at async testPlugin (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:421:5) |     at async main (file:///Users/ross/Documents/WK/code/noteforge/frontend/scripts/compat/run.mjs:982:13)",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -13078,7 +12512,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 931
+      "ms": 16136
     },
     {
       "id": "obsidian-notes-from-template",
@@ -13104,7 +12538,7 @@
       "apiErrors": {},
       "bytes": 626994,
       "manifestVersion": "0.1.13",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 9,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13189,7 +12623,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 935
+      "ms": 15349
     },
     {
       "id": "dataview-publisher",
@@ -13217,7 +12651,7 @@
       "apiErrors": {},
       "bytes": 328409,
       "manifestVersion": "0.3.10",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 2,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13302,7 +12736,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 943
+      "ms": 12474
     },
     {
       "id": "dataview-properties",
@@ -13328,7 +12762,7 @@
       "apiErrors": {},
       "bytes": 379773,
       "manifestVersion": "1.0.2",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 9,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13416,7 +12850,7 @@
         "sanitizeHTMLToDom×4",
         "debounce×1"
       ],
-      "ms": 979,
+      "ms": 21127,
       "asyncErrors": [
         "Failed to execute 'appendChild' on 'Node': parameter 1 is not of type 'Node'."
       ]
@@ -13446,7 +12880,7 @@
       "apiErrors": {},
       "bytes": 24961,
       "manifestVersion": "1.1.10",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 12,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13531,7 +12965,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 940
+      "ms": 12887
     },
     {
       "id": "obs-projects-plus",
@@ -13562,21 +12996,21 @@
       "viewShells": {
         "obs-projects-plus": {
           "children": 1,
-          "textLen": 77,
+          "textLen": 214,
           "tags": []
         },
         "obs-projects-plus-visualizer": {
           "children": 1,
-          "textLen": 73,
+          "textLen": 138,
           "tags": []
         }
       },
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 3286790,
+      "bytes": 3286650,
       "manifestVersion": "3.7.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 17,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13666,7 +13100,7 @@
         "getLanguage×2",
         "addIcon×1"
       ],
-      "ms": 1413
+      "ms": 21451
     },
     {
       "id": "default-template",
@@ -13690,7 +13124,7 @@
       "apiErrors": {},
       "bytes": 5647,
       "manifestVersion": "1.2.6",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 5,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13775,7 +13209,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 899
+      "ms": 18061
     },
     {
       "id": "macros",
@@ -13804,7 +13238,7 @@
       "apiErrors": {},
       "bytes": 1258247,
       "manifestVersion": "2.6.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 10,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -13891,7 +13325,7 @@
       "topApi": [
         "setIcon×8"
       ],
-      "ms": 1128
+      "ms": 42558
     },
     {
       "id": "settings-sidebar-organizer",
@@ -13915,7 +13349,7 @@
       "apiErrors": {},
       "bytes": 118239,
       "manifestVersion": "1.3.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 9,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -14000,7 +13434,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 981
+      "ms": 6984
     },
     {
       "id": "note-archiver",
@@ -14026,7 +13460,7 @@
       "apiErrors": {},
       "bytes": 6725,
       "manifestVersion": "0.1.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 2,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -14113,7 +13547,7 @@
       "topApi": [
         "normalizePath×1"
       ],
-      "ms": 905
+      "ms": 14644
     },
     {
       "id": "auto-file-organizer",
@@ -14139,7 +13573,7 @@
       "apiErrors": {},
       "bytes": 16062,
       "manifestVersion": "1.2.0",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 16,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -14224,7 +13658,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 929
+      "ms": 11843
     },
     {
       "id": "auto-archive",
@@ -14248,7 +13682,7 @@
       "apiErrors": {},
       "bytes": 71648,
       "manifestVersion": "1.0.7",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 1,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -14333,7 +13767,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 955
+      "ms": 16254
     },
     {
       "id": "dataview-autocompletion",
@@ -14357,7 +13791,7 @@
       "apiErrors": {},
       "bytes": 792032,
       "manifestVersion": "0.9.5",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "settingRows": 2,
       "accessedApi": [
         "AbstractInputSuggest",
@@ -14442,7 +13876,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 947
+      "ms": 15955
     },
     {
       "id": "projects-manager",
@@ -14472,7 +13906,7 @@
       "apiErrors": {},
       "bytes": 21349,
       "manifestVersion": "1.0.3",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "viewErrors": [
         "pm-kanban-view: Cannot read properties of undefined (reading 'empty')"
       ],
@@ -14560,7 +13994,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 948
+      "ms": 5475
     },
     {
       "id": "dataview-toggle",
@@ -14586,7 +14020,7 @@
       "apiErrors": {},
       "bytes": 3083,
       "manifestVersion": "1.0.1",
-      "ref": "cache",
+      "ref": "ghfast.top/releases/latest",
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -14670,7 +14104,7 @@
         "stringifyYaml"
       ],
       "topApi": [],
-      "ms": 1055
+      "ms": 16926
     },
     {
       "id": "vault-agent",
@@ -14681,29 +14115,30 @@
       "status": "pass",
       "phase": null,
       "error": null,
-      "commands": 1,
+      "commands": 2,
       "views": 1,
       "settingTabs": 1,
       "editorExtensions": 0,
       "postProcessors": 0,
       "cmModulesUsed": [],
       "commandIds": [
-        "vault-agent:open-agent"
+        "vault-agent:open-agent",
+        "vault-agent:switch-agent"
       ],
       "viewShells": {
         "vault-agent-view": {
-          "children": 3,
-          "textLen": 201,
+          "children": 4,
+          "textLen": 267,
           "tags": []
         }
       },
       "unresolvedRequires": [],
       "unsupportedApi": {},
       "apiErrors": {},
-      "bytes": 61738,
-      "manifestVersion": "0.1.7",
-      "ref": "cache",
-      "settingRows": 13,
+      "bytes": 113372,
+      "manifestVersion": "0.2.0",
+      "ref": "ghfast.top/releases/latest",
+      "settingRows": 16,
       "accessedApi": [
         "AbstractInputSuggest",
         "App",
@@ -14787,285 +14222,9 @@
         "stringifyYaml"
       ],
       "topApi": [
-        "setIcon×4"
+        "setIcon×8"
       ],
-      "ms": 1116
-    },
-    {
-      "id": "bpmn-plugin",
-      "name": "BPMN",
-      "category": "本地/自装",
-      "downloads": 0,
-      "repo": "(local)",
-      "status": "pass-view-error",
-      "phase": null,
-      "error": null,
-      "commands": 2,
-      "views": 1,
-      "settingTabs": 1,
-      "editorExtensions": 2,
-      "postProcessors": 1,
-      "cmModulesUsed": [
-        "@codemirror/autocomplete",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/state",
-        "@codemirror/language",
-        "@codemirror/autocomplete",
-        "@codemirror/commands",
-        "@lezer/lr",
-        "@lezer/highlight",
-        "@codemirror/language",
-        "@codemirror/lint",
-        "@codemirror/autocomplete",
-        "@codemirror/commands",
-        "@codemirror/language",
-        "@codemirror/lint",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@lezer/common",
-        "@lezer/common",
-        "@lezer/highlight",
-        "@lezer/lr",
-        "@lezer/highlight",
-        "@lezer/common",
-        "@codemirror/lint",
-        "@codemirror/language",
-        "@lezer/lr",
-        "@lezer/highlight",
-        "@codemirror/language",
-        "@codemirror/language",
-        "@lezer/lr",
-        "@lezer/lr",
-        "@lezer/highlight",
-        "@lezer/common",
-        "@codemirror/language",
-        "@lezer/highlight",
-        "@codemirror/view",
-        "@codemirror/language",
-        "@codemirror/autocomplete",
-        "@codemirror/commands",
-        "@codemirror/language",
-        "@codemirror/lint",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/language",
-        "@codemirror/autocomplete"
-      ],
-      "commandIds": [
-        "bpmn-plugin:insert-bpmn-block",
-        "bpmn-plugin:create-bpmn"
-      ],
-      "viewShells": {},
-      "unresolvedRequires": [],
-      "unsupportedApi": {},
-      "apiErrors": {},
-      "bytes": 2985885,
-      "manifestVersion": "8.0.0",
-      "ref": "cache",
-      "viewErrors": [
-        "bpmn-view: Cannot read properties of undefined (reading 'baseVal')"
-      ],
-      "settingRows": 14,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 6948
-    },
-    {
-      "id": "vault-force-sync",
-      "name": "Vault Force Sync",
-      "category": "本地/自装",
-      "downloads": 0,
-      "repo": "(local)",
-      "status": "pass",
-      "phase": null,
-      "error": null,
-      "commands": 3,
-      "views": 0,
-      "settingTabs": 1,
-      "editorExtensions": 0,
-      "postProcessors": 0,
-      "cmModulesUsed": [],
-      "commandIds": [
-        "vault-force-sync:sync",
-        "vault-force-sync:force-sync",
-        "vault-force-sync:open-log"
-      ],
-      "viewShells": {},
-      "unresolvedRequires": [],
-      "unsupportedApi": {},
-      "apiErrors": {},
-      "bytes": 20999,
-      "manifestVersion": "1.5.1",
-      "ref": "cache",
-      "settingRows": 11,
-      "accessedApi": [
-        "AbstractInputSuggest",
-        "App",
-        "BasesEntry",
-        "BasesEntryGroup",
-        "BasesQueryResult",
-        "BasesView",
-        "BasesViewConfig",
-        "ButtonComponent",
-        "CodeMirror",
-        "ColorComponent",
-        "Component",
-        "ConfirmationModal",
-        "DropdownComponent",
-        "Editor",
-        "EditorSuggest",
-        "Events",
-        "ExtraButtonComponent",
-        "FileSystemAdapter",
-        "FuzzySuggestModal",
-        "ItemView",
-        "Keymap",
-        "MarkdownRenderChild",
-        "MarkdownRenderer",
-        "MarkdownView",
-        "Menu",
-        "MenuItem",
-        "Modal",
-        "Notice",
-        "Platform",
-        "Plugin",
-        "PluginSettingTab",
-        "QueryController",
-        "Scope",
-        "SearchComponent",
-        "SecretComponent",
-        "Setting",
-        "SettingGroup",
-        "SettingPage",
-        "SliderComponent",
-        "SuggestModal",
-        "TAbstractFile",
-        "TFile",
-        "TFolder",
-        "TextAreaComponent",
-        "TextComponent",
-        "TextFileView",
-        "ToggleComponent",
-        "Value",
-        "ValueComponent",
-        "View",
-        "WorkspaceLeaf",
-        "WorkspaceSplit",
-        "addIcon",
-        "arrayBufferToBase64",
-        "base64ToArrayBuffer",
-        "debounce",
-        "escapeRegExp",
-        "getAllTags",
-        "getFrontMatterInfo",
-        "getIconIds",
-        "getLinkpath",
-        "htmlToMarkdown",
-        "markdownToHtml",
-        "moment",
-        "normalizePath",
-        "parseFrontMatterAliases",
-        "parseFrontMatterEntry",
-        "parseFrontMatterTags",
-        "parseLinktext",
-        "parsePropertyId",
-        "parseYaml",
-        "prepareFuzzySearch",
-        "prepareSimpleSearch",
-        "request",
-        "requestUrl",
-        "requireApiVersion",
-        "sanitizeHTML",
-        "sanitizeHTMLToDom",
-        "setIcon",
-        "stringifyYaml"
-      ],
-      "topApi": [],
-      "ms": 9412
+      "ms": 6365
     }
-  ],
-  "localOverrideAt": "2026-10-10T04:37:33.454Z",
-  "summaryNote": "含 4 个本地 vault 插件的最新实测（2026-10-10 覆盖），其余为 2026-10-08 市场样本"
+  ]
 }

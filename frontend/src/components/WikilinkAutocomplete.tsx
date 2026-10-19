@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { Icon } from "./Icon";
+import { FileText } from "lucide-react";
 
 interface AutocompleteProps {
   files: { path: string }[];
@@ -43,7 +45,7 @@ export default function WikilinkAutocomplete({ files, onSelect, onClose, anchorR
             background: i === selectedIndex ? "#e8f0fe" : "transparent",
             display: "flex", alignItems: "center", gap: 6 }}
           onMouseEnter={() => setSelectedIndex(i)}>
-          <span>📝</span>
+          <span style={{ display: "inline-flex", color: "#777" }}><Icon as={FileText} size={13} /></span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
         </div>
       ))}

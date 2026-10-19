@@ -21,6 +21,11 @@ import DropdownMenu, { type MenuItem } from "./components/DropdownMenu";
 import { editorBridge } from "./editor/bridge";
 import { appVersion } from "./version";
 import type { OutlineItem } from "./editor/bridge";
+import { Icon } from "./components/Icon";
+import {
+  FolderOpen, FilePlus2, Save, ArrowLeft, Search, Command, PanelLeft,
+  Puzzle, Blocks, Settings, Info, Database, Image as ImageIcon, Pin, X, Folder, List,
+} from "lucide-react";
 
 export interface FileEntry { path: string; is_dir: boolean; size: number; modified: number; }
 
@@ -34,6 +39,7 @@ const btnBase: React.CSSProperties = {
 const railBtn: React.CSSProperties = {
   width: 30, height: 30, border: "none", borderRadius: 6, cursor: "pointer",
   background: "transparent", fontSize: 15, lineHeight: 1, padding: 0,
+  display: "flex", alignItems: "center", justifyContent: "center", color: "#555",
 };
 
 
@@ -79,7 +85,29 @@ function App() {
   const saveNoteRef = useRef<(() => void) | null>(null);
   const handleSetViewModeRef = useRef<((m: "source" | "preview" | "live") => void) | null>(null);
   const autoSyncTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const watchSyncTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // null = 尚未读取同步配置；watch_on_change_enabled 生效后为 true
+  const watchSyncOn = useRef<boolean | null>(null);
   const renderTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // 变更即同步（watch）：本地保存后延迟去抖触发一次同步
+  const scheduleWatchSync = useCallback(async () => {
+    if (watchSyncOn.current === null) {
+      try {
+        const cfg = await invoke<any>("sync_get_config");
+        watchSyncOn.current = !!cfg?.watch_on_change_enabled && !!cfg?.server_url && cfg?.server_url !== "filesystem";
+      } catch {
+        watchSyncOn.current = false;
+      }
+    }
+    if (!watchSyncOn.current) return;
+    if (watchSyncTimer.current) clearTimeout(watchSyncTimer.current);
+    watchSyncTimer.current = setTimeout(() => {
+      invoke("sync_start", { firstPolicy: null })
+        .then((r: any) => dispatch({ type: 'SET_STATUS', text: `☁ 变更同步：${r?.uploaded ?? 0}↑ ${r?.downloaded ?? 0}↓` } as any))
+        .catch(() => {});
+    }, 5000);
+  }, []);
 
   // 主题：document 属性 + 持久化（CSS 由此切换亮暗）
   useEffect(() => {
@@ -91,6 +119,9 @@ function App() {
   useEffect(() => {
     if (autoSyncTimer.current) { clearInterval(autoSyncTimer.current); autoSyncTimer.current = undefined; }
     if (!vaultPath) return;
+    // 设置面板关闭（重新加载配置）后重新评估 watch 开关
+    watchSyncOn.current = null;
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
     let minutes = 0;
     invoke<any>("sync_get_config").then((cfg) => {
       minutes = cfg?.auto_sync_minutes || 0;
@@ -101,14 +132,20 @@ function App() {
             .catch((e: any) => dispatch({ type: 'SET_STATUS', text: `☁ 自动同步失败: ${e}` } as any));
         }, minutes * 60 * 1000);
       }
-      // 启动时同步（vault 打开后触发一次）
+      // 启动时同步：等待配置的延迟秒数后再触发一次
       if (cfg?.sync_on_startup) {
-        invoke("sync_start", { firstPolicy: null })
-          .then((r: any) => dispatch({ type: 'SET_STATUS', text: `☁ 启动同步：${r?.uploaded ?? 0}↑ ${r?.downloaded ?? 0}↓` } as any))
-          .catch(() => {});
+        const delaySec = Math.max(0, Number(cfg.startup_sync_delay_seconds ?? 1));
+        startupTimer = setTimeout(() => {
+          invoke("sync_start", { firstPolicy: null })
+            .then((r: any) => dispatch({ type: 'SET_STATUS', text: `☁ 启动同步：${r?.uploaded ?? 0}↑ ${r?.downloaded ?? 0}↓` } as any))
+            .catch(() => {});
+        }, delaySec * 1000);
       }
     }).catch(() => {});
-    return () => { if (autoSyncTimer.current) { clearInterval(autoSyncTimer.current); autoSyncTimer.current = undefined; } };
+    return () => {
+      if (autoSyncTimer.current) { clearInterval(autoSyncTimer.current); autoSyncTimer.current = undefined; }
+      if (startupTimer) clearTimeout(startupTimer);
+    };
   }, [vaultPath, settingsOpen]);
 
   // Auto-open last vault on startup
@@ -342,13 +379,15 @@ function App() {
     // 优先走编辑器自身保存（最新文档 + 原子写 + 脏标记），避免缓存滞后丢字
     if (editorBridge.requestSave && editorBridge.activeFile === activeFile) {
       editorBridge.requestSave();
+      void scheduleWatchSync();
       return;
     }
     try {
       await invoke("write_note", { notePath: activeFile, content: cache?.content ?? editorBridge.latestDoc ?? "" });
       dispatch({ type: 'SET_STATUS', text: `已保存: ${activeFile}` } as any);
+      void scheduleWatchSync();
     } catch(e: any) { dispatch({ type: 'SET_STATUS', text: `保存失败: ${e}` } as any); }
-  }, [vaultPath, activeFile, cache]);
+  }, [vaultPath, activeFile, cache, scheduleWatchSync]);
 
   // ── 全局快捷键：Ctrl+O 快速切换 / Ctrl+P 命令面板 / Ctrl+S 保存 / Ctrl+N 新建 ──
   // （与菜单标注及 Obsidian 习惯一致；编辑器已处理的按键让其自行 preventDefault）
@@ -547,16 +586,16 @@ function App() {
         <DropdownMenu label="工具" items={[...toolsMenu, ...pluginToolsMenu]} />
         <DropdownMenu label="帮助" items={helpMenu} />
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: "#999", cursor: "pointer" }}
-          onClick={() => { void appVersion().then(v => dispatch({ type: 'SET_STATUS', text: `NoteForge v${v}` } as any)); }}>ℹ️</span>
+        <span style={{ fontSize: 11, color: "#999", cursor: "pointer", display: "inline-flex" }}
+          onClick={() => { void appVersion().then(v => dispatch({ type: 'SET_STATUS', text: `NoteForge v${v}` } as any)); }}><Icon as={Info} size={13} /></span>
       </div>
 
       {/* ── 工具栏 ── */}
       <div style={{ display: "flex", alignItems: "center", height: 40, background: "#fafafa",
         borderBottom: "1px solid #e0e0e0", padding: "0 8px", gap: 2 }}>
-        <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault">📂</button>
-        <button style={btnBase} onClick={newNote} title="新建笔记">📄</button>
-        <button style={btnBase} onClick={saveNote} title="保存 (Ctrl+S)">💾</button>
+        <button style={btnBase} onClick={() => handleBrowse()} title="打开 Vault"><Icon as={FolderOpen} /></button>
+        <button style={btnBase} onClick={newNote} title="新建笔记"><Icon as={FilePlus2} /></button>
+        <button style={btnBase} onClick={saveNote} title="保存 (Ctrl+S)"><Icon as={Save} /></button>
         <button style={btnBase} onClick={() => {
           if (activeGroup && activeGroup.tabs.length > 1) {
             const prev = activeGroup.activeIndex > 0 ? activeGroup.activeIndex - 1 : 0;
@@ -564,12 +603,12 @@ function App() {
               dispatch({ type: 'SELECT_TAB', groupId: activeGroup.id, tabId: activeGroup.tabs[prev].id } as any);
             }
           }
-        }} title="返回上一页">←</button>
+        }} title="返回上一页"><Icon as={ArrowLeft} /></button>
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
-        <button style={btnBase} onClick={() => setShowQuickSwitcher(true)} title="快速切换 (Ctrl+O)">🔍</button>
-        <button style={btnBase} onClick={() => setShowCommandPalette(true)} title="命令面板 (Ctrl+P)">⌘</button>
+        <button style={btnBase} onClick={() => setShowQuickSwitcher(true)} title="快速切换 (Ctrl+O)"><Icon as={Search} /></button>
+        <button style={btnBase} onClick={() => setShowCommandPalette(true)} title="命令面板 (Ctrl+P)"><Icon as={Command} /></button>
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
-        <button style={btnBase} onClick={() => setSidebarVisible(s => !s)} title="切换侧栏">📁</button>
+        <button style={btnBase} onClick={() => setSidebarVisible(s => !s)} title="切换侧栏"><Icon as={PanelLeft} /></button>
         <DropdownMenu label="..." items={quickActions} />
         <div style={{ flex: 1 }} />
         {vaultPath && <span style={{ fontSize: 12, color: "#999", marginRight: 8 }}>{noteCount} 篇笔记</span>}
@@ -583,15 +622,15 @@ function App() {
           borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column",
           alignItems: "center", paddingTop: 6, gap: 2 }}>
           <button style={railBtn} title="文件 / 大纲（切换侧栏）"
-            onClick={() => { setSidebarVisible(v => !v); setSidebarMode("files"); }}>📁</button>
-          <button style={railBtn} title="快速切换 (Ctrl+O)" onClick={() => setShowQuickSwitcher(true)}>🔍</button>
-          <button style={railBtn} title="命令面板 (Ctrl+P)" onClick={() => setShowCommandPalette(true)}>⌘</button>
+            onClick={() => { setSidebarVisible(v => !v); setSidebarMode("files"); }}><Icon as={PanelLeft} size={17} /></button>
+          <button style={railBtn} title="快速切换 (Ctrl+O)" onClick={() => setShowQuickSwitcher(true)}><Icon as={Search} size={17} /></button>
+          <button style={railBtn} title="命令面板 (Ctrl+P)" onClick={() => setShowCommandPalette(true)}><Icon as={Command} size={17} /></button>
           <div title="插件工具（命令 / 视图）">
-            <DropdownMenu label="🧩" items={[...toolsMenu, ...pluginToolsMenu]} />
+            <DropdownMenu label={<Icon as={Puzzle} size={17} />} items={[...toolsMenu, ...pluginToolsMenu]} />
           </div>
           <div style={{ flex: 1 }} />
-          <button style={railBtn} title="插件管理 / 市场…" onClick={() => setPluginSettingsOpen(true)}>🔌</button>
-          <button style={railBtn} title="设置" onClick={() => setSettingsOpen(true)}>⚙</button>
+          <button style={railBtn} title="插件管理 / 市场…" onClick={() => setPluginSettingsOpen(true)}><Icon as={Blocks} size={17} /></button>
+          <button style={railBtn} title="设置" onClick={() => setSettingsOpen(true)}><Icon as={Settings} size={17} /></button>
         </div>
         {sidebarVisible && files.length > 0 && (
           <div className="nf-sidebar" style={{ width: 260, minWidth: 200, background: theme === "dark" ? "#252526" : "#fafafa", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column" }}>
@@ -599,14 +638,16 @@ function App() {
               <button onClick={() => setSidebarMode("files")}
                 style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
                   background: sidebarMode === "files" ? (theme === "dark" ? "#333" : "#fff") : "transparent",
-                  color: theme === "dark" ? "#ccc" : "#555" }}>
-                📁 文件
+                  color: theme === "dark" ? "#ccc" : "#555",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                <Icon as={Folder} size={14} /> 文件
               </button>
               <button onClick={() => setSidebarMode("outline")}
                 style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
                   background: sidebarMode === "outline" ? (theme === "dark" ? "#333" : "#fff") : "transparent",
-                  color: theme === "dark" ? "#ccc" : "#555" }}>
-                📑 大纲
+                  color: theme === "dark" ? "#ccc" : "#555",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                <Icon as={List} size={14} /> 大纲
               </button>
             </div>
             {sidebarMode === "files"
@@ -620,10 +661,10 @@ function App() {
           {basesFile && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-                <span style={{ fontSize: 12 }}>🗃</span>
+                <span style={{ fontSize: 12, display: "inline-flex" }}><Icon as={Database} size={13} /></span>
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{basesFile}</span>
                 <button onClick={() => setBasesFile(null)} title="关闭"
-                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px", display: "inline-flex", alignItems: "center" }}><Icon as={X} size={13} /></button>
               </div>
               <BasesPane basePath={basesFile} dark={theme === "dark"} onNavigate={readNote}
                 onStatus={(m) => dispatch({ type: 'SET_STATUS', text: m } as any)} />
@@ -632,10 +673,10 @@ function App() {
           {pluginViewFile && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "0 8px", background: theme === "dark" ? "#252525" : "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-                <span style={{ fontSize: 12 }}>🧩</span>
+                <span style={{ fontSize: 12, display: "inline-flex" }}><Icon as={Puzzle} size={13} /></span>
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pluginViewFile}</span>
                 <button onClick={() => setPluginViewFile(null)} title="关闭"
-                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px", display: "inline-flex", alignItems: "center" }}><Icon as={X} size={13} /></button>
               </div>
               {/* 常驻挂载：运行时按需往这里塞视图 DOM，所以空的时候也要渲染这个 div
                   contain:paint + transform:translateZ(0) 强制为 position:fixed 的子元素建立
@@ -676,11 +717,11 @@ function App() {
           {htmlViewFile && !pluginViewFile && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
               <div style={{ padding: "0 8px", background: "#fafafa", borderBottom: "1px solid #e5e5e5", fontSize: 12, color: "#777", display: "flex", alignItems: "center", gap: 6, height: 26 }}>
-                <span style={{ fontSize: 12 }}>🖼</span>
+                <span style={{ fontSize: 12, display: "inline-flex" }}><Icon as={ImageIcon} size={13} /></span>
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{htmlViewFile}</span>
                 <button onClick={() => setHtmlViewFile(null)}
                   title="关闭"
-                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px" }}>✕</button>
+                  style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "26px", display: "inline-flex", alignItems: "center" }}><Icon as={X} size={13} /></button>
               </div>
               <ImageViewer filePath={htmlViewFile} />
             </div>
@@ -701,10 +742,10 @@ function App() {
               borderBottom: "1px solid var(--background-modifier-border, #ddd)",
               fontSize: 12, color: "#777",
             }}>
-              <span>📌</span>
+              <span style={{ display: "inline-flex" }}><Icon as={Pin} size={13} /></span>
               <span className="nf-dock-title" style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}></span>
               <button onClick={() => obsidianRuntime.closeView()} title="关闭"
-                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "20px" }}>✕</button>
+                style={{ padding: "0 6px", border: "none", borderRadius: 3, cursor: "pointer", background: "transparent", color: "#aaa", fontSize: 13, lineHeight: "20px", display: "inline-flex", alignItems: "center" }}><Icon as={X} size={13} /></button>
             </div>
           </div>
         )}

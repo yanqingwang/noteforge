@@ -84,6 +84,29 @@ class EmbedImageWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
+/** `-`/`*`/`+` → `•` 项目符号（非光标行，1 字符替换保持行宽） */
+class BulletWidget extends WidgetType {
+  eq(other: BulletWidget) { return other instanceof BulletWidget; }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "lp-bullet";
+    span.textContent = "•";
+    return span;
+  }
+  ignoreEvent() { return false; }
+}
+
+/** `---` / `***` → 一条横线（非光标行） */
+class HrWidget extends WidgetType {
+  eq(other: HrWidget) { return other instanceof HrWidget; }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "lp-hr";
+    return span;
+  }
+  ignoreEvent() { return false; }
+}
+
 /** `- [ ]` / `- [x]` → 可点击复选框（点击回写文档） */
 class TaskCheckboxWidget extends WidgetType {
   checked: boolean;
@@ -393,7 +416,32 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "Link" || name === "URL") {
-          add(node.from, node.to, Decoration.mark({ class: "lp-link" }));
+          if (name === "Link" && !lineFocused(node.from, node.to)) {
+            // 非光标行：隐藏 [ ] ( url ) 标记，只留链接文字
+            for (const child of node.node.getChildren("LinkMark")) {
+              add(child.from, child.to, Decoration.replace({}));
+            }
+            const url = node.node.getChild("URL");
+            if (url) add(url.from, url.to, Decoration.replace({}));
+            // 链接文字保留样式
+            add(node.from, node.to, Decoration.mark({ class: "lp-link" }));
+          } else {
+            add(node.from, node.to, Decoration.mark({ class: "lp-link" }));
+          }
+          return;
+        }
+        if (name === "ListMark") {
+          // 无序列表 `-`/`*`/`+` → `•`；有序列表保留数字原文
+          const text = state.doc.sliceString(node.from, node.to);
+          if (!/^\d/.test(text) && !focusLines.has(lineOf(node.from).number)) {
+            add(node.from, node.to, Decoration.replace({ widget: new BulletWidget() }));
+          }
+          return;
+        }
+        if (name === "HorizontalRule") {
+          if (!lineFocused(node.from, node.to)) {
+            add(node.from, node.to, Decoration.replace({ widget: new HrWidget() }));
+          }
           return;
         }
         if (name === "Table") {
@@ -415,8 +463,13 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
         }
       }
       for (const m of line.text.matchAll(mdImageRe)) {
-        // `![alt](target)` → 内联图片；跳过外链/协议与锚点
+        // `![alt](target)` → 内联图片；外链 http(s) 直接渲染，其余协议与锚点跳过
         const target = m[2];
+        if (/^https?:\/\//i.test(target)) {
+          add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
+            Decoration.replace({ widget: new EmbedImageWidget(target, () => Promise.resolve(target)) }));
+          continue;
+        }
         if (/^(?:[a-z][a-z0-9+.-]*:)/i.test(target) || target.startsWith("#")) continue;
         const rel = target.replace(/^\.\//, "");
         if (IMAGE_EXT_RE.test(rel)) {

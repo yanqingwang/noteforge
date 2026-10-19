@@ -1,6 +1,8 @@
 import { useEffect, useState, memo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { FileEntry } from "../App";
+import { Icon } from "./Icon";
+import { Folder, FileText, Globe, Home } from "lucide-react";
 
 type SortMode = "name-asc" | "name-desc" | "modified-desc" | "modified-asc" | "size-desc" | "size-asc";
 
@@ -217,7 +219,7 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
       {/* Sort controls */}
       <div style={{ padding: "6px 10px", borderBottom: "1px solid #eee", display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontWeight: 600, fontSize: 13, color: "#555" }}>📁 {noteCount}</span>
+          <span style={{ fontWeight: 600, fontSize: 13, color: "#555", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon as={Folder} size={13} /> {noteCount}</span>
           <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
             <input type="checkbox" checked={dirsFirst} onChange={e => setDirsFirst(e.target.checked)} />
             目录优先
@@ -316,7 +318,9 @@ const FileTree = memo(function FileTree({ files, activeFile, onSelect, vaultPath
                   onClick={() => { if (isSelf) return; const t = moveTarget; setMoveTarget(null); void moveTo(t, d); }}
                   onMouseEnter={(e) => { if (!isSelf) (e.target as HTMLElement).style.background = "#f0f4fa"; }}
                   onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "transparent"; }}
-                >{d ? `📁 ${d.split("/").pop()}` : "🏠（vault 根目录）"}</div>
+                ><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{d
+                  ? <><Icon as={Folder} size={13} /> {d.split("/").pop()}</>
+                  : <><Icon as={Home} size={13} />（vault 根目录）</>}</span></div>
               );
             })}
           </div>
@@ -382,7 +386,7 @@ function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, on
             onMoveTo(t, key);
           }}>
           <span>{isCollapsed ? "▶" : "▼"}</span>
-          <span>📁 {item.name}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon as={Folder} size={14} /> {item.name}</span>
         </div>
         {!isCollapsed && item.children.map(c => (
           <TreeItem key={c.path || c.name} item={c} depth={depth + 1}
@@ -405,7 +409,7 @@ function TreeItem({ item, depth, activeFile, onSelect, expanded, setExpanded, on
       {...dragProps}
       onMouseEnter={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "#e8f0fe"; }}
       onMouseLeave={e => { if (activeFile !== item.path) (e.target as HTMLElement).style.background = "transparent"; }}>
-      <span>{isHtml ? "🌐" : "📝"}</span>
+      <span style={{ display: "inline-flex", color: "#777" }}>{isHtml ? <Icon as={Globe} size={14} /> : <Icon as={FileText} size={14} />}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{item.name}</span>
       <span style={{ fontSize: 10, color: "#999" }}>{fmtTime(item.modified)}</span>
     </div>

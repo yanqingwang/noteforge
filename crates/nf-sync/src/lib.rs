@@ -19,6 +19,6 @@ pub use file_api::{FileApi, FileEntry};
 pub use crypto_layer::SyncCrypto;
 pub use mirror::MirrorEngine;
 pub use mirror::diff::{Action, Direction, SyncPlan};
-pub use mirror::ignore::IgnoreRules;
+pub use mirror::filter::SyncFilter;
 pub use mirror::report::{SyncReport, ReportItem};
 pub use mirror::state::{SyncState, StateEntry};

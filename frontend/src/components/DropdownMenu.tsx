@@ -9,7 +9,7 @@ export interface MenuItem {
 }
 
 interface DropdownMenuProps {
-  label: string;
+  label: React.ReactNode;
   items: MenuItem[];
 }
 
@@ -28,7 +28,7 @@ export default function DropdownMenu({ label, items }: DropdownMenuProps) {
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <span style={{ padding: "4px 8px", cursor: "pointer", borderRadius: 4, color: "#555", fontSize: 13 }}
+      <span style={{ padding: "4px 8px", cursor: "pointer", borderRadius: 4, color: "#555", fontSize: 13, display: "inline-flex", alignItems: "center" }}
         onClick={() => setOpen(!open)}
         onMouseEnter={e => (e.currentTarget.style.background = "#e0e0e0")}
         onMouseLeave={e => (e.currentTarget.style.background = "")}>

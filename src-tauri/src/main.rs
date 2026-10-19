@@ -477,6 +477,7 @@ fn main() {
             sync_cmd::sync_start,
             sync_cmd::sync_first_sync_needed,
             sync_cmd::sync_get_report,
+            sync_cmd::sync_fetch_attachment,
             plugin_cmd::list_plugins,
             plugin_cmd::list_dir,
             plugin_cmd::make_dir,

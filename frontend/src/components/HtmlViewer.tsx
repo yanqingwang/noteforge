@@ -9,6 +9,8 @@
  */
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Icon } from "./Icon";
+import { Pencil, Eye, Save, Search as SearchIcon } from "lucide-react";
 
 interface HtmlViewerProps {
   /** vault 内相对路径（以 .html/.htm 结尾） */
@@ -219,15 +221,17 @@ const HtmlViewer = memo(function HtmlViewer({ filePath, onStatus }: HtmlViewerPr
       {/* 工具栏 */}
       <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", gap: 4,
         background: "#f8f8f8", borderBottom: "1px solid #eee", fontSize: 12 }}>
-        <button onClick={toggleMode} style={{ ...btn, fontWeight: 600 }}>
-          {mode === "preview" ? "✏️ 编辑" : "👁 预览"}
+        <button onClick={toggleMode} style={{ ...btn, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {mode === "preview" ? <><Icon as={Pencil} size={12} /> 编辑</> : <><Icon as={Eye} size={12} /> 预览</>}
         </button>
         {mode === "edit" && (
-          <button onClick={save} style={{ ...btn, fontWeight: 600 }}>💾 保存 (Ctrl+S)</button>
+          <button onClick={save} style={{ ...btn, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Icon as={Save} size={12} /> 保存 (Ctrl+S)
+          </button>
         )}
         {dirty && <span style={{ color: "#b45309" }}>● 未保存</span>}
         <div style={{ flex: 1 }} />
-        <span style={{ color: "#999" }}>🔍</span>
+        <span style={{ color: "#999", display: "inline-flex" }}><Icon as={SearchIcon} size={13} /></span>
         <button onClick={() => applyZoom(zoom - 0.1)} style={btn}>−</button>
         <span style={{ minWidth: 40, textAlign: "center", color: "#666" }}>{Math.round(zoom * 100)}%</span>
         <button onClick={() => applyZoom(zoom + 0.1)} style={btn}>+</button>

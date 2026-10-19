@@ -414,6 +414,11 @@ const lpThemeStyles = (dark: boolean) => ({
   },
   ".lp-embed-image": { display: "block", margin: "6px 0" },
   ".lp-task-checkbox": { marginRight: "4px", cursor: "pointer" },
+  ".lp-bullet": { color: dark ? "#8a8a8a" : "#57606a", fontWeight: 700 },
+  ".lp-hr": {
+    display: "inline-block", width: "100%", verticalAlign: "middle",
+    borderTop: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`, height: 0,
+  },
   ".cm-selectionBackground": { backgroundColor: dark ? "#264f78 !important" : "#b4d5fe !important" },
   ".cm-searchMatch": { backgroundColor: dark ? "#5a3d10" : "#fff3c4" },
   ".cm-searchMatch-selected": { backgroundColor: dark ? "#8a5a12" : "#ffd700" },

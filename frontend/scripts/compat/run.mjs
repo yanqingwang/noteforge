@@ -21,7 +21,7 @@ import { JSDOM } from "jsdom";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = resolve(HERE, "../..");
 const CACHE = resolve(HERE, ".cache");
-const REPORTS = "/home/wang/wk/wk/AIReports";
+const REPORTS = process.env.NF_COMPAT_REPORTS || resolve(FRONTEND, "../../../wk/AIReports");
 const BUNDLE = resolve(FRONTEND, "dist-harness/obsidian-shim.mjs");
 
 const args = process.argv.slice(2);
@@ -1061,7 +1061,7 @@ async function main() {
         generatedAt: new Date().toISOString(),
         sampleGeneratedAt: sample.generatedAt,
         total: results.length,
-        summary: { passed, viewError: viewErr, loadOnly, artifactMissing, failed },
+        summary: { passed, viewError: viewErr, settingsError: settingsErr, loadOnly, artifactMissing, failed },
         missingApi: Object.fromEntries([...apiFreq].sort((a, b) => b[1] - a[1])),
         usedApi: Object.fromEntries([...apiUsed].sort((a, b) => b[1] - a[1])),
         topErrors: Object.fromEntries([...errorFreq].sort((a, b) => b[1].length - a[1].length)),

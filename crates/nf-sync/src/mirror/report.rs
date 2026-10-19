@@ -15,6 +15,18 @@ pub struct SyncReport {
     pub errors: usize,
     pub first_sync: bool,
     pub encrypted: bool,
+    /// Remote files removed because their file type is excluded (yanc purge).
+    #[serde(default)]
+    pub purged: usize,
+    /// Lazy attachments indexed but not downloaded (yanc lazy sync).
+    #[serde(default)]
+    pub indexed: usize,
+    /// Conflicts left untouched on both sides (merge safe-hold).
+    #[serde(default)]
+    pub held: usize,
+    /// Deletions refused by the mass-delete circuit breaker.
+    #[serde(default)]
+    pub blocked: usize,
     pub items: Vec<ReportItem>,
 }
 
@@ -41,9 +53,15 @@ impl SyncReport {
             self.errors += 1;
         }
         match action {
-            "upload" | "reupload" => self.uploaded += 1,
+            "upload" | "reupload" | "merge-clean" | "conflict-local-win" | "conflict-remote-win" => {
+                self.uploaded += 1
+            }
             "download" | "restore" => self.downloaded += 1,
-            "conflict" => self.conflicts += 1,
+            "conflict" | "conflict-markers" => self.conflicts += 1,
+            "conflict-hold" => self.held += 1,
+            "index-lazy" => self.indexed += 1,
+            "purge" => self.purged += 1,
+            "delete-blocked" => self.blocked += 1,
             "delete-remote" => self.deleted_remote += 1,
             "delete-local" => self.deleted_local += 1,
             _ => self.skipped += 1,

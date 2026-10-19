@@ -2,7 +2,7 @@
 //! files lazily (only when mtime/size differ from the last-sync state).
 
 use crate::error::SyncError;
-use crate::mirror::ignore::IgnoreRules;
+use crate::mirror::filter::SyncFilter;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
@@ -21,8 +21,15 @@ pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", h.finalize())
 }
 
+/// `/`-separated vault-relative path of a walk entry.
+fn rel_of(entry: &walkdir::DirEntry, vault_root: &Path) -> Option<String> {
+    entry.path().strip_prefix(vault_root).ok().map(|p| {
+        p.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
+    })
+}
+
 /// Walk the vault and collect non-ignored files (sorted by path).
-pub fn scan_local(vault_root: &Path, ignore: &IgnoreRules) -> Result<Vec<LocalFile>, SyncError> {
+pub fn scan_local(vault_root: &Path, filter: &SyncFilter) -> Result<Vec<LocalFile>, SyncError> {
     let mut files = Vec::new();
     if !vault_root.exists() {
         return Ok(files);
@@ -34,8 +41,13 @@ pub fn scan_local(vault_root: &Path, ignore: &IgnoreRules) -> Result<Vec<LocalFi
             if e.depth() == 0 {
                 return true;
             }
-            let name = e.file_name().to_string_lossy();
-            !name.starts_with('.')
+            if !e.file_type().is_dir() {
+                return true;
+            }
+            match rel_of(e, vault_root) {
+                Some(rel) => !filter.prune_dir(&rel),
+                None => true,
+            }
         })
         .filter_map(|e| e.ok())
     {
@@ -47,15 +59,11 @@ pub fn scan_local(vault_root: &Path, ignore: &IgnoreRules) -> Result<Vec<LocalFi
             continue;
         }
         // 统一使用 / 分隔符：同步状态与远端快照跨平台一致（Windows 上 strip_prefix 产生 \）。
-        let rel = match entry.path().strip_prefix(vault_root) {
-            Ok(p) => p
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy())
-                .collect::<Vec<_>>()
-                .join("/"),
-            Err(_) => continue,
+        let rel = match rel_of(&entry, vault_root) {
+            Some(rel) => rel,
+            None => continue,
         };
-        if rel.is_empty() || ignore.ignored(&rel) {
+        if rel.is_empty() || filter.ignored(&rel) {
             continue;
         }
         let mtime = meta
@@ -95,7 +103,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".noteforge")).unwrap();
         std::fs::write(root.join(".noteforge/sync-state.json"), b"{}").unwrap();
         std::fs::write(root.join("scratch.tmp"), b"x").unwrap();
-        let files = scan_local(root, &IgnoreRules::new(&[])).unwrap();
+        let files = scan_local(root, &SyncFilter::default()).unwrap();
         let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, vec!["notes/a.md", "notes/sub/b.md"]);
     }

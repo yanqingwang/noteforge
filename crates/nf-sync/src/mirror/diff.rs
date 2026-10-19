@@ -183,6 +183,16 @@ pub fn build_plan(
         let lc = local_change(l, s, hash_fn);
         let rc = remote_change(r.copied(), s);
 
+        // Lazy-sync placeholder: the bytes were never downloaded on purpose,
+        // so "local missing" must NOT mean "deleted locally" — that would
+        // delete the server copy of an attachment we never fetched.
+        if s.map(|e| e.lazy).unwrap_or(false) && l.is_none() {
+            if rc == RemoteChange::Changed && direction != Direction::UploadOnly {
+                actions.push(Action::Download { path: path.to_string() });
+            }
+            continue;
+        }
+
         match (lc, rc) {
             (LocalChange::Unchanged, RemoteChange::Unchanged) => { /* skip */ }
             (LocalChange::Changed, RemoteChange::Unchanged) => {
@@ -248,5 +258,89 @@ fn remote_change(r: Option<&FileEntry>, s: Option<&crate::mirror::state::StateEn
         // etag missing/unreliable → fall back to size heuristic
         _ if e.size == 0 && st.local_size == 0 => RemoteChange::Unchanged,
         _ => RemoteChange::Changed,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mirror::state::{StateEntry, SyncState};
+
+    fn remote_entry(path: &str, etag: &str, size: u64) -> FileEntry {
+        FileEntry {
+            path: path.to_string(),
+            is_dir: false,
+            size,
+            updated_time: 0,
+            etag: Some(etag.to_string()),
+        }
+    }
+
+    fn state_with(entry: StateEntry) -> SyncState {
+        let mut st = SyncState::default();
+        st.files.insert("files/a.png".to_string(), entry);
+        st
+    }
+
+    fn lazy_entry(etag: &str) -> StateEntry {
+        StateEntry {
+            local_hash: String::new(),
+            local_mtime: 0,
+            local_size: 0,
+            remote_etag: Some(etag.to_string()),
+            synced_at: 0,
+            lazy: true,
+            conflicted: false,
+        }
+    }
+
+    #[test]
+    fn lazy_placeholder_is_never_deleted_from_the_remote() {
+        let remote = vec![remote_entry("files/a.png", "etag-1", 123)];
+        let state = state_with(lazy_entry("etag-1"));
+        let plan = build_plan(
+            &[], // nothing on disk — the attachment was only indexed
+            &remote,
+            &state,
+            Direction::Bidirectional,
+            &FirstSyncPolicy::Bidirectional,
+            &|_| String::new(),
+        );
+        assert!(plan.actions.is_empty(), "no action expected, got {:?}", plan.actions);
+    }
+
+    #[test]
+    fn lazy_placeholder_refreshes_when_the_remote_changes() {
+        let remote = vec![remote_entry("files/a.png", "etag-2", 999)];
+        let state = state_with(lazy_entry("etag-1"));
+        let plan = build_plan(
+            &[],
+            &remote,
+            &state,
+            Direction::Bidirectional,
+            &FirstSyncPolicy::Bidirectional,
+            &|_| String::new(),
+        );
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(plan.actions[0], Action::Download { .. }));
+    }
+
+    #[test]
+    fn plain_missing_local_file_still_deletes_the_remote() {
+        // Same shape but NOT lazy: a genuine local delete must propagate.
+        let remote = vec![remote_entry("files/a.png", "etag-1", 123)];
+        let mut e = lazy_entry("etag-1");
+        e.lazy = false;
+        let state = state_with(e);
+        let plan = build_plan(
+            &[],
+            &remote,
+            &state,
+            Direction::Bidirectional,
+            &FirstSyncPolicy::Bidirectional,
+            &|_| String::new(),
+        );
+        assert_eq!(plan.actions.len(), 1);
+        assert!(matches!(plan.actions[0], Action::DeleteRemote { .. }));
     }
 }

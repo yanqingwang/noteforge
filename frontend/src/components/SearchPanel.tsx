@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Icon } from "./Icon";
+import { Search, FileText } from "lucide-react";
 
 interface SearchPanelProps {
   vaultPath: string;
@@ -20,7 +22,9 @@ export default function SearchPanel({ vaultPath, onOpenNote }: SearchPanelProps)
 
   return (
     <div style={{ width: 280, background: "#fffbe6", borderRight: "1px solid #e0e0e0", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "10px 12px", fontWeight: 700, borderBottom: "1px solid #eee" }}>🔍 搜索</div>
+      <div style={{ padding: "10px 12px", fontWeight: 700, borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 6 }}>
+        <Icon as={Search} size={14} /> 搜索
+      </div>
       <div style={{ padding: 8, display: "flex", gap: 4 }}>
         <input value={query} onChange={e => setQuery(e.target.value)}
                onKeyDown={e => e.key === "Enter" && doSearch()}
@@ -30,8 +34,9 @@ export default function SearchPanel({ vaultPath, onOpenNote }: SearchPanelProps)
       <div style={{ flex: 1, overflowY: "auto" }}>
         {results.map(r => (
           <div key={r.path} onClick={() => onOpenNote(r.path)}
-               style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f0f0f0", fontSize: 12 }}>
-            📄 {r.path}
+               style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f0f0f0", fontSize: 12,
+                 display: "flex", alignItems: "center", gap: 5 }}>
+            <Icon as={FileText} size={13} /> {r.path}
           </div>
         ))}
       </div>

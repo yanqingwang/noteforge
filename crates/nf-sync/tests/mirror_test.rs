@@ -5,7 +5,7 @@
 use nf_sync::crypto_layer::SyncCrypto;
 use nf_sync::drivers::filesystem::FsDriver;
 use nf_sync::mirror::diff::{Direction, FirstSyncPolicy};
-use nf_sync::mirror::ignore::IgnoreRules;
+use nf_sync::mirror::filter::SyncFilter;
 use nf_sync::mirror::state::SyncState;
 use nf_sync::mirror::MirrorEngine;
 use std::path::Path;
@@ -21,7 +21,7 @@ fn engine<'a>(
     direction: Direction,
     policy: FirstSyncPolicy,
 ) -> MirrorEngine<'a> {
-    MirrorEngine::new(driver, crypto, IgnoreRules::new(&[]), direction, policy)
+    MirrorEngine::new(driver, crypto, SyncFilter::new(&[]), direction, policy)
 }
 
 fn disabled() -> SyncCrypto {
@@ -116,7 +116,7 @@ async fn remote_change_downloads_and_delete_moves_to_trash() {
 }
 
 #[tokio::test]
-async fn conflict_keeps_both_versions() {
+async fn conflict_merges_with_markers_and_loses_nothing() {
     let local = tempfile::tempdir().unwrap();
     let remote = tempfile::tempdir().unwrap();
     write(local.path(), "doc.md", "base");
@@ -125,22 +125,42 @@ async fn conflict_keeps_both_versions() {
     let mut e = engine(&drv, disabled(), Direction::Bidirectional, FirstSyncPolicy::UploadAll);
     e.sync(local.path(), &no_progress()).await.unwrap();
 
-    // Both sides change the same file
+    // Both sides change the same file: no common ancestor can satisfy both,
+    // so the merge keeps BOTH edits in-file as marker regions.
     touch_later(local.path(), "doc.md", "local edit");
     touch_later(remote.path(), "doc.md", "remote edit");
 
     let rep = e.sync(local.path(), &no_progress()).await.unwrap();
     assert_eq!(rep.conflicts, 1);
-    // Canonical file = remote version
-    assert_eq!(read(local.path(), "doc.md"), "remote edit");
-    // Conflict copy contains the local version
-    let conflict: Vec<_> = std::fs::read_dir(local.path()).unwrap()
-        .filter_map(|en| en.ok())
-        .map(|en| en.file_name().to_string_lossy().to_string())
-        .filter(|n| n.starts_with("doc (冲突 "))
-        .collect();
-    assert_eq!(conflict.len(), 1, "one conflict copy expected: {:?}", conflict);
-    assert_eq!(read(local.path(), &conflict[0]), "local edit");
+
+    let merged = read(local.path(), "doc.md");
+    assert!(merged.contains("<<<<<<< 本地"), "marker opening present: {}", merged);
+    assert!(merged.contains("======="), "marker separator present");
+    assert!(merged.contains(">>>>>>> 远端"), "marker closing present");
+    assert!(merged.contains("local edit"), "local edit preserved");
+    assert!(merged.contains("remote edit"), "remote edit preserved");
+    // The converged content is pushed to the server too.
+    assert_eq!(read(remote.path(), "doc.md"), merged);
+}
+
+#[tokio::test]
+async fn disjoint_edits_auto_merge_cleanly() {
+    let local = tempfile::tempdir().unwrap();
+    let remote = tempfile::tempdir().unwrap();
+    write(local.path(), "notes.md", "line1\nline2\nline3\n");
+
+    let drv = FsDriver::new(remote.path());
+    let mut e = engine(&drv, disabled(), Direction::Bidirectional, FirstSyncPolicy::UploadAll);
+    e.sync(local.path(), &no_progress()).await.unwrap();
+
+    // Each side edits a DIFFERENT line → the stored merge base resolves it.
+    touch_later(local.path(), "notes.md", "LINE1\nline2\nline3\n");
+    touch_later(remote.path(), "notes.md", "line1\nline2\nLINE3\n");
+
+    let rep = e.sync(local.path(), &no_progress()).await.unwrap();
+    assert_eq!(rep.conflicts, 0, "clean merge is not a conflict");
+    assert_eq!(rep.uploaded, 1, "merged result uploaded once");
+    assert_eq!(read(local.path(), "notes.md"), "LINE1\nline2\nLINE3\n");
 }
 
 #[tokio::test]

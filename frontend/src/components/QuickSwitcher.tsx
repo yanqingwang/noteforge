@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { isRenderableFile } from "./FileTree";
+import { Icon } from "./Icon";
+import { FileText, Globe } from "lucide-react";
 
 interface QuickSwitcherProps {
   /** 完整文件树（含目录）；仅列出可打开的 .md/.html 文件 */
@@ -69,8 +71,11 @@ export default function QuickSwitcher({ files, onSelect, onClose, extraExts = []
               style={{
                 padding: "8px 16px", cursor: "pointer", fontSize: 14,
                 background: i === sel ? "#e8f0fe" : "transparent",
+                display: "flex", alignItems: "center", gap: 6,
               }}>
-              {/\.html?$/i.test(f.path) ? "🌐" : "📄"} {f.path}
+              <span style={{ display: "inline-flex", color: "#777" }}>
+                {/\.html?$/i.test(f.path) ? <Icon as={Globe} size={14} /> : <Icon as={FileText} size={14} />}
+              </span> {f.path}
             </div>
           ))}
           {query && results.length === 0 && (

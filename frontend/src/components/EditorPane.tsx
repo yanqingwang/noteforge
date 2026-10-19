@@ -8,6 +8,8 @@ import { GFM } from "@lezer/markdown";
 import { nfExtensions, DEFAULT_ATTACH_CONFIG } from "../editor/extensions";
 import type { AttachConfig } from "../editor/extensions";
 import { makeImageSrcResolver } from "../editor/imageSrc";
+import { Icon } from "./Icon";
+import { FileText } from "lucide-react";
 import { editorBridge, EchoTracker } from "../editor/bridge";
 import type { OutlineItem } from "../editor/bridge";
 import { extractOutline } from "../editor/bridge";
@@ -340,7 +342,9 @@ const EditorPane = memo(function EditorPane({
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
       {/* Tab bar */}
       <div style={{ display: "flex", alignItems: "center", padding: "4px 8px", background: "#f8f8f8", borderBottom: "1px solid #eee", gap: 4 }}>
-        <span style={{ flex: 1, fontSize: 13, color: "#666" }}>📄 {activeFile || "未打开笔记"}</span>
+        <span style={{ flex: 1, fontSize: 13, color: "#666", display: "flex", alignItems: "center", gap: 5 }}>
+          <Icon as={FileText} size={14} /> {activeFile || "未打开笔记"}
+        </span>
         <div className="view-mode-bar" style={{ display: "flex", gap: 2, background: "#e8e8e8", borderRadius: 4, padding: 2 }}>
           {/* HTML 文件：只给「源码 / HTML」两种并列格式 */}
           {isHtmlFile ? (["source", "html"] as ViewMode[]).map(m => (
