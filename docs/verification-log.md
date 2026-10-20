@@ -88,3 +88,37 @@
 | Rust 编译 | ✅ cargo build -p noteforge（async list_tags 显式 touch 后 7.16s 全量编译通过） |
 | Tauri 桌面启动 | ✅ /home/wang/wk/wk（2930 笔记）打开正常，侧栏三页签（文件/大纲/标签）渲染，打开笔记与表格渲染无回归（spectacle 截屏） |
 | 已知限制 | Wayland 无 xdotool/ydotool/wtype，无法脚本化点击「标签」页签；面板交互由 4 个组件级单测覆盖 |
+
+---
+
+# 验证日志 - 2026-10-20（二）live 行内展开粒度 + 焦点模式 + 打字机模式
+
+## 本轮改动
+
+**A1：live 模式行内标记展开粒度从「整行」改为「仅光标/选区触及的片段」（Typora 行为）**
+1. 抽出可测纯函数 `shouldReveal(from, to, sels)`：空选区（光标）`from <= p <= to` 触及即展开（含落在 `**` 标记内部）；非空选区与节点区间有交集即展开
+2. `livePreview.ts` 行内节点（StrongEmphasis/Emphasis/Strikethrough/InlineCode/Link/HorizontalRule）与正则驱动的 wikilink / 图片改调 `reveal(node.from, node.to)`，同一行不再整行回显源码（`**a** 和 **b**` 光标在 a 内时只展开 a）
+3. 有意保留按行判断：ATXHeading（等价）、Blockquote（须逐行）、FencedCode（整块）、TaskMarker / ListMark、表格 `focusLines`
+
+**B1：焦点模式**（光标所在段落正常，其余淡出）
+4. 新增 `focusMode.ts`：`activeBlockLines(state)` 以「连续非空行」为块（空行即块边界；光标在空行则只聚焦该行），仅用 `Decoration.line` 加 `.nf-focus-dim`（opacity 0.3），无块级 replace 限制
+5. 刻意不依赖语法树：CM6 markdown 树分片异步解析，打开大文件时首次构建装饰可能拿到残树（实测 297 行报告刚打开时前 5 行被当成一块、其余全淡出）；按行判定与解析进度无关，结果稳定可单测
+
+**B2：打字机模式**（光标行垂直居中）
+6. `typewriterMode()` ViewPlugin 用 rAF 延后 dispatch（update 阶段禁止 dispatch），滚到 `{ y: "center" }`
+7. 上下留白改为声明式 `typewriterPadding` 主题：`.cm-scroller { padding-top/bottom: 45vh !important }`——**不加 `!important` 会被基础主题的简写 `padding: 12px 16px` 吃掉**（其 StyleModule 注册次序在本模块之后，实测首行仍贴顶）
+
+**接线**（第 4 步）
+8. 状态栏两个开关按钮、命令面板两条命令（`toggle-focus-mode` / `toggle-typewriter-mode`）、全局快捷键 Ctrl+Shift+F / Ctrl+Shift+Y、视图菜单两项；localStorage `nf-focus-mode` / `nf-typewriter-mode` 持久化；`nfExtensions` 两处调用点（创建 + reconfigure）与依赖数组同步
+
+## 验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 前端全量测试 | ✅ 394 passed / 30 files（新增：livePreview 粒度 6 例 + shouldReveal 5 例、focusMode 6 例、EditorPane 接线 1 例） |
+| tsc + vite build | ✅ built in 1.01s |
+| CSS 级证据（探针） | ✅ 探针实测基础主题 `padding: 12px 16px` 规则索引 9708 晚于 `padding-top` 9467（故被吃掉）；加 `!important` 后 jsdom 计算值 `paddingTop = 345.6px`（= 45vh × 768） |
+| Tauri 桌面启动 | ✅ 重启二进制加载新模块后截屏：焦点模式仅标题行（光标块）为纯黑（像素 min=0），「执行摘要」与正文段落 min≈189（0.3 透明度）→ 残树 bug 已消失 |
+| 打字机居中 | ✅ 首行上方出现大面积留白，标题行落在编辑器垂直中央；状态栏两按钮高亮为开启态 |
+| 已知限制 | ① Wayland 无 xdotool/ydotool/wtype，无法脚本化注入键鼠，桌面验证靠「临时自动打开笔记 hook + spectacle 截屏」，验证后已删除临时代码；② 两模式装饰会随 HMR 失效（EditorView 扩展不重建），桌面验证须重启二进制；③ 无空行隔开的长文档，焦点块会覆盖整篇，属预期语义 |
+

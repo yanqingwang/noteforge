@@ -275,6 +275,29 @@ function isDelimRow(text: string): boolean {
   return t.includes("-") && /^[\s|:-]*-[\s|:-]*$/.test(t);
 }
 
+/** 一个选区（空选区的 from === to 表示光标）。 */
+export interface SelRange { from: number; to: number }
+
+/**
+ * 行内标记「是否回显源码」的判定（Typora 式展开粒度）。
+ *
+ * 只要任一选区与该节点区间 `[from, to]` 重叠或触及边界，就回显源码：
+ *  - 空选区（光标）：`from <= p <= to` —— 光标落在 `**` 标记内部或节点两端都算触及；
+ *  - 非空选区：`[selFrom, selTo]` 与 `[from, to]` 有交集。
+ *
+ * 这样同一行上未被触及的其他行内标记可以继续渲染，而不是整行一起裸奔。
+ */
+export function shouldReveal(from: number, to: number, sels: readonly SelRange[]): boolean {
+  for (const s of sels) {
+    if (s.from === s.to) {
+      if (s.from >= from && s.from <= to) return true;
+    } else if (s.from <= to && s.to >= from) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationSet {
   const decos: Array<{ from: number; to: number; deco: Decoration }> = [];
   const add = (from: number, to: number, deco: Decoration) => decos.push({ from, to, deco });
@@ -294,6 +317,12 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
     for (let l = a; l <= b; l++) if (focusLines.has(l)) return true;
     return false;
   };
+
+  // 行内标记用「节点区间是否被光标/选区触及」判断展开（见 shouldReveal）：
+  // 块级元素（标题行/引用行/代码块/表格行/列表标记）仍按行判断 —— 它们本身就是
+  // 「一行的语法」，光标落在该行即要编辑它；行内标记则精确到被触及的那个片段。
+  const selections: SelRange[] = state.selection.ranges.map(r => ({ from: r.from, to: r.to }));
+  const reveal = (from: number, to: number) => shouldReveal(from, to, selections);
 
   for (const { from, to } of view.visibleRanges) {
     // ── 语法树驱动的块级/行内装饰 ──
@@ -317,7 +346,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "StrongEmphasis") {
-          if (!lineFocused(node.from, node.to)) {
+          if (!reveal(node.from, node.to)) {
             add(node.from, node.from + 2, Decoration.replace({}));
             add(node.to - 2, node.to, Decoration.replace({}));
             add(node.from + 2, node.to - 2, Decoration.mark({ class: "lp-bold" }));
@@ -327,7 +356,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "Emphasis") {
-          if (!lineFocused(node.from, node.to)) {
+          if (!reveal(node.from, node.to)) {
             add(node.from, node.from + 1, Decoration.replace({}));
             add(node.to - 1, node.to, Decoration.replace({}));
             add(node.from + 1, node.to - 1, Decoration.mark({ class: "lp-italic" }));
@@ -337,7 +366,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "Strikethrough") {
-          if (!lineFocused(node.from, node.to)) {
+          if (!reveal(node.from, node.to)) {
             add(node.from, node.from + 2, Decoration.replace({}));
             add(node.to - 2, node.to, Decoration.replace({}));
             add(node.from + 2, node.to - 2, Decoration.mark({ class: "lp-del" }));
@@ -345,7 +374,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "InlineCode") {
-          if (!lineFocused(node.from, node.to)) {
+          if (!reveal(node.from, node.to)) {
             add(node.from, node.from + 1, Decoration.replace({}));
             add(node.to - 1, node.to, Decoration.replace({}));
             add(node.from + 1, node.to - 1, Decoration.mark({ class: "lp-inline-code" }));
@@ -419,7 +448,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "Link" || name === "URL") {
-          if (name === "Link" && !lineFocused(node.from, node.to)) {
+          if (name === "Link" && !reveal(node.from, node.to)) {
             // 非光标行：隐藏 [ ] ( url ) 标记，只留链接文字
             for (const child of node.node.getChildren("LinkMark")) {
               add(child.from, child.to, Decoration.replace({}));
@@ -442,7 +471,7 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
           return;
         }
         if (name === "HorizontalRule") {
-          if (!lineFocused(node.from, node.to)) {
+          if (!reveal(node.from, node.to)) {
             add(node.from, node.to, Decoration.replace({ widget: new HrWidget() }));
           }
           return;
@@ -455,34 +484,40 @@ function buildDecorations(view: EditorView, opts?: LivePreviewOpts): DecorationS
     });
 
     // ── 正则驱动的 wikilink / 嵌入图片（lezer 不认识） ──
+    // 与行内标记同样的粒度：只有光标/选区触及的那一个才回显源码，
+    // 同一行其他未被触及的链接/图片照常渲染。
     for (let l = lineOf(from).number; l <= lineOf(to).number; l++) {
       const line = state.doc.line(l);
-      if (focusLines.has(l)) continue;
       for (const m of line.text.matchAll(embedImageRe)) {
         const target = m[1].split("|")[0];
-        if (IMAGE_EXT_RE.test(target)) {
-          add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
+        const start = line.from + (m.index ?? 0);
+        if (IMAGE_EXT_RE.test(target) && !reveal(start, start + m[0].length)) {
+          add(start, start + m[0].length,
             Decoration.replace({ widget: new EmbedImageWidget(target, opts?.resolveImageSrc) }));
         }
       }
       for (const m of line.text.matchAll(mdImageRe)) {
         // `![alt](target)` → 内联图片；外链 http(s) 直接渲染，其余协议与锚点跳过
         const target = m[2];
+        const start = line.from + (m.index ?? 0);
+        const end = start + m[0].length;
+        if (reveal(start, end)) continue;
         if (/^https?:\/\//i.test(target)) {
-          add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
+          add(start, end,
             Decoration.replace({ widget: new EmbedImageWidget(target, () => Promise.resolve(target)) }));
           continue;
         }
         if (/^(?:[a-z][a-z0-9+.-]*:)/i.test(target) || target.startsWith("#")) continue;
         const rel = target.replace(/^\.\//, "");
         if (IMAGE_EXT_RE.test(rel)) {
-          add(line.from + (m.index ?? 0), line.from + (m.index ?? 0) + m[0].length,
+          add(start, end,
             Decoration.replace({ widget: new EmbedImageWidget(rel, opts?.resolveImageSrc) }));
         }
       }
       for (const m of line.text.matchAll(wikilinkRe)) {
         // 嵌入图片已处理，跳过 ![[ ]]（正则不带 !，不会重叠）
         const start = line.from + (m.index ?? 0);
+        if (reveal(start, start + m[0].length)) continue;
         const raw = m[1];
         const parts = splitWikilink(raw);
         const label = m[2] || parts.alias || parts.target;

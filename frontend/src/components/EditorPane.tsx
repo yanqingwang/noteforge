@@ -53,6 +53,10 @@ interface EditorPaneProps {
   pendingAnchor?: PendingAnchor | null;
   /** 锚点跳转完成（或未找到）后的回调 */
   onAnchorConsumed?: () => void;
+  /** 焦点模式：仅光标所在块正常显示 */
+  focusMode?: boolean;
+  /** 打字机模式：光标行垂直居中 */
+  typewriterMode?: boolean;
 }
 
 export type { ViewMode };
@@ -61,7 +65,7 @@ const AUTO_SAVE_MS = 2000;
 
 const EditorPane = memo(function EditorPane({
   content, previewHtml, activeFile, files = [], onNavigate, mode: externalMode, onSetMode, onContentChange, onStatus, onOutline, theme = "light", htmlFile = null, vaultConfig = null, vaultPath = "",
-  tags = [], pendingAnchor = null, onAnchorConsumed,
+  tags = [], pendingAnchor = null, onAnchorConsumed, focusMode = false, typewriterMode = false,
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -183,7 +187,7 @@ const EditorPane = memo(function EditorPane({
           // 可重组部分：live 装饰（含主题/快捷键/补全）
           liveComp.current.of(nfExtensions({
             live: isLive(), lineNumbers: !isLive(), getFiles: () => cbRef.current.files.map(f => f.path),
-            getTags,
+            getTags, focus: focusMode, typewriter: typewriterMode,
             theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
           })),
           EditorView.updateListener.of((u) => {
@@ -237,7 +241,7 @@ const EditorPane = memo(function EditorPane({
     view.dispatch({
       effects: liveComp.current.reconfigure(nfExtensions({
         live: isLive, lineNumbers: !isLive, getFiles: () => cbRef.current.files.map(f => f.path),
-        getTags,
+        getTags, focus: focusMode, typewriter: typewriterMode,
         theme: cbRef.current.theme, resolveLink, getAttachConfig, getActiveFile, resolveImageSrc,
       })),
     });
@@ -247,7 +251,7 @@ const EditorPane = memo(function EditorPane({
       prevModeRef.current = mode;
       if (!showHtml) view.focus();
     }
-  }, [mode, theme, vaultConfig, resolveImageSrc, showHtml]);
+  }, [mode, theme, vaultConfig, resolveImageSrc, showHtml, focusMode, typewriterMode]);
 
   // ── 外部内容变化（文件切换 / 缓存加载）→ 全文替换 ──
   useEffect(() => {

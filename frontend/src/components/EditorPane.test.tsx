@@ -6,6 +6,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { EditorView } from "@codemirror/view";
 import EditorPane from "./EditorPane";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
@@ -136,6 +137,42 @@ describe("EditorPane live 模式（即输即显）", () => {
 
     await act(async () => root.unmount());
     container.remove();
+  });
+
+  it("focusMode / typewriterMode 开启：非当前块淡化 + 居中滚动请求（道具接线）", async () => {
+    const orig = EditorView.scrollIntoView;
+    const calls: Array<{ opts?: { y?: string } }> = [];
+    (EditorView as any).scrollIntoView = (pos: number, opts?: any) => {
+      calls.push({ opts });
+      return orig(pos, opts);
+    };
+    try {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root: Root = createRoot(container);
+      // 焦点块的判定以空行为边界，故用例给三段带空行的文本
+      await act(async () => {
+        root.render(
+          <EditorPane content={"第一段文字\n\n第二段文字\n\n第三段文字"} previewHtml=""
+            activeFile="笔记.md" mode="live" focusMode typewriterMode />,
+        );
+      });
+      const editor = container.querySelector(".cm-editor");
+      expect(editor).toBeTruthy();
+      // 焦点模式：光标所在块以外的行被淡化
+      expect(editor!.querySelectorAll(".nf-focus-dim").length).toBeGreaterThan(0);
+      // 打字机模式：请求把光标滚到视口中央（具体 frame 之后触发）
+      await act(async () => {
+        await new Promise(r => requestAnimationFrame(() => r(null)));
+        await new Promise(r => requestAnimationFrame(() => r(null)));
+      });
+      expect(calls.some(c => c.opts?.y === "center")).toBe(true);
+
+      await act(async () => root.unmount());
+      container.remove();
+    } finally {
+      (EditorView as any).scrollIntoView = orig;
+    }
   });
 
   it("mode=source 挂载：原样显示源码（对照组）", () => {

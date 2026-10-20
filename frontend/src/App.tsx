@@ -37,6 +37,13 @@ const btnBase: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: 4,
 };
 
+/** 状态栏里的模式开关按钮（开启态高亮）。 */
+const statusToggleBtn = (on: boolean): React.CSSProperties => ({
+  padding: "1px 8px", border: `1px solid ${on ? "#0969da" : "#ccc"}`, borderRadius: 10,
+  cursor: "pointer", fontSize: 11, lineHeight: "16px",
+  background: on ? "#ddf4ff" : "transparent", color: on ? "#0969da" : "#888", whiteSpace: "nowrap",
+});
+
 /** 最左侧图标栏的按钮（悬停 title 显示文字）。 */
 const railBtn: React.CSSProperties = {
   width: 30, height: 30, border: "none", borderRadius: 6, cursor: "pointer",
@@ -69,6 +76,11 @@ function App() {
     const saved = localStorage.getItem('nf-view-mode');
     return (saved === "source" || saved === "preview" || saved === "split" || saved === "live") ? saved : "split";
   });
+  // 焦点模式 / 打字机模式（全局开关，持久化）
+  const [focusMode, setFocusMode] = useState(() => localStorage.getItem('nf-focus-mode') === '1');
+  const [typewriterMode, setTypewriterMode] = useState(() => localStorage.getItem('nf-typewriter-mode') === '1');
+  useEffect(() => { localStorage.setItem('nf-focus-mode', focusMode ? '1' : '0'); }, [focusMode]);
+  useEffect(() => { localStorage.setItem('nf-typewriter-mode', typewriterMode ? '1' : '0'); }, [typewriterMode]);
   // HTML 只是与源码并列的一种显示格式，独立记忆其选择
   const [htmlMode, setHtmlMode] = useState<ViewMode>(
     () => (localStorage.getItem('nf-html-mode') === 'source' ? 'source' : 'html'));
@@ -447,6 +459,8 @@ function App() {
       else if (k === "p") { e.preventDefault(); setShowCommandPalette(true); }
       else if (k === "s") { e.preventDefault(); editorBridge.requestSave?.(); }
       else if (k === "n") { e.preventDefault(); newNoteRef.current(); }
+      else if (k === "f" && e.shiftKey) { e.preventDefault(); setFocusMode(v => !v); }
+      else if (k === "y" && e.shiftKey) { e.preventDefault(); setTypewriterMode(v => !v); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -515,6 +529,9 @@ function App() {
     { label: "即输即显", action: () => handleSetMode("live") },
     { label: "预览模式", action: () => handleSetMode("preview") },
     { divider: true as const },
+    { label: `${focusMode ? "✓ " : ""}焦点模式`, shortcut: "Ctrl+Shift+F", action: () => setFocusMode(v => !v) },
+    { label: `${typewriterMode ? "✓ " : ""}打字机模式`, shortcut: "Ctrl+Shift+Y", action: () => setTypewriterMode(v => !v) },
+    { divider: true as const },
     { label: "快速切换器", shortcut: "Ctrl+O", action: () => setShowQuickSwitcher(true) },
     { label: "命令面板", shortcut: "Ctrl+P", action: () => setShowCommandPalette(true) },
     { divider: true as const },
@@ -579,6 +596,8 @@ function App() {
       { id: 'toggle-sidebar', name: '切换侧栏', action: () => setSidebarVisible(s => !s) },
       { id: 'vault-stats', name: 'Vault 统计', action: vaultStats },
       { id: 'new-note', name: '新建笔记', action: newNote },
+      { id: 'toggle-focus-mode', name: `${focusMode ? "关闭" : "开启"}焦点模式`, shortcut: 'Ctrl+Shift+F', action: () => setFocusMode(v => !v) },
+      { id: 'toggle-typewriter-mode', name: `${typewriterMode ? "关闭" : "开启"}打字机模式`, shortcut: 'Ctrl+Shift+Y', action: () => setTypewriterMode(v => !v) },
     ];
     // Plugin commands
     for (const pc of pluginManager.getCommands()) {
@@ -589,7 +608,7 @@ function App() {
       cmds.push({ id: `obsidian-plugin-${oc.id}`, name: oc.name, action: oc.run });
     }
     return cmds;
-  }, [handleBrowse, vaultStats, newNote, saveNote, pluginTick]);
+  }, [handleBrowse, vaultStats, newNote, saveNote, pluginTick, focusMode, typewriterMode]);
 
   // 「工具」菜单里的插件区：只保留管理入口。
   // 命令走命令面板（Ctrl+P）；插件视图并入「插件管理 / 市场」对话框的已安装列表，
@@ -758,6 +777,8 @@ function App() {
             vaultConfig={vaultConfig} vaultPath={vaultPath}
             mode={paneMode} onSetMode={handleSetMode}
             tags={tagIndex}
+            focusMode={focusMode}
+            typewriterMode={typewriterMode}
             pendingAnchor={pendingAnchor}
             onAnchorConsumed={consumeAnchor}
             onStatus={(msg) => {
@@ -824,7 +845,14 @@ function App() {
       </div>
 
       {/* ── 状态栏 ── */}
-      <StatusBar text={(state as any).statusText || "就绪"} />
+      <StatusBar text={(state as any).statusText || "就绪"} right={
+        <>
+          <button onClick={() => setFocusMode(v => !v)} title={`焦点模式 (Ctrl+Shift+F)：仅当前段落正常显示${focusMode ? "（已开启）" : ""}`}
+            style={statusToggleBtn(focusMode)}>焦点模式</button>
+          <button onClick={() => setTypewriterMode(v => !v)} title={`打字机模式 (Ctrl+Shift+Y)：光标行垂直居中${typewriterMode ? "（已开启）" : ""}`}
+            style={statusToggleBtn(typewriterMode)}>打字机模式</button>
+        </>
+      } />
 
       {showQuickSwitcher && files.length > 0 && (
         <QuickSwitcher extraExts={pluginExts} files={files} onSelect={(p) => readNote(p)}

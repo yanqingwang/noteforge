@@ -8,6 +8,7 @@ import type { Extension } from "@codemirror/state";
 import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { livePreview } from "./livePreview";
+import { focusMode, typewriterMode, typewriterPadding } from "./focusMode";
 import { tableEditing, pasteTableFromClipboard, tableContextMenuHandler } from "./tableEdit";
 
 // ── 列表续行（ED-05）────────────────────────────────────────────────
@@ -453,6 +454,8 @@ const lpThemeStyles = (dark: boolean) => ({
     display: "inline-block", width: "100%", verticalAlign: "middle",
     borderTop: `1px solid ${dark ? "#3c3c3c" : "#d0d7de"}`, height: 0,
   },
+  // ── 焦点模式（打字机模式的上下留白见 typewriterPadding 主题） ──
+  ".nf-focus-dim": { opacity: 0.3, transition: "opacity .15s" },
   ".cm-selectionBackground": { backgroundColor: dark ? "#264f78 !important" : "#b4d5fe !important" },
   ".cm-searchMatch": { backgroundColor: dark ? "#5a3d10" : "#fff3c4" },
   ".cm-searchMatch-selected": { backgroundColor: dark ? "#8a5a12" : "#ffd700" },
@@ -478,6 +481,10 @@ export interface EditorExtOptions {
   getTags?: () => string[];
   /** 亮/暗主题 */
   theme?: "light" | "dark";
+  /** 焦点模式：仅光标所在块正常显示（可热切换） */
+  focus?: boolean;
+  /** 打字机模式：光标行垂直居中（可热切换） */
+  typewriter?: boolean;
   /** 追加 keymap（Ctrl+S 等，优先级更高） */
   extraKeys?: any[];
   /** wikilink 目标是否存在于 vault（live 模式下标记未解析链接） */
@@ -494,6 +501,8 @@ export function nfExtensions(opts: EditorExtOptions): Extension[] {
   return [
     themeFor(opts.theme ?? "light"),
     ...(opts.live ? [livePreview({ resolveLink: opts.resolveLink, resolveImageSrc: opts.resolveImageSrc })] : []),
+    ...(opts.focus ? [focusMode()] : []),
+    ...(opts.typewriter ? [typewriterMode(), typewriterPadding] : []),
     tableEditing(),
     autocompletion({ override: [makeWikilinkSource(opts.getFiles), makeTagSource(opts.getTags ?? (() => []))] }),
     closeBrackets(),
